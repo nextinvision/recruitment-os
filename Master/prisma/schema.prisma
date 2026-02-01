@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  RECRUITER
+}
+
+enum JobSource {
+  LINKEDIN
+  INDEED
+  NAUKRI
+}
+
+enum ApplicationStage {
+  IDENTIFIED
+  RESUME_UPDATED
+  COLD_MESSAGE_SENT
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  CLOSED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole @default(RECRUITER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  jobs         Job[]
+  candidates   Candidate[]
+  applications Application[]
+
+  @@map("users")
+}
+
+model Job {
+  id          String     @id @default(cuid())
+  title       String
+  company     String
+  location    String
+  description String     @db.Text
+  source      JobSource
+  recruiterId String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  recruiter    User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@map("jobs")
+}
+
+model Candidate {
+  id                  String   @id @default(cuid())
+  firstName           String
+  lastName            String
+  email               String
+  phone               String?
+  assignedRecruiterId String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  assignedRecruiter User          @relation(fields: [assignedRecruiterId], references: [id], onDelete: Cascade)
+  applications      Application[]
+
+  @@map("candidates")
+}
+
+model Application {
+  id          String           @id @default(cuid())
+  jobId       String
+  candidateId String
+  stage       ApplicationStage @default(IDENTIFIED)
+  recruiterId String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  job      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  recruiter User    @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, candidateId])
+  @@map("applications")
+}
+

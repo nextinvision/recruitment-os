@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: recruitment-os-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: recruitment_user
+      POSTGRES_PASSWORD: recruitment_password
+      POSTGRES_DB: recruitment_os
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recruitment_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+

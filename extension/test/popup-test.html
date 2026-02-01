@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extension Popup Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      width: 400px;
+      min-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+    }
+    .test-container {
+      border: 2px solid #0073b1;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .test-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #0073b1;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-primary {
+      background: #0073b1;
+      color: white;
+    }
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    #root {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      min-height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <div class="test-title">Extension Popup Component Test</div>
+    <p style="margin-bottom: 15px; color: #666;">
+      This page allows you to test the popup components without loading the extension in Chrome.
+      Chrome APIs are mocked to work in a regular browser.
+    </p>
+    <button class="btn-primary" onclick="loadPopup()">Load Popup Component</button>
+    <button class="btn-secondary" onclick="clearPopup()">Clear</button>
+    <button class="btn-secondary" onclick="mockLogin()">Mock Login Success</button>
+    <button class="btn-secondary" onclick="mockJobs()">Mock Captured Jobs</button>
+  </div>
+  
+  <div id="root"></div>
+
+  <!-- Mock Chrome APIs -->
+  <script>
+    // Mock chrome.storage
+    window.chrome = {
+      storage: {
+        local: {
+          get: function(keys, callback) {
+            const data = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            const result = {};
+            if (Array.isArray(keys)) {
+              keys.forEach(key => {
+                result[key] = data[key];
+              });
+            } else if (keys) {
+              result[keys] = data[keys];
+            } else {
+              Object.assign(result, data);
+            }
+            callback(result);
+          },
+          set: function(data, callback) {
+            const current = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            Object.assign(current, data);
+            localStorage.setItem('chrome_storage', JSON.stringify(current));
+            if (callback) callback();
+          },
+          remove: function(keys, callback) {
+            const data = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            if (Array.isArray(keys)) {
+              keys.forEach(key => delete data[key]);
+            } else {
+              delete data[keys];
+            }
+            localStorage.setItem('chrome_storage', JSON.stringify(data));
+            if (callback) callback();
+          }
+        }
+      },
+      runtime: {
+        sendMessage: function(message, callback) {
+          console.log('Mock chrome.runtime.sendMessage:', message);
+          
+          // Mock responses
+          if (message.type === 'CHECK_AUTH') {
+            const token = localStorage.getItem('chrome_storage');
+            const data = token ? JSON.parse(token) : {};
+            const response = {
+              success: true,
+              data: {
+                authenticated: !!data.auth_token,
+                user: data.user_data || null
+              }
+            };
+            if (callback) setTimeout(() => callback(response), 100);
+            return;
+          }
+          
+          if (message.type === 'LOGIN') {
+            // Mock successful login
+            const response = {
+              success: true,
+              data: {
+                token: 'mock-jwt-token-' + Date.now(),
+                user: {
+                  id: 'user-1',
+                  email: message.credentials.email,
+                  firstName: 'Test',
+                  lastName: 'User',
+                  role: 'ADMIN'
+                }
+              }
+            };
+            // Store in mock storage
+            const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            storage.auth_token = response.data.token;
+            storage.user_data = response.data.user;
+            localStorage.setItem('chrome_storage', JSON.stringify(storage));
+            
+            if (callback) setTimeout(() => callback(response), 100);
+            return;
+          }
+          
+          if (message.type === 'LOGOUT') {
+            const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            delete storage.auth_token;
+            delete storage.user_data;
+            localStorage.setItem('chrome_storage', JSON.stringify(storage));
+            if (callback) setTimeout(() => callback({ success: true }), 100);
+            return;
+          }
+          
+          if (message.type === 'GET_STAGING_JOBS') {
+            const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            const response = {
+              success: true,
+              data: storage.staging_jobs || []
+            };
+            if (callback) setTimeout(() => callback(response), 100);
+            return;
+          }
+          
+          if (message.type === 'SAVE_STAGING_JOBS') {
+            const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+            storage.staging_jobs = message.jobs;
+            localStorage.setItem('chrome_storage', JSON.stringify(storage));
+            if (callback) setTimeout(() => callback({ success: true }), 100);
+            return;
+          }
+          
+          if (message.type === 'SUBMIT_JOBS') {
+            console.log('Mock submitting jobs:', message.jobs);
+            const response = {
+              success: true,
+              data: { count: message.jobs.length }
+            };
+            if (callback) setTimeout(() => callback(response), 100);
+            return;
+          }
+          
+          if (callback) setTimeout(() => callback({ success: false, error: 'Unknown message type' }), 100);
+        },
+        onMessage: {
+          addListener: function(callback) {
+            window.mockMessageListener = callback;
+          }
+        }
+      }
+    };
+    
+    function mockLogin() {
+      const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+      storage.auth_token = 'mock-token';
+      storage.user_data = {
+        id: 'user-1',
+        email: 'admin@recruitment.com',
+        firstName: 'Admin',
+        lastName: 'User',
+        role: 'ADMIN'
+      };
+      localStorage.setItem('chrome_storage', JSON.stringify(storage));
+      alert('Mock login successful! Reload popup component.');
+    }
+    
+    function mockJobs() {
+      const mockJobs = [
+        {
+          id: 'job-1',
+          title: 'Senior Software Engineer',
+          company: 'Tech Corp',
+          location: 'Remote',
+          description: 'We are looking for an experienced software engineer...',
+          source: 'linkedin',
+          isValid: true,
+          errors: []
+        },
+        {
+          id: 'job-2',
+          title: 'Frontend Developer',
+          company: 'Startup Inc',
+          location: 'San Francisco, CA',
+          description: 'React developer needed for exciting startup...',
+          source: 'indeed',
+          isValid: true,
+          errors: []
+        }
+      ];
+      const storage = JSON.parse(localStorage.getItem('chrome_storage') || '{}');
+      storage.staging_jobs = mockJobs;
+      localStorage.setItem('chrome_storage', JSON.stringify(storage));
+      alert('Mock jobs added! Reload popup component.');
+    }
+    
+    function clearPopup() {
+      document.getElementById('root').innerHTML = '';
+      localStorage.removeItem('chrome_storage');
+      alert('Cleared!');
+    }
+    
+    function loadPopup() {
+      const root = document.getElementById('root');
+      
+      // Check if built popup exists
+      const script = document.createElement('script');
+      script.type = 'module';
+      
+      // Try to load from dist (if built)
+      // For now, show instructions to build first
+      if (window.location.protocol === 'file:') {
+        // We're running from file://, need to load the built version
+        root.innerHTML = `
+          <div style="padding: 20px;">
+            <h3 style="color: #0073b1; margin-bottom: 15px;">To Load the Actual Popup:</h3>
+            <div style="background: #f0f7ff; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+              <p style="margin-bottom: 10px;"><strong>Step 1:</strong> Build the extension first:</p>
+              <code style="background: white; padding: 8px; display: block; border-radius: 4px; margin-bottom: 10px;">npm run build</code>
+              <p style="margin-bottom: 10px;"><strong>Step 2:</strong> Then open the built popup:</p>
+              <p style="color: #666; font-size: 14px;">
+                Open: <code>dist/popup/index.html</code> in this browser<br>
+                The Chrome APIs are already mocked, so it will work!
+              </p>
+            </div>
+            <div style="background: #fff5f5; padding: 15px; border-radius: 4px; border-left: 4px solid #fcc;">
+              <p style="margin-bottom: 10px;"><strong>Alternative:</strong> Test individual components</p>
+              <p style="color: #666; font-size: 14px;">
+                You can test the React components by running unit tests:<br>
+                <code style="background: white; padding: 4px; border-radius: 4px;">npm test</code>
+              </p>
+            </div>
+          </div>
+        `;
+      } else {
+        // If running from a server, we could load the built files
+        root.innerHTML = `
+          <div style="padding: 20px; text-align: center;">
+            <p>Loading popup component...</p>
+            <p style="color: #666; margin-top: 10px;">Make sure you've built the extension first: <code>npm run build</code></p>
+          </div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
+

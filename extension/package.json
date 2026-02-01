@@ -1,0 +1,39 @@
+{
+  "name": "recruitment-os-extension",
+  "version": "1.0.0",
+  "description": "Chrome Extension for manual job scraping",
+  "scripts": {
+    "build": "npm run build:popup && npm run build:background && npm run build:content",
+    "build:popup": "vite build --config vite.popup.config.ts",
+    "build:background": "tsc --project tsconfig.background.json",
+    "build:content": "tsc --project tsconfig.content.json",
+    "dev": "concurrently \"npm run dev:popup\" \"npm run dev:background\" \"npm run dev:content\"",
+    "dev:popup": "vite build --config vite.popup.config.ts --watch",
+    "dev:background": "tsc --project tsconfig.background.json --watch",
+    "dev:content": "tsc --project tsconfig.content.json --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:popup": "open test/popup-test.html",
+    "test:server": "node test-server.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/ui": "^1.6.0",
+    "concurrently": "^8.2.2",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
+    "vitest": "^1.6.0"
+  }
+}
+
