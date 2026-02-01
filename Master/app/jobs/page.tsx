@@ -71,7 +71,7 @@ export default function JobsPage() {
       render: (job: Job) => (
         <div>
           <div className="font-medium text-gray-900">{job.title}</div>
-          <div className="text-sm text-gray-500">{job.company} • {job.location}</div>
+          <div className="text-sm text-gray-700">{job.company} • {job.location}</div>
         </div>
       ),
     },
@@ -79,7 +79,7 @@ export default function JobsPage() {
       key: 'source',
       header: 'Source',
       render: (job: Job) => (
-        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200">
           {job.source}
         </span>
       ),
@@ -88,10 +88,10 @@ export default function JobsPage() {
       key: 'status',
       header: 'Status',
       render: (job: Job) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-          job.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-          job.status === 'CLOSED' ? 'bg-gray-100 text-gray-800' :
-          'bg-yellow-100 text-yellow-800'
+        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+          job.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border-green-200' :
+          job.status === 'CLOSED' ? 'bg-gray-100 text-gray-800 border-gray-200' :
+          'bg-yellow-100 text-yellow-800 border-yellow-200'
         }`}>
           {job.status}
         </span>
@@ -101,7 +101,7 @@ export default function JobsPage() {
       key: 'createdAt',
       header: 'Created',
       render: (job: Job) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-700">
           {new Date(job.createdAt).toLocaleDateString()}
         </span>
       ),
@@ -119,7 +119,7 @@ export default function JobsPage() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Jobs</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-700">
                 Manage and track all job postings
               </p>
             </div>
@@ -227,7 +227,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Title</label>
+        <label className="block text-sm font-medium text-gray-900">Title</label>
         <input
           type="text"
           required
@@ -239,7 +239,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Company</label>
+          <label className="block text-sm font-medium text-gray-900">Company</label>
           <input
             type="text"
             required
@@ -249,7 +249,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Location</label>
+          <label className="block text-sm font-medium text-gray-900">Location</label>
           <input
             type="text"
             required
@@ -261,7 +261,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Description</label>
+        <label className="block text-sm font-medium text-gray-900">Description</label>
         <textarea
           required
           rows={4}
@@ -273,7 +273,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Source</label>
+          <label className="block text-sm font-medium text-gray-900">Source</label>
           <select
             value={formData.source}
             onChange={(e) => setFormData({ ...formData, source: e.target.value })}
@@ -285,7 +285,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Status</label>
+          <label className="block text-sm font-medium text-gray-900">Status</label>
           <select
             value={formData.status}
             onChange={(e) => setFormData({ ...formData, status: e.target.value })}

@@ -159,7 +159,7 @@ export default function AdminPage() {
           <div className="font-medium text-gray-900">
             {user.firstName} {user.lastName}
           </div>
-          <div className="text-sm text-gray-500">{user.email}</div>
+          <div className="text-sm text-gray-700">{user.email}</div>
         </div>
       ),
     },
@@ -191,7 +191,7 @@ export default function AdminPage() {
       key: 'manager',
       header: 'Manager',
       render: (user: User) => (
-        <span className="text-sm text-gray-600">
+        <span className="text-sm text-gray-700">
           {user.manager ? `${user.manager.firstName} ${user.manager.lastName}` : 'N/A'}
         </span>
       ),
@@ -200,7 +200,7 @@ export default function AdminPage() {
       key: 'stats',
       header: 'Activity',
       render: (user: User) => (
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-gray-700">
           {user._count && (
             <>
               {user._count.jobs} jobs • {user._count.candidates} candidates • {user._count.applications} applications
@@ -213,7 +213,7 @@ export default function AdminPage() {
       key: 'lastLogin',
       header: 'Last Login',
       render: (user: User) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-700">
           {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
         </span>
       ),
@@ -247,7 +247,7 @@ export default function AdminPage() {
         <div className="mb-6 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-            <p className="mt-2 text-gray-600">Manage users, roles, and permissions</p>
+            <p className="mt-2 text-gray-700">Manage users, roles, and permissions</p>
           </div>
           <button
             onClick={handleCreateUser}
@@ -258,9 +258,9 @@ export default function AdminPage() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-4 mb-6 border border-gray-200">
           <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">Filter by Role:</label>
+            <label className="text-sm font-medium text-gray-900">Filter by Role:</label>
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
@@ -430,7 +430,7 @@ function UserForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             First Name *
           </label>
           <input
@@ -442,7 +442,7 @@ function UserForm({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Last Name *
           </label>
           <input
@@ -456,7 +456,7 @@ function UserForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-900 mb-2">
           Email *
         </label>
         <input
@@ -469,7 +469,7 @@ function UserForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-900 mb-2">
           Password {user ? '(leave blank to keep current)' : '*'}
         </label>
         <input
@@ -483,7 +483,7 @@ function UserForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Role *
           </label>
           <select
@@ -498,7 +498,7 @@ function UserForm({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Status
           </label>
           <select
@@ -514,7 +514,7 @@ function UserForm({
 
       {formData.role === 'RECRUITER' && managers.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Manager (Optional)
           </label>
           <select

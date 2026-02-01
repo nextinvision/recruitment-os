@@ -161,7 +161,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading dashboard...</p>
+            <p className="mt-4 text-gray-900">Loading dashboard...</p>
           </div>
         </div>
       ) : (
@@ -212,26 +212,26 @@ export default function DashboardPage() {
 
           {/* Conversion Rates */}
           {stats && stats.conversionRates && (
-            <div className="bg-white shadow rounded-lg p-6 mb-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Conversion Rates (Last 30 Days)</h3>
+            <div className="bg-white shadow rounded-lg p-6 mb-8 border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversion Rates (Last 30 Days)</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
                     {stats.conversionRates.identifiedToApplied.toFixed(1)}%
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">Identified → Applied</div>
+                  <div className="text-sm text-gray-700 mt-1">Identified → Applied</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-blue-600">
                     {stats.conversionRates.appliedToInterview.toFixed(1)}%
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">Applied → Interview</div>
+                  <div className="text-sm text-gray-700 mt-1">Applied → Interview</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
+                  <div className="text-2xl font-bold text-blue-600">
                     {stats.conversionRates.interviewToOffer.toFixed(1)}%
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">Interview → Offer</div>
+                  <div className="text-sm text-gray-700 mt-1">Interview → Offer</div>
                 </div>
               </div>
             </div>
@@ -240,85 +240,85 @@ export default function DashboardPage() {
           {/* Recent Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Recent Jobs */}
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Recent Jobs</h3>
-                <Link href="/jobs" className="text-sm text-blue-600 hover:text-blue-800">
+                <h3 className="text-lg font-semibold text-gray-900">Recent Jobs</h3>
+                <Link href="/jobs" className="text-sm font-medium text-blue-600 hover:text-blue-700">
                   View all
                 </Link>
               </div>
               <div className="space-y-3">
                 {recentJobs.length > 0 ? (
                   recentJobs.map((job) => (
-                    <div key={job.id} className="border-l-4 border-blue-500 pl-3 py-2">
+                    <div key={job.id} className="border-l-4 border-blue-600 pl-3 py-2">
                       <div className="text-sm font-medium text-gray-900">{job.title}</div>
-                      <div className="text-xs text-gray-500">{job.company} • {job.location}</div>
+                      <div className="text-xs text-gray-700">{job.company} • {job.location}</div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-gray-500">No recent jobs</p>
+                  <p className="text-sm text-gray-700">No recent jobs</p>
                 )}
               </div>
             </div>
 
             {/* Recent Candidates */}
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Recent Candidates</h3>
-                <Link href="/candidates" className="text-sm text-blue-600 hover:text-blue-800">
+                <h3 className="text-lg font-semibold text-gray-900">Recent Candidates</h3>
+                <Link href="/candidates" className="text-sm font-medium text-blue-600 hover:text-blue-700">
                   View all
                 </Link>
               </div>
               <div className="space-y-3">
                 {recentCandidates.length > 0 ? (
                   recentCandidates.map((candidate) => (
-                    <div key={candidate.id} className="border-l-4 border-green-500 pl-3 py-2">
+                    <div key={candidate.id} className="border-l-4 border-blue-600 pl-3 py-2">
                       <div className="text-sm font-medium text-gray-900">
                         {candidate.firstName} {candidate.lastName}
                       </div>
-                      <div className="text-xs text-gray-500">{candidate.email}</div>
+                      <div className="text-xs text-gray-700">{candidate.email}</div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-gray-500">No recent candidates</p>
+                  <p className="text-sm text-gray-700">No recent candidates</p>
                 )}
               </div>
             </div>
 
             {/* Recent Applications */}
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Recent Applications</h3>
-                <Link href="/applications" className="text-sm text-blue-600 hover:text-blue-800">
+                <h3 className="text-lg font-semibold text-gray-900">Recent Applications</h3>
+                <Link href="/applications" className="text-sm font-medium text-blue-600 hover:text-blue-700">
                   View all
                 </Link>
               </div>
               <div className="space-y-3">
                 {recentApplications.length > 0 ? (
                   recentApplications.map((app) => (
-                    <div key={app.id} className="border-l-4 border-purple-500 pl-3 py-2">
+                    <div key={app.id} className="border-l-4 border-blue-600 pl-3 py-2">
                       <div className="text-sm font-medium text-gray-900">
                         {app.candidate?.firstName} {app.candidate?.lastName}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-700">
                         {app.job?.title} {app.job?.company ? `@ ${app.job.company}` : ''} • {app.stage.replace(/_/g, ' ')}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-gray-500">No recent applications</p>
+                  <p className="text-sm text-gray-700">No recent applications</p>
                 )}
               </div>
             </div>
           </div>
 
           {/* Quick Actions */}
-          <div className="mt-8 bg-white shadow rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
+          <div className="mt-8 bg-white shadow rounded-lg p-6 border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Link
                 href="/jobs"
-                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-600 hover:bg-blue-50 transition-colors"
               >
                 <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -327,18 +327,18 @@ export default function DashboardPage() {
               </Link>
               <Link
                 href="/candidates"
-                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
+                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-600 hover:bg-blue-50 transition-colors"
               >
-                <svg className="h-6 w-6 text-green-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
                 <span className="text-sm font-medium text-gray-900">Add Candidate</span>
               </Link>
               <Link
                 href="/applications"
-                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
+                className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-600 hover:bg-blue-50 transition-colors"
               >
-                <svg className="h-6 w-6 text-purple-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
                 <span className="text-sm font-medium text-gray-900">View Pipeline</span>
@@ -346,9 +346,9 @@ export default function DashboardPage() {
               {user?.role === 'ADMIN' || user?.role === 'MANAGER' ? (
                 <Link
                   href="/reports"
-                  className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors"
+                  className="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-600 hover:bg-blue-50 transition-colors"
                 >
-                  <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                   <span className="text-sm font-medium text-gray-900">View Reports</span>

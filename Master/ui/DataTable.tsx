@@ -60,7 +60,7 @@ export function DataTable<T extends { id: string }>({
   }
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-md">
+    <div className="bg-white shadow overflow-hidden sm:rounded-md border border-gray-200">
       {searchable && (
         <div className="p-4 border-b border-gray-200">
           <input
@@ -68,7 +68,7 @@ export function DataTable<T extends { id: string }>({
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500"
           />
         </div>
       )}
@@ -80,13 +80,13 @@ export function DataTable<T extends { id: string }>({
                 <th
                   key={String(column.key)}
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-6 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort(column.key as keyof T)}
                 >
                   <div className="flex items-center space-x-1">
                     <span>{column.header}</span>
                     {sortKey === column.key && (
-                      <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                     )}
                   </div>
                 </th>
@@ -116,7 +116,7 @@ export function DataTable<T extends { id: string }>({
       </div>
       {sortedData.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-500">No data found</p>
+          <p className="text-gray-700">No data found</p>
         </div>
       )}
     </div>

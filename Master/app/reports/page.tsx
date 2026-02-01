@@ -11,16 +11,6 @@ interface SystemMetrics {
   period: { start: string; end: string }
 }
 
-interface RecruiterMetrics {
-  jobsScraped: number
-  candidatesManaged: number
-  applicationsCreated: number
-  conversionRates: {
-    identifiedToApplied: number
-    appliedToInterview: number
-    interviewToOffer: number
-  }
-}
 
 const STAGE_LABELS: Record<string, string> = {
   IDENTIFIED: 'Identified',
@@ -45,6 +35,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadMetrics()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
 
   const loadMetrics = async () => {
@@ -102,14 +93,14 @@ export default function ReportsPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="mt-2 text-gray-600">Comprehensive insights into your recruitment pipeline</p>
+          <p className="mt-2 text-gray-700">Comprehensive insights into your recruitment pipeline</p>
         </div>
 
         {/* Date Range Filter */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-white rounded-lg shadow p-6 mb-6 border border-gray-200">
           <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+              <label className="block text-sm font-medium text-gray-900 mb-2">Start Date</label>
               <input
                 type="date"
                 value={dateRange.start}
@@ -118,7 +109,7 @@ export default function ReportsPage() {
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+              <label className="block text-sm font-medium text-gray-900 mb-2">End Date</label>
               <input
                 type="date"
                 value={dateRange.end}
@@ -180,7 +171,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Platform Usage */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-white rounded-lg shadow p-6 mb-6 border border-gray-200">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Platform Usage</h2>
           <div className="space-y-4">
             {systemMetrics?.platformUsage.map((item) => {
@@ -188,8 +179,8 @@ export default function ReportsPage() {
               return (
                 <div key={item.source}>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">{item.source}</span>
-                    <span className="text-sm text-gray-600">{item.count} jobs ({percentage.toFixed(1)}%)</span>
+                    <span className="text-sm font-medium text-gray-900">{item.source}</span>
+                    <span className="text-sm text-gray-700">{item.count} jobs ({percentage.toFixed(1)}%)</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
@@ -204,7 +195,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Funnel Performance */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-white rounded-lg shadow p-6 mb-6 border border-gray-200">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Application Funnel</h2>
           <div className="space-y-4">
             {systemMetrics?.funnelPerformance.map((item) => {
@@ -213,10 +204,10 @@ export default function ReportsPage() {
               return (
                 <div key={item.stage}>
                   <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                    <span className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
                       {STAGE_LABELS[item.stage] || item.stage}
                     </span>
-                    <span className={`text-sm ${isActive ? 'text-gray-600' : 'text-gray-400'}`}>
+                    <span className={`text-sm ${isActive ? 'text-gray-700' : 'text-gray-600'}`}>
                       {item.count} applications ({percentage.toFixed(1)}%)
                     </span>
                   </div>
@@ -235,21 +226,21 @@ export default function ReportsPage() {
         </div>
 
         {/* Stage Distribution Chart */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Stage Distribution</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {systemMetrics?.funnelPerformance.map((item) => (
               <div
                 key={item.stage}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-gray-900">
                     {STAGE_LABELS[item.stage] || item.stage}
                   </span>
                   <span className="text-lg font-bold text-blue-600">{item.count}</span>
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-700">
                   {totalApplications > 0 ? ((item.count / totalApplications) * 100).toFixed(1) : 0}% of total
                 </div>
               </div>

@@ -14,24 +14,24 @@ interface StatsCardProps {
 export function StatsCard({ title, value, icon, trend, color = 'blue' }: StatsCardProps) {
   const colorClasses = {
     blue: 'bg-blue-50 border-blue-200 text-blue-600',
-    green: 'bg-green-50 border-green-200 text-green-600',
-    purple: 'bg-purple-50 border-purple-200 text-purple-600',
-    orange: 'bg-orange-50 border-orange-200 text-orange-600',
-    red: 'bg-red-50 border-red-200 text-red-600',
+    green: 'bg-blue-50 border-blue-200 text-blue-600',
+    purple: 'bg-blue-50 border-blue-200 text-blue-600',
+    orange: 'bg-blue-50 border-blue-200 text-blue-600',
+    red: 'bg-blue-50 border-blue-200 text-blue-600',
   }
 
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
+    <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
       <div className="p-5">
         <div className="flex items-center">
           {icon && (
-            <div className={`shrink-0 ${colorClasses[color]}`}>
+            <div className={`shrink-0 p-2 rounded-lg ${colorClasses[color]}`}>
               {icon}
             </div>
           )}
           <div className={`ml-5 w-0 flex-1 ${icon ? '' : 'flex items-center'}`}>
             <dl>
-              <dt className="text-sm font-medium text-gray-500 truncate">
+              <dt className="text-sm font-medium text-gray-700 truncate">
                 {title}
               </dt>
               <dd className="flex items-baseline">
@@ -40,7 +40,7 @@ export function StatsCard({ title, value, icon, trend, color = 'blue' }: StatsCa
                 </div>
                 {trend && (
                   <div className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    trend.isPositive ? 'text-green-600' : 'text-red-600'
+                    trend.isPositive ? 'text-blue-600' : 'text-gray-600'
                   }`}>
                     <span>{trend.isPositive ? '↑' : '↓'}</span>
                     <span>{Math.abs(trend.value)}%</span>

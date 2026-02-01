@@ -57,6 +57,7 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     loadApplications()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadApplications = async () => {
@@ -125,7 +126,7 @@ export default function ApplicationsPage() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Application Pipeline</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-700">
                 Drag and drop to move applications between stages
               </p>
             </div>
@@ -152,14 +153,14 @@ export default function ApplicationsPage() {
                   <div className="text-sm font-medium text-gray-900">
                     {app.candidate.firstName} {app.candidate.lastName}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-700 mt-1">
                     {app.job.title}
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-gray-600 mt-1">
                     {app.job.company}
                   </div>
                   {app.followUpDate && (
-                    <div className="text-xs text-orange-600 mt-1">
+                    <div className="text-xs text-blue-600 mt-1 font-medium">
                       Follow-up: {new Date(app.followUpDate).toLocaleDateString()}
                     </div>
                   )}
@@ -167,8 +168,8 @@ export default function ApplicationsPage() {
               )}
             />
           ) : (
-            <div className="text-center py-12 bg-white rounded-lg shadow">
-              <p className="text-gray-500">No applications found. Create applications to track candidate progress.</p>
+            <div className="text-center py-12 bg-white rounded-lg shadow border border-gray-200">
+              <p className="text-gray-700">No applications found. Create applications to track candidate progress.</p>
             </div>
           )}
 
@@ -204,7 +205,6 @@ export default function ApplicationsPage() {
 
 function ApplicationDetails({ application, onUpdate }: { application: Application; onUpdate: () => void }) {
   const [stage, setStage] = useState(application.stage)
-  const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleUpdate = async () => {
@@ -217,7 +217,7 @@ function ApplicationDetails({ application, onUpdate }: { application: Applicatio
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ stage, ...(notes && { notes }) }),
+        body: JSON.stringify({ stage }),
       })
 
       if (response.ok) {
@@ -233,21 +233,21 @@ function ApplicationDetails({ application, onUpdate }: { application: Applicatio
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Candidate</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Candidate</label>
         <div className="text-sm text-gray-900">
           {application.candidate.firstName} {application.candidate.lastName}
         </div>
-        <div className="text-xs text-gray-500">{application.candidate.email}</div>
+        <div className="text-xs text-gray-700">{application.candidate.email}</div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Job</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Job</label>
         <div className="text-sm text-gray-900">{application.job.title}</div>
-        <div className="text-xs text-gray-500">{application.job.company}</div>
+        <div className="text-xs text-gray-700">{application.job.company}</div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Stage</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Stage</label>
         <select
           value={stage}
           onChange={(e) => setStage(e.target.value)}
@@ -280,8 +280,8 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
     candidateId: '',
     stage: 'IDENTIFIED',
   })
-  const [jobs, setJobs] = useState<any[]>([])
-  const [candidates, setCandidates] = useState<any[]>([])
+  const [jobs, setJobs] = useState<Array<{ id: string; title: string; company: string }>>([])
+  const [candidates, setCandidates] = useState<Array<{ id: string; firstName: string; lastName: string; email: string }>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -345,7 +345,7 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
         const data = await response.json()
         setError(data.error || 'Failed to create application')
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setLoading(false)
@@ -361,7 +361,7 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Job</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Job</label>
         <select
           required
           value={formData.jobId}
@@ -378,7 +378,7 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Candidate</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Candidate</label>
         <select
           required
           value={formData.candidateId}
@@ -395,7 +395,7 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Initial Stage</label>
+        <label className="block text-sm font-medium text-gray-900 mb-2">Initial Stage</label>
         <select
           value={formData.stage}
           onChange={(e) => setFormData({ ...formData, stage: e.target.value })}

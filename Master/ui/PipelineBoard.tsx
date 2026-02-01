@@ -55,13 +55,13 @@ export function PipelineBoard<T extends PipelineItem>({
         return (
           <div
             key={stage}
-            className="bg-white rounded-lg shadow p-4 min-w-[250px]"
+            className="bg-white rounded-lg shadow p-4 min-w-[250px] border border-gray-200"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, stage)}
           >
             <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-semibold text-gray-700">{label}</h3>
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+              <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
+              <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full border border-gray-200 font-medium">
                 {stageItems.length}
               </span>
             </div>
@@ -71,13 +71,13 @@ export function PipelineBoard<T extends PipelineItem>({
                   key={item.id}
                   draggable
                   onDragStart={() => handleDragStart(item.id)}
-                  className="p-3 bg-gray-50 rounded border border-gray-200 hover:border-blue-300 cursor-move transition-colors"
+                  className="p-3 bg-gray-50 rounded border border-gray-200 hover:border-blue-600 cursor-move transition-colors"
                 >
                   {renderItem(item)}
                 </div>
               ))}
               {stageItems.length === 0 && (
-                <div className="text-center py-8 text-gray-400 text-sm">
+                <div className="text-center py-8 text-gray-600 text-sm">
                   Drop items here
                 </div>
               )}

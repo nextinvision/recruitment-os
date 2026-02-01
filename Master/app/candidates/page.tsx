@@ -72,7 +72,7 @@ export default function CandidatesPage() {
           <div className="font-medium text-gray-900">
             {candidate.firstName} {candidate.lastName}
           </div>
-          <div className="text-sm text-gray-500">{candidate.email}</div>
+          <div className="text-sm text-gray-700">{candidate.email}</div>
         </div>
       ),
     },
@@ -94,12 +94,12 @@ export default function CandidatesPage() {
             href={candidate.linkedinUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 text-sm"
+            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
           >
             View Profile
           </a>
         ) : (
-          <span className="text-sm text-gray-400">N/A</span>
+          <span className="text-sm text-gray-700">N/A</span>
         )
       ),
     },
@@ -107,7 +107,7 @@ export default function CandidatesPage() {
       key: 'createdAt',
       header: 'Created',
       render: (candidate: Candidate) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-700">
           {new Date(candidate.createdAt).toLocaleDateString()}
         </span>
       ),
@@ -125,7 +125,7 @@ export default function CandidatesPage() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Candidates</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-700">
                 Manage your candidate database
               </p>
             </div>
@@ -233,7 +233,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">First Name</label>
+          <label className="block text-sm font-medium text-gray-900">First Name</label>
           <input
             type="text"
             required
@@ -243,7 +243,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Last Name</label>
+          <label className="block text-sm font-medium text-gray-900">Last Name</label>
           <input
             type="text"
             required
@@ -255,7 +255,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Email</label>
+        <label className="block text-sm font-medium text-gray-900">Email</label>
         <input
           type="email"
           required
@@ -266,7 +266,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Phone</label>
+        <label className="block text-sm font-medium text-gray-900">Phone</label>
         <input
           type="tel"
           value={formData.phone}
@@ -276,7 +276,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">LinkedIn URL</label>
+        <label className="block text-sm font-medium text-gray-900">LinkedIn URL</label>
         <input
           type="url"
           value={formData.linkedinUrl}
