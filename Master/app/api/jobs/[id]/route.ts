@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext, requireAuth, canAccessResource } from '@/lib/rbac'
+import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { getJobById, updateJob, deleteJob } from '@/modules/jobs/service'
-import { createApiResponse, createApiError, handleApiRequest } from '@/lib/api-response'
+import { addCorsHeaders, handleCors } from '@/lib/cors'
 
 export async function OPTIONS(request: NextRequest) {
-  return handleApiRequest(request) || new NextResponse(null, { status: 204 })
+  return handleCors(request) || new NextResponse(null, { status: 204 })
 }
 
 export async function GET(
@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -22,26 +22,35 @@ export async function GET(
     const job = await getJobById(id)
 
     if (!job) {
-      return createApiError(request, 'Job not found', 404)
+      const response = NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, job.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && job.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    return createApiResponse(request, job, 200)
+    const response = NextResponse.json(job, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch job'
-    return createApiError(request, message, 500)
+    const response = NextResponse.json({ error: message }, { status: 500 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 
-export async function PATCH(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -51,20 +60,29 @@ export async function PATCH(
     const job = await getJobById(id)
 
     if (!job) {
-      return createApiError(request, 'Job not found', 404)
+      const response = NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, job.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && job.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
     const body = await request.json()
     const updatedJob = await updateJob({ id, ...body })
 
-    return createApiResponse(request, updatedJob, 200)
+    const response = NextResponse.json(updatedJob, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update job'
-    return createApiError(request, message, 400)
+    const response = NextResponse.json({ error: message }, { status: 400 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 
@@ -73,7 +91,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -83,19 +101,28 @@ export async function DELETE(
     const job = await getJobById(id)
 
     if (!job) {
-      return createApiError(request, 'Job not found', 404)
+      const response = NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, job.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && job.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
     await deleteJob(id)
 
-    return createApiResponse(request, { message: 'Job deleted successfully' }, 200)
+    const response = NextResponse.json({ message: 'Job deleted successfully' }, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete job'
-    return createApiError(request, message, 500)
+    const response = NextResponse.json({ error: message }, { status: 500 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 

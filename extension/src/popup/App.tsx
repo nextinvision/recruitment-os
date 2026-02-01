@@ -216,9 +216,13 @@ export const App: React.FC = () => {
     try {
       // Use direct API call as primary method (more reliable than service worker)
       // Service workers can be terminated/sleeping, causing delays
+      // Add header to identify this as extension request (so API doesn't set cookies)
       const loginResponse = await fetch(`${getBackendUrl()}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Client-Type': 'extension', // Identify as extension to avoid cookie setting
+        },
         body: JSON.stringify(credentials),
       })
 

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
-    const authContext = requireAuth(await getAuthContext(authHeader))
+    requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
     const job = await createJob(body)

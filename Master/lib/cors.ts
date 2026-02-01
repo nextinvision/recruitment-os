@@ -14,7 +14,7 @@ export function addCorsHeaders(response: NextResponse, origin: string | null): N
   if (origin?.startsWith('chrome-extension://')) {
     response.headers.set('Access-Control-Allow-Origin', origin)
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Type')
     response.headers.set('Access-Control-Allow-Credentials', 'true')
     return response
   }
@@ -23,7 +23,7 @@ export function addCorsHeaders(response: NextResponse, origin: string | null): N
   if (origin && ALLOWED_ORIGINS.some(allowed => origin.includes(allowed.replace('*', '')))) {
     response.headers.set('Access-Control-Allow-Origin', origin)
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Type')
     response.headers.set('Access-Control-Allow-Credentials', 'true')
     return response
   }

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext, requireAuth, canAccessResource } from '@/lib/rbac'
+import { getAuthContext, requireAuth } from '@/lib/rbac'
 import {
   getApplicationById,
   updateApplication,
   deleteApplication,
 } from '@/modules/applications/service'
-import { createApiResponse, createApiError, handleApiRequest } from '@/lib/api-response'
+import { addCorsHeaders, handleCors } from '@/lib/cors'
 
 export async function OPTIONS(request: NextRequest) {
-  return handleApiRequest(request) || new NextResponse(null, { status: 204 })
+  return handleCors(request) || new NextResponse(null, { status: 204 })
 }
 
 export async function GET(
@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -26,26 +26,35 @@ export async function GET(
     const application = await getApplicationById(id)
 
     if (!application) {
-      return createApiError(request, 'Application not found', 404)
+      const response = NextResponse.json({ error: 'Application not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, application.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && application.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    return createApiResponse(request, application, 200)
+    const response = NextResponse.json(application, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch application'
-    return createApiError(request, message, 500)
+    const response = NextResponse.json({ error: message }, { status: 500 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 
-export async function PATCH(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -55,20 +64,29 @@ export async function PATCH(
     const application = await getApplicationById(id)
 
     if (!application) {
-      return createApiError(request, 'Application not found', 404)
+      const response = NextResponse.json({ error: 'Application not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, application.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && application.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
     const body = await request.json()
     const updatedApplication = await updateApplication({ id, ...body })
 
-    return createApiResponse(request, updatedApplication, 200)
+    const response = NextResponse.json(updatedApplication, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update application'
-    return createApiError(request, message, 400)
+    const response = NextResponse.json({ error: message }, { status: 400 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 
@@ -77,7 +95,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const corsResponse = handleApiRequest(request)
+    const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
@@ -87,19 +105,28 @@ export async function DELETE(
     const application = await getApplicationById(id)
 
     if (!application) {
-      return createApiError(request, 'Application not found', 404)
+      const response = NextResponse.json({ error: 'Application not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
-    if (!canAccessResource(authContext, application.recruiterId)) {
-      return createApiError(request, 'Forbidden', 403)
+    // Check access
+    if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER' && application.recruiterId !== authContext.userId) {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
     }
 
     await deleteApplication(id)
 
-    return createApiResponse(request, { message: 'Application deleted successfully' }, 200)
+    const response = NextResponse.json({ message: 'Application deleted successfully' }, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete application'
-    return createApiError(request, message, 500)
+    const response = NextResponse.json({ error: message }, { status: 500 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
   }
 }
 

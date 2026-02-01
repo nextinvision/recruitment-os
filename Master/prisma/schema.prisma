@@ -26,11 +26,38 @@ enum ApplicationStage {
   IDENTIFIED
   RESUME_UPDATED
   COLD_MESSAGE_SENT
+  CONNECTION_ACCEPTED
   APPLIED
-  INTERVIEW
+  INTERVIEW_SCHEDULED
   OFFER
   REJECTED
   CLOSED
+}
+
+enum JobStatus {
+  ACTIVE
+  CLOSED
+  FILLED
+}
+
+enum NotificationType {
+  FOLLOW_UP_REMINDER
+  INTERVIEW_ALERT
+  OVERDUE_TASK
+  AI_INSIGHT
+  JOB_SCRAPE_CONFIRMATION
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  EMAIL
+  IN_APP
+}
+
+enum FileType {
+  RESUME
+  DOCUMENT
+  IMAGE
 }
 
 model User {
@@ -40,27 +67,40 @@ model User {
   firstName String
   lastName  String
   role      UserRole @default(RECRUITER)
+  managerId String?  // For manager-recruiter relationship
+  isActive  Boolean  @default(true)
+  lastLogin DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  jobs         Job[]
-  candidates   Candidate[]
-  applications Application[]
+  jobs              Job[]
+  candidates        Candidate[]
+  applications      Application[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  managedRecruiters User[]        @relation("ManagerRecruiter")
+  manager           User?         @relation("ManagerRecruiter", fields: [managerId], references: [id])
 
   @@map("users")
 }
 
 model Job {
-  id          String     @id @default(cuid())
-  title       String
-  company     String
-  location    String
-  description String     @db.Text
-  source      JobSource
-  recruiterId String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  title            String
+  company          String
+  location         String
+  description      String     @db.Text
+  source           JobSource
+  sourceUrl        String?
+  skills           String[]   // Array of skills
+  experienceRequired String?
+  salaryRange      String?
+  status           JobStatus  @default(ACTIVE)
+  recruiterId      String
+  notes            String?    @db.Text
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   // Relations
   recruiter    User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
@@ -75,6 +115,9 @@ model Candidate {
   lastName            String
   email               String
   phone               String?
+  linkedinUrl         String?
+  tags                String[] // Array of tags
+  notes               String?  @db.Text
   assignedRecruiterId String
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -82,6 +125,7 @@ model Candidate {
   // Relations
   assignedRecruiter User          @relation(fields: [assignedRecruiterId], references: [id], onDelete: Cascade)
   applications      Application[]
+  resumes           Resume[]
 
   @@map("candidates")
 }
@@ -92,6 +136,8 @@ model Application {
   candidateId String
   stage       ApplicationStage @default(IDENTIFIED)
   recruiterId String
+  notes       String?          @db.Text
+  followUpDate DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -102,5 +148,69 @@ model Application {
 
   @@unique([jobId, candidateId])
   @@map("applications")
+}
+
+model Resume {
+  id          String   @id @default(cuid())
+  candidateId String
+  fileUrl     String
+  fileName    String
+  fileSize    Int      // in bytes
+  version     Int      @default(1)
+  uploadedBy  String
+  uploadedAt  DateTime @default(now())
+
+  // Relations
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("resumes")
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  userId    String
+  type      NotificationType
+  channel   NotificationChannel
+  title     String
+  message   String            @db.Text
+  read      Boolean           @default(false)
+  sent      Boolean           @default(false)
+  sentAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // e.g., "CREATE_JOB", "UPDATE_CANDIDATE"
+  entity    String   // e.g., "Job", "Candidate"
+  entityId  String?
+  details   String?  @db.Text
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+model File {
+  id        String   @id @default(cuid())
+  fileName  String
+  fileUrl   String
+  fileType  FileType
+  fileSize  Int      // in bytes
+  mimeType  String
+  uploadedBy String
+  createdAt DateTime @default(now())
+
+  @@map("files")
 }
 

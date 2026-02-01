@@ -16,13 +16,47 @@ export async function POST(request: NextRequest) {
     const result = await loginUser(body)
 
     const response = NextResponse.json(result, { status: 200 })
-    const origin = request.headers.get('origin')
-    return addCorsHeaders(response, origin)
+    
+    // Detect client type: Extension vs Web Dashboard
+    const userAgent = request.headers.get('user-agent') || ''
+    const requestOrigin = request.headers.get('origin') || ''
+    const isExtension = request.headers.get('x-client-type') === 'extension' || 
+                       userAgent.includes('chrome-extension://') ||
+                       requestOrigin.includes('chrome-extension://')
+    
+    // Only set cookies for web dashboard (not for extension)
+    // Extension uses Bearer token in Authorization header
+    if (!isExtension) {
+      // Set cookie with proper attributes for web dashboard
+      // Important: Use sameSite: 'lax' for top-level navigations
+      // Use httpOnly: false to allow client-side access if needed
+      response.cookies.set('token', result.token, {
+        httpOnly: false, // Allow client-side access for API calls
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax', // Allows cookie to be sent with top-level navigations (GET requests)
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: '/', // Available for all paths
+        // Don't set domain - let it default to current domain
+      })
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Login API] Cookie set for web client')
+        console.log('[Login API] Cookie value length:', result.token.length)
+        console.log('[Login API] Request origin:', requestOrigin)
+      }
+    } else {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Login API] Extension client detected - skipping cookie')
+      }
+    }
+    
+    return addCorsHeaders(response, requestOrigin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Login failed'
-    const response = NextResponse.json({ error: message }, { status: 401 })
-    const origin = request.headers.get('origin')
-    return addCorsHeaders(response, origin)
+    const errorResponse = NextResponse.json({ error: message }, { status: 401 })
+    const errorOrigin = request.headers.get('origin')
+    return addCorsHeaders(errorResponse, errorOrigin)
   }
 }
 

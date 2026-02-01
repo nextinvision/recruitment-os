@@ -56,9 +56,16 @@ export class ApiClient {
     console.log('[API Client] Attempting login to:', url)
     
     try {
+      const baseHeaders = await this.getHeaders(false)
+      // Add header to identify this as extension request (so API doesn't set cookies)
+      const headers: Record<string, string> = {
+        ...baseHeaders,
+        'X-Client-Type': 'extension',
+      } as Record<string, string>
+      
       const response = await fetch(url, {
         method: 'POST',
-        headers: await this.getHeaders(false),
+        headers,
         body: JSON.stringify(credentials),
       })
 
