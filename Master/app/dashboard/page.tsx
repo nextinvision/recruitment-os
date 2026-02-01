@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { StatsCard } from '@/ui/StatsCard'
+import { DashboardLayout } from '@/components/DashboardLayout'
 
 interface Stats {
   jobsScraped: number
@@ -154,88 +155,17 @@ export default function DashboardPage() {
     }
   }, [router, loadDashboardData])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <Link href="/dashboard" className="flex items-center">
-                <h1 className="text-xl font-bold text-gray-900">Recruitment OS</h1>
-              </Link>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link href="/dashboard" className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Dashboard
-                </Link>
-                <Link href="/jobs" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Jobs
-                </Link>
-                <Link href="/candidates" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Candidates
-                </Link>
-                <Link href="/applications" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Applications
-                </Link>
-                {user?.role === 'ADMIN' || user?.role === 'MANAGER' ? (
-                  <Link href="/reports" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                    Reports
-                  </Link>
-                ) : null}
-                {user?.role === 'ADMIN' ? (
-                  <Link href="/admin" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                    Admin
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <div className="text-sm font-medium text-gray-900">
-                  {user?.firstName} {user?.lastName}
-                </div>
-                <div className="text-xs text-gray-500">{user?.role}</div>
-              </div>
-              <button
-                onClick={() => {
-                  localStorage.removeItem('token')
-                  localStorage.removeItem('user')
-                  // Also clear cookie by setting it to expire
-                  document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-                  router.push('/login')
-                }}
-                className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Logout
-              </button>
-            </div>
+    <DashboardLayout>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading dashboard...</p>
           </div>
         </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Welcome back, {user?.firstName}!
-            </h1>
-            <p className="mt-2 text-gray-600">
-              Here&apos;s what&apos;s happening with your recruitment pipeline today.
-            </p>
-          </div>
-
+      ) : (
+        <div className="max-w-7xl mx-auto">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             <StatsCard
@@ -427,7 +357,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      )}
+    </DashboardLayout>
   )
 }

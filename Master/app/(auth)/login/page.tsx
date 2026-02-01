@@ -1,13 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 // Disable static generation for this page
 export const dynamic = 'force-dynamic'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -37,20 +35,13 @@ export default function LoginPage() {
         const urlParams = new URLSearchParams(window.location.search)
         const redirectTo = urlParams.get('redirect') || '/dashboard'
         
-        // Debug: Check if cookie is set
-        console.log('[Login] Login successful, redirecting to:', redirectTo)
-        console.log('[Login] Cookie will be sent with next request')
-        
-        // Small delay to ensure cookie is processed by browser
-        // Then use window.location.href for full page reload
+        // Use window.location.href for full page reload
         // This ensures the cookie set by the server is available when middleware runs
-        setTimeout(() => {
-          window.location.href = redirectTo
-        }, 100)
+        window.location.href = redirectTo
       } else {
         setError(data.error || 'Login failed')
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setLoading(false)

@@ -27,24 +27,11 @@ export async function middleware(request: NextRequest) {
   // Check authentication for protected routes
   // Priority: Authorization header > Cookie > null
   const cookieToken = request.cookies.get('token')?.value
-  
-  // Debug logging (remove in production)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Middleware] Path:', pathname)
-    console.log('[Middleware] Cookie token exists:', !!cookieToken)
-    console.log('[Middleware] All cookies:', request.cookies.getAll().map(c => c.name))
-  }
-  
   const authHeader = request.headers.get('authorization') || 
     (cookieToken ? `Bearer ${cookieToken}` : null)
 
   try {
     const authContext = await getAuthContext(authHeader)
-    
-    // Debug logging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Middleware] Auth context:', authContext ? { userId: authContext.userId, role: authContext.role } : 'null')
-    }
 
     if (!authContext) {
       // Redirect to login if not authenticated
@@ -90,10 +77,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('x-user-role', authContext.role)
 
     return response
-  } catch (error) {
-    // Log error for debugging
-    console.error('[Middleware] Auth error:', error)
-    
+  } catch {
     // Redirect to login on auth error (only if not already on login page)
     if (!pathname.startsWith('/login')) {
       const loginUrl = new URL('/login', request.url)

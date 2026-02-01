@@ -60,7 +60,25 @@ export async function getUsersByRole(role: UserRole) {
       firstName: true,
       lastName: true,
       role: true,
+      isActive: true,
+      lastLogin: true,
       createdAt: true,
+      managerId: true,
+      manager: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      },
+      _count: {
+        select: {
+          jobs: true,
+          candidates: true,
+          applications: true,
+        },
+      },
     },
   })
 }

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { PipelineBoard } from '@/ui/PipelineBoard'
 import { Modal } from '@/ui/Modal'
+import { DashboardLayout } from '@/components/DashboardLayout'
 
 interface Application {
   id: string
@@ -114,44 +114,14 @@ export default function ApplicationsPage() {
     setShowModal(true)
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <Link href="/dashboard" className="flex items-center text-xl font-bold">
-                Recruitment OS
-              </Link>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link href="/dashboard" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Dashboard
-                </Link>
-                <Link href="/jobs" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Jobs
-                </Link>
-                <Link href="/candidates" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Candidates
-                </Link>
-                <Link href="/applications" className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  Applications
-                </Link>
-              </div>
-            </div>
-          </div>
+    <DashboardLayout>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
+      ) : (
+        <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Application Pipeline</h2>
@@ -201,10 +171,8 @@ export default function ApplicationsPage() {
               <p className="text-gray-500">No applications found. Create applications to track candidate progress.</p>
             </div>
           )}
-        </div>
-      </main>
 
-      <Modal
+          <Modal
         isOpen={showModal}
         onClose={() => {
           setShowModal(false)
@@ -227,8 +195,10 @@ export default function ApplicationsPage() {
             onCancel={() => setShowModal(false)}
           />
         )}
-      </Modal>
-    </div>
+        </Modal>
+        </div>
+      )}
+    </DashboardLayout>
   )
 }
 

@@ -39,16 +39,6 @@ export async function POST(request: NextRequest) {
         // Don't set domain - let it default to current domain
       })
       
-      // Debug logging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Login API] Cookie set for web client')
-        console.log('[Login API] Cookie value length:', result.token.length)
-        console.log('[Login API] Request origin:', requestOrigin)
-      }
-    } else {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Login API] Extension client detected - skipping cookie')
-      }
     }
     
     return addCorsHeaders(response, requestOrigin)

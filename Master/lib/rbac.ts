@@ -1,5 +1,5 @@
 import { UserRole } from '@prisma/client'
-import { verifyToken, extractTokenFromHeader, JWTPayload } from './auth'
+import { verifyToken, extractTokenFromHeader } from './auth'
 
 export interface AuthContext {
   userId: string
@@ -16,7 +16,7 @@ export async function getAuthContext(
   }
 
   try {
-    const payload = verifyToken(token)
+    const payload = await verifyToken(token)
     return {
       userId: payload.userId,
       email: payload.email,
