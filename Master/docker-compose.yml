@@ -16,7 +16,53 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - recruitment-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: recruitment-os-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass recruitment_redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - recruitment-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: recruitment-os-minio
+    restart: unless-stopped
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    environment:
+      MINIO_ROOT_USER: recruitment_minio_admin
+      MINIO_ROOT_PASSWORD: recruitment_minio_password
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - recruitment-network
 
 volumes:
   postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  recruitment-network:
+    driver: bridge
 

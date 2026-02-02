@@ -61,11 +61,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [router])
 
   useEffect(() => {
+    // Initial check
+    const mobile = window.innerWidth < 1024
+    if (mobile) {
+      setIsSidebarOpen(false)
+    } else {
+      const saved = localStorage.getItem('sidebarOpen')
+      if (saved !== null) {
+        setIsSidebarOpen(saved === 'true')
+      }
+    }
+    
     const checkMobile = () => {
       const mobile = window.innerWidth < 1024
       if (mobile) {
+        // On mobile, close sidebar when switching to mobile view
         setIsSidebarOpen(false)
       } else {
+        // On desktop, restore saved state or default to open
         const saved = localStorage.getItem('sidebarOpen')
         if (saved !== null) {
           setIsSidebarOpen(saved === 'true')
@@ -75,7 +88,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     }
     
-    checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
@@ -83,6 +95,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const toggleSidebar = () => {
     const newState = !isSidebarOpen
     setIsSidebarOpen(newState)
+    // Save state only for desktop
     if (window.innerWidth >= 1024) {
       localStorage.setItem('sidebarOpen', String(newState))
     }

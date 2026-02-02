@@ -19,7 +19,9 @@ export async function GET(
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization')
+    // Get token from cookie or Authorization header
+    const authHeader = request.headers.get('authorization') || 
+      (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const { id } = await params
@@ -49,7 +51,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -57,7 +59,9 @@ export async function PUT(
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization')
+    // Get token from cookie or Authorization header
+    const authHeader = request.headers.get('authorization') || 
+      (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const { id } = await params
@@ -98,7 +102,9 @@ export async function DELETE(
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization')
+    // Get token from cookie or Authorization header
+    const authHeader = request.headers.get('authorization') || 
+      (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const { id } = await params

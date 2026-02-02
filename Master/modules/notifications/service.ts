@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
-import { NotificationData, WhatsAppMessage, EmailMessage } from './types'
-import { NotificationType, NotificationChannel } from '@prisma/client'
+import { cacheService } from '@/lib/redis'
+import { NotificationData } from './types'
+import { NotificationType, NotificationChannel, Notification } from '@prisma/client'
 
 export class NotificationService {
   /**
@@ -51,10 +52,19 @@ export class NotificationService {
   }
 
   /**
-   * Get user notifications
+   * Get user notifications (with Redis caching)
    */
-  async getUserNotifications(userId: string, unreadOnly = false) {
-    return db.notification.findMany({
+  async getUserNotifications(userId: string, unreadOnly = false): Promise<Notification[]> {
+    const cacheKey = `notifications:${userId}:${unreadOnly ? 'unread' : 'all'}`
+    
+    // Try to get from cache first
+    const cached = await cacheService.get<Notification[]>(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    // Fetch from database
+    const notifications = await db.notification.findMany({
       where: {
         userId,
         ...(unreadOnly && { read: false }),
@@ -62,16 +72,76 @@ export class NotificationService {
       orderBy: { createdAt: 'desc' },
       take: 50,
     })
+
+    // Cache for 30 seconds
+    await cacheService.set(cacheKey, notifications, 30)
+
+    return notifications
   }
 
   /**
    * Mark notification as read
    */
   async markAsRead(notificationId: string): Promise<void> {
+    const notification = await db.notification.findUnique({
+      where: { id: notificationId },
+    })
+
+    if (!notification) {
+      throw new Error('Notification not found')
+    }
+
     await db.notification.update({
       where: { id: notificationId },
       data: { read: true },
     })
+
+    // Invalidate cache for this user
+    await cacheService.deletePattern(`notifications:${notification.userId}:*`)
+  }
+
+  /**
+   * Get unread notification count for user (with Redis caching)
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    const cacheKey = `notifications:${userId}:unread:count`
+    
+    // Try to get from cache first
+    const cached = await cacheService.get<number>(cacheKey)
+    if (cached !== null) {
+      return cached
+    }
+
+    // Fetch from database
+    const count = await db.notification.count({
+      where: {
+        userId,
+        read: false,
+      },
+    })
+
+    // Cache for 60 seconds
+    await cacheService.set(cacheKey, count, 60)
+
+    return count
+  }
+
+  /**
+   * Mark all notifications as read for user
+   */
+  async markAllAsRead(userId: string): Promise<void> {
+    await db.notification.updateMany({
+      where: {
+        userId,
+        read: false,
+      },
+      data: {
+        read: true,
+      },
+    })
+
+    // Invalidate cache for this user
+    await cacheService.deletePattern(`notifications:${userId}:*`)
   }
 }
 

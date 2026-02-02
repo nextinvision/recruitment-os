@@ -25,7 +25,8 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     loadCandidates()
-  }, [router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const loadCandidates = async () => {
     try {
@@ -37,8 +38,10 @@ export default function CandidatesPage() {
 
       const response = await fetch('/api/candidates', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Content-Type': 'application/json',
         },
+        credentials: 'include',
       })
 
       if (response.ok) {
@@ -194,7 +197,7 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       const user = userData ? JSON.parse(userData) : null
 
       const url = candidate ? `/api/candidates/${candidate.id}` : '/api/candidates'
-      const method = candidate ? 'PUT' : 'POST'
+      const method = candidate ? 'PATCH' : 'POST'
 
       const payload = {
         ...formData,
@@ -204,9 +207,10 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       const response = await fetch(url, {
         method,
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       })
 

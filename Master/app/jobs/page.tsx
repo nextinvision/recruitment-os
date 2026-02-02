@@ -38,8 +38,10 @@ export default function JobsPage() {
 
       const response = await fetch('/api/jobs', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Content-Type': 'application/json',
         },
+        credentials: 'include',
       })
 
       if (response.ok) {
@@ -189,7 +191,7 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
       const user = userData ? JSON.parse(userData) : null
 
       const url = job ? `/api/jobs/${job.id}` : '/api/jobs'
-      const method = job ? 'PUT' : 'POST'
+      const method = job ? 'PATCH' : 'POST'
 
       const payload = {
         ...formData,
@@ -199,9 +201,10 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
       const response = await fetch(url, {
         method,
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       })
 

@@ -98,6 +98,18 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Lock body scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (isMobile && isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [isMobile, isOpen])
+
   const filteredNavigation = navigation.filter(item => {
     if (!item.roles) return true
     return item.roles.includes(user?.role || '')
@@ -105,23 +117,25 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile overlay - behind sidebar, below navbar */}
       {isMobile && isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed top-16 left-0 right-0 bottom-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={onToggle}
+          aria-hidden="true"
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - above overlay */}
       <aside
         className={`
-          fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] bg-white text-gray-900
+          fixed top-16 left-0 z-50 h-[calc(100vh-4rem)] bg-white text-gray-900
           transition-all duration-300 ease-in-out
           ${isOpen ? 'w-64' : 'w-20'}
           ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
           shadow-lg border-r border-gray-200
           flex flex-col
+          lg:z-30
         `}
       >
 
@@ -143,7 +157,7 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
                 `}
                 title={!isOpen ? item.name : undefined}
               >
-                <span className={`flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-900'}`}>
+                <span className={`shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-900'}`}>
                   {item.icon}
                 </span>
                 {isOpen && (

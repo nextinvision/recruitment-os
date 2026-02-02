@@ -14,6 +14,31 @@ const managerRoutes = ['/reports', '/analytics']
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Handle root path redirect
+  if (pathname === '/') {
+    // Check authentication for root path
+    const cookieToken = request.cookies.get('token')?.value
+    const authHeader = request.headers.get('authorization') || 
+      (cookieToken ? `Bearer ${cookieToken}` : null)
+    
+    try {
+      const authContext = await getAuthContext(authHeader)
+      if (authContext) {
+        // Authenticated - redirect to dashboard
+        const dashboardUrl = new URL('/dashboard', request.url)
+        return NextResponse.redirect(dashboardUrl)
+      } else {
+        // Not authenticated - redirect to login
+        const loginUrl = new URL('/login', request.url)
+        return NextResponse.redirect(loginUrl)
+      }
+    } catch {
+      // On error, redirect to login
+      const loginUrl = new URL('/login', request.url)
+      return NextResponse.redirect(loginUrl)
+    }
+  }
+
   // Allow public routes
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next()

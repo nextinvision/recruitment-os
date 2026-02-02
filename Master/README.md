@@ -48,31 +48,56 @@ npm install
 
 ### 2. Start Docker Services
 
-Start PostgreSQL using Docker Compose:
+Start all services (PostgreSQL, Redis, MinIO) using Docker Compose:
 
 ```bash
 docker-compose up -d
 ```
 
-This will start a PostgreSQL 16 container on port 5433 with:
-- Database: `recruitment_os`
-- User: `recruitment_user`
-- Password: `recruitment_password`
+This will start:
+- **PostgreSQL 16** on port 5433
+  - Database: `recruitment_os`
+  - User: `recruitment_user`
+  - Password: `recruitment_password`
+- **Redis 7** on port 6380
+  - Password: `recruitment_redis_password`
+- **MinIO** on ports 9010 (API) and 9011 (Console)
+  - Access Key: `recruitment_minio_admin`
+  - Secret Key: `recruitment_minio_password`
+  - Console: http://localhost:9011
 
 **Note:** Port 5433 is used to avoid conflicts with other PostgreSQL instances.
 
 ### 3. Set Up Environment Variables
 
-Create a `.env` file in the `Master` directory:
+Create a `.env` file in the `Master` directory (see `.env.example` for reference):
 
 ```env
+# Database
 DATABASE_URL="postgresql://recruitment_user:recruitment_password@localhost:5433/recruitment_os?schema=public"
+
+# JWT Authentication
 JWT_SECRET="your-super-secret-jwt-key-change-in-production-min-32-chars"
 JWT_EXPIRES_IN="7d"
+
+# Redis Configuration
+REDIS_HOST="localhost"
+REDIS_PORT="6380"
+REDIS_PASSWORD="recruitment_redis_password"
+
+# MinIO Configuration
+MINIO_ENDPOINT="localhost"
+MINIO_PORT="9010"
+MINIO_USE_SSL="false"
+MINIO_ACCESS_KEY="recruitment_minio_admin"
+MINIO_SECRET_KEY="recruitment_minio_password"
+MINIO_PUBLIC_URL="http://localhost:9010"
+
+# Environment
 NODE_ENV="development"
 ```
 
-### 4. Set Up Database
+### 4. Set Up Database and Storage
 
 ```bash
 # Generate Prisma Client
@@ -83,6 +108,9 @@ npm run db:push
 
 # Seed database with initial users (admin, manager, recruiter)
 npm run db:seed
+
+# Initialize MinIO buckets (resumes, documents, images)
+npm run storage:init
 ```
 
 **Default Users Created:**

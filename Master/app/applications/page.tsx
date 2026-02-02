@@ -70,8 +70,10 @@ export default function ApplicationsPage() {
 
       const response = await fetch('/api/applications', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Content-Type': 'application/json',
         },
+        credentials: 'include',
       })
 
       if (response.ok) {
@@ -89,11 +91,12 @@ export default function ApplicationsPage() {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(`/api/applications/${applicationId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ stage: newStage }),
       })
 
@@ -212,11 +215,12 @@ function ApplicationDetails({ application, onUpdate }: { application: Applicatio
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(`/api/applications/${application.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ stage }),
       })
 
@@ -294,10 +298,18 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       const token = localStorage.getItem('token')
       const [jobsRes, candidatesRes] = await Promise.all([
         fetch('/api/jobs', {
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: {
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
         }),
         fetch('/api/candidates', {
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: {
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
         }),
       ])
 
@@ -333,9 +345,10 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       })
 

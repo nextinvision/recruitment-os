@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { cacheService } from '@/lib/redis'
 import { UserRole } from '@prisma/client'
 
 export interface RecruiterMetrics {
@@ -23,13 +24,21 @@ export interface RecruiterMetrics {
 
 export class AnalyticsService {
   /**
-   * Get recruiter metrics
+   * Get recruiter metrics (with Redis caching)
    */
   async getRecruiterMetrics(
     recruiterId: string,
     startDate: Date,
     endDate: Date
   ): Promise<RecruiterMetrics> {
+    const cacheKey = `analytics:recruiter:${recruiterId}:${startDate.getTime()}:${endDate.getTime()}`
+    
+    // Try to get from cache first
+    const cached = await cacheService.get<RecruiterMetrics>(cacheKey)
+    if (cached) {
+      return cached
+    }
+
     const [jobs, candidates, applications] = await Promise.all([
       db.job.count({
         where: {
@@ -56,7 +65,7 @@ export class AnalyticsService {
     const interview = applications.filter((a) => a.stage === 'INTERVIEW_SCHEDULED').length
     const offer = applications.filter((a) => a.stage === 'OFFER').length
 
-    return {
+    const metrics: RecruiterMetrics = {
       recruiterId,
       period: { start: startDate, end: endDate },
       jobsScraped: jobs,
@@ -69,12 +78,25 @@ export class AnalyticsService {
       },
       averageTimePerStage: [],
     }
+
+    // Cache for 5 minutes
+    await cacheService.set(cacheKey, metrics, 300)
+
+    return metrics
   }
 
   /**
-   * Get platform source usage
+   * Get platform source usage (with Redis caching)
    */
   async getPlatformUsage(startDate: Date, endDate: Date) {
+    const cacheKey = `analytics:platform:${startDate.getTime()}:${endDate.getTime()}`
+    
+    // Try to get from cache first
+    const cached = await cacheService.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
     const jobs = await db.job.groupBy({
       by: ['source'],
       where: {
@@ -83,16 +105,29 @@ export class AnalyticsService {
       _count: true,
     })
 
-    return jobs.map((j) => ({
+    const result = jobs.map((j) => ({
       source: j.source,
       count: j._count,
     }))
+
+    // Cache for 5 minutes
+    await cacheService.set(cacheKey, result, 300)
+
+    return result
   }
 
   /**
-   * Get funnel performance
+   * Get funnel performance (with Redis caching)
    */
   async getFunnelPerformance(startDate: Date, endDate: Date) {
+    const cacheKey = `analytics:funnel:${startDate.getTime()}:${endDate.getTime()}`
+    
+    // Try to get from cache first
+    const cached = await cacheService.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
     const applications = await db.application.findMany({
       where: {
         createdAt: { gte: startDate, lte: endDate },
@@ -111,10 +146,15 @@ export class AnalyticsService {
       'CLOSED',
     ]
 
-    return stages.map((stage) => ({
+    const result = stages.map((stage) => ({
       stage,
       count: applications.filter((a) => a.stage === stage).length,
     }))
+
+    // Cache for 5 minutes
+    await cacheService.set(cacheKey, result, 300)
+
+    return result
   }
 }
 
