@@ -6,6 +6,7 @@ import {
   deleteApplication,
 } from '@/modules/applications/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
+import { logMutation } from '@/lib/mutation-logger'
 
 export async function OPTIONS(request: NextRequest) {
   return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -81,7 +82,25 @@ export async function PATCH(
     }
 
     const body = await request.json()
+    
+    // Get old data for change tracking
+    const oldApplication = application
+    
     const updatedApplication = await updateApplication({ id, ...body })
+
+    // Log the mutation (Activity + AuditLog)
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'UPDATE',
+      entity: 'Application',
+      entityId: id,
+      entityName: `Application for ${updatedApplication.job.title}`,
+      oldData: oldApplication,
+      newData: updatedApplication,
+    }).catch((err) => {
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json(updatedApplication, { status: 200 })
     const origin = request.headers.get('origin')
@@ -124,6 +143,19 @@ export async function DELETE(
     }
 
     await deleteApplication(id)
+
+    // Log the mutation (Activity + AuditLog)
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'DELETE',
+      entity: 'Application',
+      entityId: id,
+      entityName: `Application for ${application.job.title}`,
+      oldData: application,
+    }).catch((err) => {
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json({ message: 'Application deleted successfully' }, { status: 200 })
     const origin = request.headers.get('origin')

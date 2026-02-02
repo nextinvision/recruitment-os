@@ -11,13 +11,13 @@ const getRedisClient = () => {
 
   const redisUrl = process.env.REDIS_URL
   const redisPassword = process.env.REDIS_PASSWORD
+  const redisHost = process.env.REDIS_HOST || 'localhost'
+  const redisPort = parseInt(process.env.REDIS_PORT || '6380')
 
-  if (!redisUrl && !redisPassword) {
-    // Fallback to default connection if env vars not set
-    const client = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6380'),
-      password: redisPassword || 'recruitment_redis_password',
+  // Use connection string if provided
+  if (redisUrl) {
+    const client = new Redis(redisUrl, {
+      password: redisPassword,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000)
         return delay
@@ -33,9 +33,11 @@ const getRedisClient = () => {
     return client
   }
 
-  // Use connection string if provided
-  const client = new Redis(redisUrl || '', {
-    password: redisPassword,
+  // Otherwise, use host/port/password configuration
+  const client = new Redis({
+    host: redisHost,
+    port: redisPort,
+    password: redisPassword || 'recruitment_redis_password',
     retryStrategy: (times) => {
       const delay = Math.min(times * 50, 2000)
       return delay

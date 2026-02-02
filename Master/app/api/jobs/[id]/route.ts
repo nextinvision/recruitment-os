@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { getJobById, updateJob, deleteJob } from '@/modules/jobs/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
+import { logMutation } from '@/lib/mutation-logger'
 
 export async function OPTIONS(request: NextRequest) {
   return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -77,7 +78,26 @@ export async function PATCH(
     }
 
     const body = await request.json()
+    
+    // Get old data for change tracking
+    const oldJob = job
+    
     const updatedJob = await updateJob({ id, ...body })
+
+    // Log the mutation (Activity + AuditLog)
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'UPDATE',
+      entity: 'Job',
+      entityId: id,
+      entityName: `${updatedJob.title} at ${updatedJob.company}`,
+      oldData: oldJob,
+      newData: updatedJob,
+    }).catch((err) => {
+      // Log error but don't fail the request
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json(updatedJob, { status: 200 })
     const origin = request.headers.get('origin')
@@ -120,6 +140,20 @@ export async function DELETE(
     }
 
     await deleteJob(id)
+
+    // Log the mutation (Activity + AuditLog)
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'DELETE',
+      entity: 'Job',
+      entityId: id,
+      entityName: `${job.title} at ${job.company}`,
+      oldData: job,
+    }).catch((err) => {
+      // Log error but don't fail the request
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json({ message: 'Job deleted successfully' }, { status: 200 })
     const origin = request.headers.get('origin')

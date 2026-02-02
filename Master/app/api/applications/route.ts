@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { getApplications, createApplication } from '@/modules/applications/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
+import { logMutation } from '@/lib/mutation-logger'
 
 export async function OPTIONS(request: NextRequest) {
   return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -42,6 +43,19 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const application = await createApplication(body)
+
+    // Log the mutation (Activity + AuditLog)
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'CREATE',
+      entity: 'Application',
+      entityId: application.id,
+      entityName: `Application for ${application.job.title}`,
+      newData: application,
+    }).catch((err) => {
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json(application, { status: 201 })
     const origin = request.headers.get('origin')
