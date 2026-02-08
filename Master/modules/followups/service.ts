@@ -36,8 +36,8 @@ export async function createFollowUp(input: CreateFollowUpInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -126,8 +126,8 @@ export async function getFollowUps(
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -173,8 +173,8 @@ export async function updateFollowUp(input: UpdateFollowUpInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },

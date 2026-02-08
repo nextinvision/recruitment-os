@@ -1,11 +1,13 @@
 /**
  * Email Service
- * Supports both AWS SES and SendGrid
+ * Uses Nodemailer with SMTP for reliable email delivery
  */
+
+import nodemailer from 'nodemailer'
 
 interface EmailMessage {
   to: string | string[]
-  from: string
+  from?: string
   subject: string
   text?: string
   html?: string
@@ -22,195 +24,130 @@ interface EmailResponse {
 }
 
 export class EmailService {
-  private provider: 'ses' | 'sendgrid'
+  private transporter: nodemailer.Transporter | null = null
   private fromEmail: string
   private fromName: string
-  private sesRegion?: string
-  private sendGridApiKey?: string
+  private smtpConfig: {
+    host: string
+    port: number
+    secure: boolean
+    auth?: {
+      user: string
+      pass: string
+    }
+  }
 
   constructor() {
-    this.provider = (process.env.EMAIL_PROVIDER as 'ses' | 'sendgrid') || 'sendgrid'
     this.fromEmail = process.env.EMAIL_FROM || 'noreply@recruitment-os.com'
     this.fromName = process.env.EMAIL_FROM_NAME || 'Recruitment OS'
-    this.sesRegion = process.env.AWS_SES_REGION || 'us-east-1'
-    this.sendGridApiKey = process.env.SENDGRID_API_KEY
+    
+    // SMTP Configuration
+    this.smtpConfig = {
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+      ...(process.env.SMTP_USER && process.env.SMTP_PASS && {
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      }),
+    }
+
+    // Initialize transporter
+    this.initializeTransporter()
   }
 
   /**
-   * Send email
+   * Initialize Nodemailer transporter
    */
-  async sendEmail(message: EmailMessage): Promise<EmailResponse> {
-    if (this.provider === 'sendgrid') {
-      return this.sendViaSendGrid(message)
-    } else {
-      return this.sendViaSES(message)
+  private initializeTransporter(): void {
+    try {
+      this.transporter = nodemailer.createTransport({
+        host: this.smtpConfig.host,
+        port: this.smtpConfig.port,
+        secure: this.smtpConfig.secure,
+        auth: this.smtpConfig.auth,
+        // Additional options for better compatibility
+        tls: {
+          rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false',
+        },
+      })
+
+      // Verify connection (async, but don't block)
+      this.transporter.verify().then(() => {
+        console.log('[Email Service] SMTP connection verified successfully')
+      }).catch((error) => {
+        console.warn('[Email Service] SMTP verification failed:', error.message)
+        console.warn('[Email Service] Email sending may fail. Check your SMTP configuration.')
+      })
+    } catch (error) {
+      console.error('[Email Service] Failed to initialize transporter:', error)
+      this.transporter = null
     }
   }
 
   /**
-   * Send via SendGrid
+   * Send email via SMTP
    */
-  private async sendViaSendGrid(message: EmailMessage): Promise<EmailResponse> {
-    if (!this.sendGridApiKey) {
-      throw new Error('SendGrid API key not configured')
+  async sendEmail(message: EmailMessage): Promise<EmailResponse> {
+    if (!this.transporter) {
+      throw new Error(
+        'Email transporter not initialized. Check SMTP configuration in environment variables.'
+      )
+    }
+
+    // Validate SMTP credentials
+    if (!this.smtpConfig.auth?.user || !this.smtpConfig.auth?.pass) {
+      throw new Error(
+        'SMTP credentials not configured. Set SMTP_USER and SMTP_PASS environment variables.'
+      )
     }
 
     try {
       const recipients = Array.isArray(message.to) ? message.to : [message.to]
-
-      const payload = {
-        personalizations: recipients.map((to) => ({
-          to: [{ email: to }],
-        })),
-        from: {
-          email: this.fromEmail,
-          name: this.fromName,
-        },
+      
+      // Prepare mail options
+      const mailOptions: nodemailer.SendMailOptions = {
+        from: message.from || `${this.fromName} <${this.fromEmail}>`,
+        to: recipients.join(', '),
         subject: message.subject,
-        content: [
-          ...(message.text
-            ? [{ type: 'text/plain', value: message.text }]
-            : []),
-          ...(message.html
-            ? [{ type: 'text/html', value: message.html }]
-            : []),
-        ],
+        text: message.text,
+        html: message.html,
         ...(message.attachments && {
           attachments: message.attachments.map((att) => ({
-            content: typeof att.content === 'string' ? att.content : att.content.toString('base64'),
             filename: att.filename,
-            type: att.type || 'application/octet-stream',
-            disposition: 'attachment',
+            content: att.content,
+            contentType: att.type,
           })),
         }),
       }
 
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.sendGridApiKey}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        const error = await response.text()
-        throw new Error(`SendGrid API error: ${error}`)
-      }
-
-      // SendGrid doesn't return message ID in v3 API, so we generate one
-      const messageId = response.headers.get('x-message-id') || `sg-${Date.now()}`
-
-      return {
-        messageId,
-        status: 'sent',
-      }
-    } catch (error) {
-      console.error('Error sending email via SendGrid:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Send via AWS SES
-   * Uses @aws-sdk/client-ses (AWS SDK v3)
-   * Note: @aws-sdk/client-ses must be installed separately: npm install @aws-sdk/client-ses
-   */
-  private async sendViaSES(message: EmailMessage): Promise<EmailResponse> {
-    try {
-      // Check for AWS credentials first
-      if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-        throw new Error(
-          'AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.'
-        )
-      }
-
-      // Check AWS credentials are defined
-      const accessKeyId = process.env.AWS_ACCESS_KEY_ID
-      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
-
-      if (!accessKeyId || !secretAccessKey) {
-        throw new Error(
-          'AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.'
-        )
-      }
-
-      // Dynamically import AWS SDK v3 to avoid build-time dependency
-      let awsSdk: {
-        SESClient: new (config: { region: string; credentials: { accessKeyId: string; secretAccessKey: string } }) => {
-          send: (command: unknown) => Promise<{ MessageId?: string }>
-        }
-        SendEmailCommand: new (params: unknown) => unknown
-      }
-
-      try {
-        // Dynamic import - module may not be installed
-        // This is marked as external in next.config.ts via serverExternalPackages
-        // Turbopack may show a warning, but it's harmless - the module is resolved at runtime
-        // @ts-expect-error - Module '@aws-sdk/client-ses' may not be installed, handled at runtime
-        awsSdk = await import('@aws-sdk/client-ses')
-      } catch (importError: unknown) {
-        const errorMessage = importError instanceof Error ? importError.message : 'Unknown error'
-        throw new Error(
-          `AWS SES SDK not installed. Install it with: npm install @aws-sdk/client-ses\n` +
-          `Or set EMAIL_PROVIDER=sendgrid to use SendGrid instead.\n` +
-          `Error: ${errorMessage}`
-        )
-      }
-
-      const { SESClient, SendEmailCommand } = awsSdk
-
-      // Create SES client
-      const sesClient = new SESClient({
-        region: this.sesRegion || 'us-east-1',
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      })
-
-      // Prepare email parameters
-      const recipients = Array.isArray(message.to) ? message.to : [message.to]
-
-      const emailParams = {
-        Source: `${this.fromName} <${this.fromEmail}>`,
-        Destination: {
-          ToAddresses: recipients,
-        },
-        Message: {
-          Subject: {
-            Data: message.subject,
-            Charset: 'UTF-8',
-          },
-          Body: {
-            ...(message.text && {
-              Text: {
-                Data: message.text,
-                Charset: 'UTF-8',
-              },
-            }),
-            ...(message.html && {
-              Html: {
-                Data: message.html,
-                Charset: 'UTF-8',
-              },
-            }),
-          },
-        },
-      }
-
       // Send email
-      const command = new SendEmailCommand(emailParams)
-      const result = await sesClient.send(command)
+      const result = await this.transporter.sendMail(mailOptions)
 
       return {
-        messageId: result.MessageId || `ses-${Date.now()}`,
+        messageId: result.messageId || `smtp-${Date.now()}`,
         status: 'sent',
       }
     } catch (error) {
-      console.error('Error sending email via SES:', error)
-      throw error
+      console.error('[Email Service] Error sending email:', error)
+      
+      // Provide helpful error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid login')) {
+          throw new Error('SMTP authentication failed. Check your SMTP_USER and SMTP_PASS credentials.')
+        }
+        if (error.message.includes('ECONNREFUSED')) {
+          throw new Error(`Cannot connect to SMTP server at ${this.smtpConfig.host}:${this.smtpConfig.port}. Check SMTP_HOST and SMTP_PORT.`)
+        }
+        if (error.message.includes('timeout')) {
+          throw new Error('SMTP connection timeout. Check your network connection and SMTP server settings.')
+        }
+        throw new Error(`Failed to send email: ${error.message}`)
+      }
+      
+      throw new Error('Failed to send email: Unknown error')
     }
   }
 
@@ -237,7 +174,7 @@ export class EmailService {
   }
 
   /**
-   * Render HTML template
+   * Render HTML template with variables
    */
   renderTemplate(template: string, variables: Record<string, unknown>): string {
     let rendered = template
@@ -250,7 +187,28 @@ export class EmailService {
 
     return rendered
   }
+
+  /**
+   * Test SMTP connection
+   */
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
+    if (!this.transporter) {
+      return {
+        success: false,
+        error: 'Transporter not initialized',
+      }
+    }
+
+    try {
+      await this.transporter.verify()
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }
+    }
+  }
 }
 
 export const emailService = new EmailService()
-

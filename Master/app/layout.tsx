@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700", "800"],
+  preload: true,
 });
 
 export const metadata: Metadata = {
-  title: "Recruitment OS - Internal Recruitment Agency System",
-  description: "Internal Recruitment Agency System for managing jobs, candidates, and applications",
+  title: "Careerist - Professional Recruitment Platform",
+  description: "Career Consulting + Recruitment Execution Platform",
 };
 
 export default function RootLayout({
@@ -24,9 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${inter.variable} antialiased`}>
         {children}
       </body>
     </html>

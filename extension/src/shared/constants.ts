@@ -1,11 +1,12 @@
 import { JobSource } from './types'
 
-export const SUPPORTED_PLATFORMS: JobSource[] = ['linkedin', 'indeed', 'naukri']
+export const SUPPORTED_PLATFORMS: JobSource[] = ['linkedin', 'indeed', 'naukri', 'other']
 
 export const PLATFORM_DOMAINS: Record<JobSource, string[]> = {
   linkedin: ['www.linkedin.com', 'linkedin.com'],
   indeed: ['www.indeed.com', 'indeed.com'],
   naukri: ['www.naukri.com', 'naukri.com'],
+  other: [], // Universal scraper - no specific domains
 }
 
 export const STORAGE_KEYS = {

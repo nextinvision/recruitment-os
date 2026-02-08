@@ -18,7 +18,12 @@ export async function GET(request: NextRequest) {
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
-    const applications = await getApplications(authContext.userId, authContext.role)
+    // Get query parameters
+    const { searchParams } = new URL(request.url)
+    const jobId = searchParams.get('jobId')
+    const candidateId = searchParams.get('candidateId')
+
+    const applications = await getApplications(authContext.userId, authContext.role, jobId || undefined, candidateId || undefined)
 
     const response = NextResponse.json(applications, { status: 200 })
     const origin = request.headers.get('origin')

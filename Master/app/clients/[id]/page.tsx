@@ -8,13 +8,15 @@ import Link from 'next/link'
 
 interface Client {
   id: string
-  companyName: string
-  contactName: string
+  firstName: string
+  lastName: string
   email?: string
   phone?: string
   status: 'ACTIVE' | 'INACTIVE'
   industry?: string
-  website?: string
+  currentJobTitle?: string
+  experience?: string
+  skills?: string[]
   address?: string
   notes?: string
   assignedUser: {
@@ -106,7 +108,7 @@ export default function ClientProfilePage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-careerist-primary-yellow"></div>
         </div>
       </DashboardLayout>
     )
@@ -116,8 +118,8 @@ export default function ClientProfilePage() {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-gray-600">Client not found</p>
-          <Link href="/clients" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
+          <p className="text-careerist-text-secondary">Client not found</p>
+          <Link href="/clients" className="text-careerist-primary-yellow hover:underline mt-4 inline-block">
             Back to Clients
           </Link>
         </div>
@@ -131,11 +133,15 @@ export default function ClientProfilePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <Link href="/clients" className="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">
+            <Link href="/clients" className="text-careerist-primary-yellow hover:underline text-sm mb-2 inline-block">
               ← Back to Clients
             </Link>
-            <h1 className="text-2xl font-bold text-gray-900">{client.companyName}</h1>
-            <p className="text-gray-600 mt-1">{client.contactName}</p>
+            <h1 className="text-3xl font-bold text-careerist-text-primary">
+              {client.firstName} {client.lastName}
+            </h1>
+            {client.currentJobTitle && (
+              <p className="text-careerist-text-secondary mt-1">{client.currentJobTitle}</p>
+            )}
           </div>
           <span
             className={`px-3 py-1 rounded text-sm font-medium ${
@@ -147,59 +153,73 @@ export default function ClientProfilePage() {
         </div>
 
         {/* Client Details */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Client Information</h2>
+        <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+          <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Client Information</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium text-gray-500">Email</label>
-              <p className="text-gray-900">{client.email || '-'}</p>
+              <label className="text-sm font-medium text-careerist-text-secondary">Email</label>
+              <p className="text-careerist-text-primary">{client.email || '-'}</p>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-500">Phone</label>
-              <p className="text-gray-900">{client.phone || '-'}</p>
+              <label className="text-sm font-medium text-careerist-text-secondary">Phone</label>
+              <p className="text-careerist-text-primary">{client.phone || '-'}</p>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-500">Industry</label>
-              <p className="text-gray-900">{client.industry || '-'}</p>
+              <label className="text-sm font-medium text-careerist-text-secondary">Industry (Desired)</label>
+              <p className="text-careerist-text-primary">{client.industry || '-'}</p>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Website</label>
-              <p className="text-gray-900">
-                {client.website ? (
-                  <a href={client.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                    {client.website}
-                  </a>
-                ) : (
-                  '-'
-                )}
-              </p>
-            </div>
+            {client.currentJobTitle && (
+              <div>
+                <label className="text-sm font-medium text-careerist-text-secondary">Current Job Title</label>
+                <p className="text-careerist-text-primary">{client.currentJobTitle}</p>
+              </div>
+            )}
+            {client.experience && (
+              <div>
+                <label className="text-sm font-medium text-careerist-text-secondary">Experience</label>
+                <p className="text-careerist-text-primary">{client.experience}</p>
+              </div>
+            )}
             <div className="col-span-2">
-              <label className="text-sm font-medium text-gray-500">Address</label>
-              <p className="text-gray-900">{client.address || '-'}</p>
+              <label className="text-sm font-medium text-careerist-text-secondary">Address</label>
+              <p className="text-careerist-text-primary">{client.address || '-'}</p>
             </div>
+            {client.skills && client.skills.length > 0 && (
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-careerist-text-secondary mb-2 block">Skills</label>
+                <div className="flex flex-wrap gap-2">
+                  {client.skills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1 bg-careerist-yellow-light text-careerist-primary-navy rounded-full text-sm font-medium border border-careerist-yellow"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
-              <label className="text-sm font-medium text-gray-500">Assigned To</label>
-              <p className="text-gray-900">
+              <label className="text-sm font-medium text-careerist-text-secondary">Assigned To</label>
+              <p className="text-careerist-text-primary">
                 {client.assignedUser.firstName} {client.assignedUser.lastName}
               </p>
             </div>
             {client.notes && (
               <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-500">Notes</label>
-                <p className="text-gray-900">{client.notes}</p>
+                <label className="text-sm font-medium text-careerist-text-secondary">Notes</label>
+                <p className="text-careerist-text-primary whitespace-pre-wrap">{client.notes}</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Activity Timeline */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h2>
-          <ActivityTimeline activities={activities} entityName={client.companyName} />
+        <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+          <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Activity Timeline</h2>
+          <ActivityTimeline activities={activities} entityName={`${client.firstName} ${client.lastName}`} />
         </div>
       </div>
     </DashboardLayout>
   )
 }
-

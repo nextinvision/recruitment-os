@@ -30,7 +30,8 @@ export async function createPayment(input: CreatePaymentInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -117,7 +118,8 @@ export async function getPayments(
       client: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },

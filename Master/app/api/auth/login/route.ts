@@ -43,8 +43,19 @@ export async function POST(request: NextRequest) {
     
     return addCorsHeaders(response, requestOrigin)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Login failed'
-    const errorResponse = NextResponse.json({ error: message }, { status: 401 })
+    // Handle validation errors (400) vs authentication errors (401)
+    let status = 401
+    let message = 'Login failed'
+    
+    if (error instanceof Error) {
+      message = error.message
+      // If it's a validation error (contains field names), use 400 status
+      if (message.includes(':') && (message.includes('email') || message.includes('password'))) {
+        status = 400
+      }
+    }
+    
+    const errorResponse = NextResponse.json({ error: message }, { status })
     const errorOrigin = request.headers.get('origin')
     return addCorsHeaders(errorResponse, errorOrigin)
   }

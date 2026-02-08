@@ -116,16 +116,17 @@ WHATSAPP_ACCESS_TOKEN=your_access_token
 WHATSAPP_API_VERSION=v18.0
 WHATSAPP_VERIFY_TOKEN=your_verify_token
 
-# Email Service
-EMAIL_PROVIDER=sendgrid  # or 'ses'
+# Email Service (Nodemailer with SMTP)
 EMAIL_FROM=noreply@recruitment-os.com
 EMAIL_FROM_NAME=Recruitment OS
-SENDGRID_API_KEY=your_sendgrid_api_key
 
-# AWS SES (if using SES)
-AWS_SES_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
+# SMTP Configuration
+SMTP_HOST=smtp.gmail.com          # Your SMTP server host
+SMTP_PORT=587                     # SMTP port (587 for TLS, 465 for SSL)
+SMTP_SECURE=false                 # true for SSL (port 465), false for TLS (port 587)
+SMTP_USER=your-email@gmail.com    # SMTP username/email
+SMTP_PASS=your-app-password       # SMTP password or app password
+SMTP_TLS_REJECT_UNAUTHORIZED=true # Set to false for self-signed certificates (not recommended)
 ```
 
 ### Usage Examples

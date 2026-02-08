@@ -43,15 +43,6 @@ const navigation: NavItem[] = [
     ),
   },
   {
-    name: 'Candidates',
-    href: '/candidates',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-  },
-  {
     name: 'Applications',
     href: '/applications',
     icon: (
@@ -215,11 +206,11 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
       {/* Sidebar - above overlay */}
       <aside
         className={`
-          fixed top-16 left-0 z-50 h-[calc(100vh-4rem)] bg-white text-gray-900
+          fixed top-16 left-0 z-50 h-[calc(100vh-4rem)] bg-[#1F3A5F] text-[#CBD5F5]
           transition-all duration-300 ease-in-out
           ${isOpen ? 'w-64' : 'w-20'}
           ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
-          shadow-lg border-r border-gray-200
+          shadow-lg border-r border-[#152A4A]
           flex flex-col
           lg:z-30
         `}
@@ -236,14 +227,14 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
                   ${isActive
-                    ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[rgba(244,180,0,0.15)] text-[#F4B400] border-l-4 border-[#F4B400] font-semibold'
+                    : 'text-[#CBD5F5] hover:bg-[rgba(244,180,0,0.1)] hover:text-[#F4B400]'
                   }
                   ${!isOpen ? 'justify-center' : ''}
                 `}
                 title={!isOpen ? item.name : undefined}
               >
-                <span className={`shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-900'}`}>
+                <span className={`shrink-0 ${isActive ? 'text-[#F4B400]' : 'text-[#CBD5F5] group-hover:text-[#F4B400]'}`}>
                   {item.icon}
                 </span>
                 {isOpen && (

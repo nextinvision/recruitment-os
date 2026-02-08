@@ -6,7 +6,7 @@ export const jobInputSchema = z.object({
   company: z.string().min(1, 'Company is required'),
   location: z.string().min(1, 'Location is required'),
   description: z.string().min(1, 'Description is required'),
-  source: z.enum(['linkedin', 'indeed', 'naukri'] as const),
+  source: z.enum(['linkedin', 'indeed', 'naukri', 'other'] as const),
 })
 
 export const loginSchema = z.object({

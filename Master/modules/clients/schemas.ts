@@ -1,14 +1,16 @@
 import { z } from 'zod'
 
 export const createClientSchema = z.object({
-  companyName: z.string().min(1, 'Company name is required'),
-  contactName: z.string().min(1, 'Contact name is required'),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
   phone: z.string().optional(),
   assignedUserId: z.string().min(1, 'Assigned user ID is required'),
   address: z.string().optional(),
-  industry: z.string().optional(),
-  website: z.string().url('Invalid URL').optional().or(z.literal('')),
+  industry: z.string().optional(), // Industry they want to work in
+  currentJobTitle: z.string().optional(), // Current job title
+  experience: z.string().optional(), // Years of experience
+  skills: z.array(z.string()).optional(), // Skills/interests
   notes: z.string().optional(),
   leadId: z.string().optional(), // For conversion from lead
 })

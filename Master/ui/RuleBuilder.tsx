@@ -251,7 +251,7 @@ export function RuleBuilder({ rule, onSave, onCancel }: RuleBuilderProps) {
                   <input
                     type="text"
                     placeholder="Value"
-                    value={condition.value || ''}
+                    value={condition.value != null ? String(condition.value) : ''}
                     onChange={(e) => {
                       const val = e.target.value
                       // Try to parse as number if possible

@@ -6,7 +6,7 @@
     "build": "npm run build:popup && npm run build:background && npm run build:content",
     "build:popup": "vite build --config vite.popup.config.ts",
     "build:background": "tsc --project tsconfig.background.json",
-    "build:content": "tsc --project tsconfig.content.json",
+    "build:content": "vite build --config vite.content.config.ts",
     "dev": "concurrently \"npm run dev:popup\" \"npm run dev:background\" \"npm run dev:content\"",
     "dev:popup": "vite build --config vite.popup.config.ts --watch",
     "dev:background": "tsc --project tsconfig.background.json --watch",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
+    "@types/node": "^20.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

@@ -4,6 +4,7 @@
     "outDir": "./dist/content",
     "rootDir": "./src",
     "baseUrl": ".",
+    "types": ["chrome"],
     "paths": {
       "@/*": ["./src/*"]
     }

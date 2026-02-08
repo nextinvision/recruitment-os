@@ -1,6 +1,6 @@
-import { getApiUrl } from '../shared/constants'
-import { LoginCredentials, LoginResponse, JobInput, BulkJobsResponse } from '../shared/types'
-import { API_ENDPOINTS, STORAGE_KEYS } from '../shared/constants'
+import { getApiUrl } from '../shared/constants.js'
+import { LoginCredentials, LoginResponse, JobInput, BulkJobsResponse } from '../shared/types.js'
+import { API_ENDPOINTS, STORAGE_KEYS } from '../shared/constants.js'
 
 export class ApiClient {
   /**
@@ -72,9 +72,36 @@ export class ApiClient {
       console.log('[API Client] Login response status:', response.status, response.statusText)
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Login failed' }))
-        console.error('[API Client] Login error:', error)
-        throw new Error(error.error || `Login failed: ${response.statusText}`)
+        const errorData = await response.json().catch(() => ({ error: 'Login failed' }))
+        console.error('[API Client] Login error:', errorData)
+        
+        // Extract user-friendly error message
+        let errorMessage = 'Login failed'
+        if (errorData.error) {
+          // If error is a string, use it directly
+          if (typeof errorData.error === 'string') {
+            errorMessage = errorData.error
+          } 
+          // If error is an array (Zod validation errors), format it
+          else if (Array.isArray(errorData.error)) {
+            errorMessage = errorData.error
+              .map((err: any) => {
+                if (typeof err === 'string') return err
+                if (err.message) return err.message
+                if (err.path && err.path.length > 0) {
+                  return `${err.path.join('.')}: ${err.message || 'Invalid value'}`
+                }
+                return 'Validation error'
+              })
+              .join(', ')
+          }
+          // If error is an object with message
+          else if (errorData.error.message) {
+            errorMessage = errorData.error.message
+          }
+        }
+        
+        throw new Error(errorMessage || `Login failed: ${response.statusText}`)
       }
 
       const data: LoginResponse = await response.json()

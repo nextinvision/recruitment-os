@@ -4,7 +4,19 @@ import { generateToken } from '@/lib/auth'
 import { loginSchema, LoginInput } from './schemas'
 
 export async function loginUser(input: LoginInput) {
-  const validated = loginSchema.parse(input)
+  // Use safeParse to handle validation errors gracefully
+  const validationResult = loginSchema.safeParse(input)
+  
+  if (!validationResult.success) {
+    // Format Zod errors into user-friendly messages
+    const errors = validationResult.error.issues.map(err => {
+      const field = err.path.join('.')
+      return `${field}: ${err.message}`
+    })
+    throw new Error(errors.join(', '))
+  }
+  
+  const validated = validationResult.data
 
   const user = await db.user.findUnique({
     where: { email: validated.email },

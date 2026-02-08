@@ -43,7 +43,8 @@ export async function createRevenue(input: CreateRevenueInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
         },
       },
       _count: {
@@ -139,7 +140,8 @@ export async function getRevenues(
       client: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
         },
       },
       _count: {

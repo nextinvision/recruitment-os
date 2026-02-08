@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { LoginCredentials } from '../shared/types'
+import { loginSchema } from '../shared/validation'
 
 interface LoginFormProps {
   onLogin: (credentials: LoginCredentials) => Promise<void>
@@ -10,9 +11,23 @@ interface LoginFormProps {
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setValidationError(null)
+    
+    // Client-side validation before API call
+    const validationResult = loginSchema.safeParse({ email, password })
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map(err => {
+        const field = err.path.join('.')
+        return `${field}: ${err.message}`
+      })
+      setValidationError(errors.join(', '))
+      return
+    }
+    
     await onLogin({ email, password })
   }
 
@@ -22,7 +37,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error 
         Login to Recruitment OS
       </h2>
       
-      {error && (
+      {(error || validationError) && (
         <div style={{
           padding: '12px',
           marginBottom: '16px',
@@ -31,7 +46,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error 
           borderRadius: '4px',
           fontSize: '14px'
         }}>
-          {error}
+          {validationError || error}
         </div>
       )}
 

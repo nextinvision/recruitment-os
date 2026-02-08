@@ -20,6 +20,7 @@ enum JobSource {
   LINKEDIN
   INDEED
   NAUKRI
+  OTHER
 }
 
 enum ApplicationStage {
@@ -280,16 +281,18 @@ model Lead {
 
 model Client {
   id            String      @id @default(cuid())
-  companyName   String
-  contactName   String
+  firstName      String
+  lastName      String
   email         String?
   phone         String?
   address       String?     @db.Text
   status        ClientStatus @default(ACTIVE)
   assignedUserId String
   leadId        String?     // For conversion from lead
-  industry      String?
-  website       String?
+  industry      String?     // Industry they want to work in
+  currentJobTitle String?   // Current job title (if employed)
+  experience    String?     // Years of experience
+  skills        String[]   // Skills/interests
   notes         String?     @db.Text
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt

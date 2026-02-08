@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { RuleEntity as PrismaRuleEntity } from '@prisma/client'
 import { RuleEntity } from './schemas'
 import {
   createRuleSchema,
@@ -18,7 +19,8 @@ export async function createRule(input: CreateRuleInput & { createdBy: string })
     data: {
       name: validated.name,
       description: validated.description,
-      entity: validated.entity,
+      // Type assert entity since Zod infers it as string union, but Prisma expects enum
+      entity: validated.entity as PrismaRuleEntity,
       enabled: validated.enabled,
       priority: validated.priority,
       conditions: JSON.stringify(validated.conditions),
@@ -72,7 +74,8 @@ export async function getRules(filters?: {
 }) {
   const rules = await db.automationRule.findMany({
     where: {
-      ...(filters?.entity && { entity: filters.entity }),
+      // Type assert entity since TypeScript enum from schemas needs to match Prisma enum
+      ...(filters?.entity && { entity: filters.entity as PrismaRuleEntity }),
       ...(filters?.enabled !== undefined && { enabled: filters.enabled }),
     },
     include: {
@@ -99,16 +102,19 @@ export async function getRules(filters?: {
 }
 
 export async function updateRule(input: UpdateRuleInput & { id: string }) {
-  const { id, ...data } = updateRuleSchema.parse(input)
+  // Extract id first, then validate the rest of the data
+  const { id, ...data } = input
+  const validated = updateRuleSchema.parse(data)
 
   const updateData: any = {}
-  if (data.name !== undefined) updateData.name = data.name
-  if (data.description !== undefined) updateData.description = data.description
-  if (data.entity !== undefined) updateData.entity = data.entity
-  if (data.enabled !== undefined) updateData.enabled = data.enabled
-  if (data.priority !== undefined) updateData.priority = data.priority
-  if (data.conditions !== undefined) updateData.conditions = JSON.stringify(data.conditions)
-  if (data.actions !== undefined) updateData.actions = JSON.stringify(data.actions)
+  if (validated.name !== undefined) updateData.name = validated.name
+  if (validated.description !== undefined) updateData.description = validated.description
+  // Type assert entity since Zod infers it as string union, but Prisma expects enum
+  if (validated.entity !== undefined) updateData.entity = validated.entity as PrismaRuleEntity
+  if (validated.enabled !== undefined) updateData.enabled = validated.enabled
+  if (validated.priority !== undefined) updateData.priority = validated.priority
+  if (validated.conditions !== undefined) updateData.conditions = JSON.stringify(validated.conditions)
+  if (validated.actions !== undefined) updateData.actions = JSON.stringify(validated.actions)
 
   const rule = await db.automationRule.update({
     where: { id },

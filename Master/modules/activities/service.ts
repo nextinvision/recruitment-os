@@ -38,8 +38,8 @@ export async function createActivity(input: CreateActivityInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -128,8 +128,8 @@ export async function getActivities(
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -168,8 +168,8 @@ export async function updateActivity(input: UpdateActivityInput) {
       client: {
         select: {
           id: true,
-          companyName: true,
-          contactName: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },

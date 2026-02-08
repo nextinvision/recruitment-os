@@ -129,12 +129,12 @@ export const App: React.FC = () => {
     // Fallback: check storage directly (ALWAYS runs)
     console.log('[checkAuth] Using direct storage fallback...')
     try {
-      const result = await chrome.storage.local.get(['auth_token', 'user_data'])
-      console.log('[checkAuth] Storage result:', { hasToken: !!result.auth_token, hasUser: !!result.user_data })
+      const result = await chrome.storage.local.get([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER])
+      console.log('[checkAuth] Storage result:', { hasToken: !!result[STORAGE_KEYS.TOKEN], hasUser: !!result[STORAGE_KEYS.USER] })
       
-      if (result.auth_token && result.user_data) {
+      if (result[STORAGE_KEYS.TOKEN] && result[STORAGE_KEYS.USER]) {
         console.log('[checkAuth] User authenticated via storage')
-        setUser(result.user_data)
+        setUser(result[STORAGE_KEYS.USER])
         setState('dashboard')
       } else {
         console.log('[checkAuth] No auth found, showing login')
@@ -178,9 +178,9 @@ export const App: React.FC = () => {
     
     // Fallback: load directly from storage
     try {
-      const result = await chrome.storage.local.get(['staging_jobs'])
-      if (result.staging_jobs) {
-        setStagingJobs(result.staging_jobs)
+      const result = await chrome.storage.local.get([STORAGE_KEYS.STAGING_JOBS])
+      if (result[STORAGE_KEYS.STAGING_JOBS]) {
+        setStagingJobs(result[STORAGE_KEYS.STAGING_JOBS])
       }
     } catch (storageErr) {
       console.error('[loadStagingJobs] Storage fallback failed:', storageErr)
@@ -188,23 +188,77 @@ export const App: React.FC = () => {
   }
 
   const listenForCapturedJobs = () => {
-    chrome.runtime.onMessage.addListener((message) => {
+    const messageListener = (message: any, sender: any, sendResponse: any) => {
       if (message.type === 'JOBS_CAPTURED') {
         const newJobs = message.jobs || []
-        setStagingJobs(prev => [...prev, ...newJobs])
-        saveStagingJobs([...stagingJobs, ...newJobs])
+        console.log('[App] Received JOBS_CAPTURED message:', newJobs.length, 'jobs')
+        
+        // Reload staging jobs from storage to get the latest (service worker saved them)
+        loadStagingJobs().then(() => {
+          console.log('[App] Staging jobs refreshed after capture')
+        })
+        
+        // Also update state immediately if we have the jobs
+        if (newJobs.length > 0) {
+          setStagingJobs(prev => {
+            // Avoid duplicates
+            const existingIds = new Set(prev.map(j => j.id))
+            const uniqueNewJobs = newJobs.filter((job: any) => !existingIds.has(job.id))
+            if (uniqueNewJobs.length > 0) {
+              const updated = [...prev, ...uniqueNewJobs]
+              saveStagingJobs(updated)
+              return updated
+            }
+            return prev
+          })
+        }
       }
-    })
+      return true // Keep channel open for async response
+    }
+    
+    chrome.runtime.onMessage.addListener(messageListener)
+    
+    // Return cleanup function
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener)
+    }
   }
 
   const saveStagingJobs = async (jobs: ScrapedJob[]) => {
     try {
-      await chrome.runtime.sendMessage({
-        type: 'SAVE_STAGING_JOBS',
-        jobs,
+      // Try service worker first
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 1000)
+      )
+      
+      const messagePromise = new Promise((resolve, reject) => {
+        try {
+          chrome.runtime.sendMessage(
+            { type: 'SAVE_STAGING_JOBS', jobs },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message))
+              } else {
+                resolve(response)
+              }
+            }
+          )
+        } catch (err) {
+          reject(err)
+        }
       })
+
+      await Promise.race([messagePromise, timeoutPromise])
     } catch (err) {
-      console.error('Failed to save staging jobs:', err)
+      console.warn('[saveStagingJobs] Service worker failed, using direct storage:', err)
+      // Fallback: save directly to storage
+      try {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.STAGING_JOBS]: jobs,
+        })
+      } catch (storageErr) {
+        console.error('[saveStagingJobs] Direct storage also failed:', storageErr)
+      }
     }
   }
 
@@ -214,36 +268,113 @@ export const App: React.FC = () => {
     console.log('[handleLogin] Starting login for:', credentials.email)
 
     try {
-      // Use direct API call as primary method (more reliable than service worker)
-      // Service workers can be terminated/sleeping, causing delays
-      // Add header to identify this as extension request (so API doesn't set cookies)
-      const loginResponse = await fetch(`${getBackendUrl()}/api/auth/login`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'extension', // Identify as extension to avoid cookie setting
-        },
-        body: JSON.stringify(credentials),
-      })
+      // Try service worker first (preferred method for consistency)
+      let loginResult: LoginResponse | null = null
+      let serviceWorkerWorked = false
 
-      if (loginResponse.ok) {
-        const data = await loginResponse.json()
-        console.log('[handleLogin] Login successful, user:', data.user?.email)
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Service worker timeout')), 2000)
+        )
         
-        // Store token and user data
-        await chrome.storage.local.set({
-          [STORAGE_KEYS.TOKEN]: data.token,
-          [STORAGE_KEYS.USER]: data.user,
+        const messagePromise = new Promise<LoginResponse>((resolve, reject) => {
+          try {
+            chrome.runtime.sendMessage(
+              { type: 'LOGIN', credentials },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  reject(new Error(chrome.runtime.lastError.message))
+                } else if (response?.success && response.data) {
+                  resolve(response.data)
+                } else {
+                  reject(new Error(response?.error || 'Login failed'))
+                }
+              }
+            )
+          } catch (err) {
+            reject(err)
+          }
         })
-        
-        setUser(data.user)
-        setState('dashboard')
-      } else {
-        const errorData = await loginResponse.json().catch(() => ({}))
-        const errorMsg = errorData.error || `Login failed: ${loginResponse.statusText}`
-        console.error('[handleLogin] Login failed:', errorMsg)
-        setError(errorMsg)
+
+        loginResult = await Promise.race([messagePromise, timeoutPromise]) as LoginResponse
+        serviceWorkerWorked = true
+        console.log('[handleLogin] Login via service worker successful')
+      } catch (swError) {
+        console.warn('[handleLogin] Service worker login failed, trying direct API:', swError)
       }
+
+      // Fallback: direct API call if service worker failed
+      if (!serviceWorkerWorked || !loginResult) {
+        console.log('[handleLogin] Using direct API call as fallback')
+        const loginResponse = await fetch(`${getBackendUrl()}/api/auth/login`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Client-Type': 'extension',
+          },
+          body: JSON.stringify(credentials),
+        })
+
+        if (loginResponse.ok) {
+          loginResult = await loginResponse.json()
+          console.log('[handleLogin] Direct API login successful')
+          
+          // Store token and user data (service worker should have done this, but ensure it's done)
+          if (loginResult) {
+            await chrome.storage.local.set({
+              [STORAGE_KEYS.TOKEN]: loginResult.token,
+              [STORAGE_KEYS.USER]: loginResult.user,
+            })
+          }
+        } else {
+          const errorData = await loginResponse.json().catch(() => ({}))
+          console.error('[handleLogin] Login failed:', errorData)
+          
+          // Extract user-friendly error message
+          let errorMsg = 'Login failed'
+          if (errorData.error) {
+            // If error is a string, use it directly
+            if (typeof errorData.error === 'string') {
+              errorMsg = errorData.error
+            } 
+            // If error is an array (Zod validation errors), format it
+            else if (Array.isArray(errorData.error)) {
+              errorMsg = errorData.error
+                .map((err: any) => {
+                  if (typeof err === 'string') return err
+                  if (err.message) return err.message
+                  if (err.path && err.path.length > 0) {
+                    return `${err.path.join('.')}: ${err.message || 'Invalid value'}`
+                  }
+                  return 'Validation error'
+                })
+                .join(', ')
+            }
+            // If error is an object with message
+            else if (errorData.error.message) {
+              errorMsg = errorData.error.message
+            }
+          } else {
+            errorMsg = `Login failed: ${loginResponse.statusText}`
+          }
+          
+          setError(errorMsg)
+          return
+        }
+      }
+
+      // Ensure we have valid login result
+      if (!loginResult) {
+        throw new Error('Login failed: No response received')
+      }
+      
+      if (!loginResult.user || !loginResult.token) {
+        throw new Error('Invalid login response: Missing user or token')
+      }
+      
+      setUser(loginResult.user)
+      setState('dashboard')
+      console.log('[handleLogin] Login complete, user:', loginResult.user.email)
     } catch (err) {
       console.error('[handleLogin] Login exception:', err)
       const errorMsg = err instanceof Error ? err.message : 'Login failed'
@@ -259,13 +390,65 @@ export const App: React.FC = () => {
   }
 
   const handleLogout = async () => {
+    console.log('[handleLogout] Starting logout...')
     try {
-      await chrome.runtime.sendMessage({ type: 'LOGOUT' })
+      // Try service worker first
+      let serviceWorkerWorked = false
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Service worker timeout')), 1000)
+        )
+        
+        const messagePromise = new Promise((resolve, reject) => {
+          try {
+            chrome.runtime.sendMessage({ type: 'LOGOUT' }, (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message))
+              } else {
+                resolve(response)
+              }
+            })
+          } catch (err) {
+            reject(err)
+          }
+        })
+
+        await Promise.race([messagePromise, timeoutPromise])
+        serviceWorkerWorked = true
+        console.log('[handleLogout] Logout via service worker successful')
+      } catch (swError) {
+        console.warn('[handleLogout] Service worker logout failed, using direct cleanup:', swError)
+      }
+
+      // Always ensure direct cleanup (fallback and safety)
+      await chrome.storage.local.remove([
+        STORAGE_KEYS.TOKEN,
+        STORAGE_KEYS.USER,
+        STORAGE_KEYS.STAGING_JOBS,
+      ])
+      console.log('[handleLogout] Storage cleared')
+
+      // Reset all state
       setUser(null)
       setStagingJobs([])
       setState('login')
+      setError(null)
+      console.log('[handleLogout] Logout complete')
     } catch (err) {
-      console.error('Logout failed:', err)
+      console.error('[handleLogout] Logout exception:', err)
+      // Even if there's an error, try to clear state
+      try {
+        await chrome.storage.local.remove([
+          STORAGE_KEYS.TOKEN,
+          STORAGE_KEYS.USER,
+          STORAGE_KEYS.STAGING_JOBS,
+        ])
+        setUser(null)
+        setStagingJobs([])
+        setState('login')
+      } catch (cleanupErr) {
+        console.error('[handleLogout] Cleanup failed:', cleanupErr)
+      }
     }
   }
 
@@ -282,13 +465,31 @@ export const App: React.FC = () => {
       // Convert ScrapedJob to JobInput (remove id, isValid, errors)
       const jobInputs = jobs.map(({ id, isValid, errors, ...job }) => ({
         ...job,
-        source: job.source.toUpperCase() as 'LINKEDIN' | 'INDEED' | 'NAUKRI',
+        source: job.source.toUpperCase() as 'LINKEDIN' | 'INDEED' | 'NAUKRI' | 'OTHER',
       }))
 
-      const response = await chrome.runtime.sendMessage({
-        type: 'SUBMIT_JOBS',
-        jobs: jobInputs,
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Submission timeout')), 30000)
+      )
+      
+      const messagePromise = new Promise((resolve, reject) => {
+        try {
+          chrome.runtime.sendMessage(
+            { type: 'SUBMIT_JOBS', jobs: jobInputs },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message))
+              } else {
+                resolve(response)
+              }
+            }
+          )
+        } catch (err) {
+          reject(err)
+        }
       })
+
+      const response = await Promise.race([messagePromise, timeoutPromise]) as any
 
       if (response?.success) {
         // Remove submitted jobs from staging
@@ -297,12 +498,14 @@ export const App: React.FC = () => {
         setStagingJobs(remainingJobs)
         saveStagingJobs(remainingJobs)
 
-        alert(`Successfully submitted ${response.data.count} job(s)!`)
+        alert(`✅ Successfully submitted ${response.data.count} job(s) to dashboard!`)
       } else {
         setError(response?.error || 'Submission failed')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Submission failed')
+      const errorMsg = err instanceof Error ? err.message : 'Submission failed'
+      setError(errorMsg)
+      console.error('[handleSubmit] Submission error:', err)
     } finally {
       setIsSubmitting(false)
     }

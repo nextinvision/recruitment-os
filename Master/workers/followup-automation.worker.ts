@@ -87,12 +87,13 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
             contactName: true,
           },
         },
-        client: {
-          select: {
-            companyName: true,
-            contactName: true,
-          },
-        },
+         client: {
+           select: {
+             id: true,
+             firstName: true,
+             lastName: true,
+           },
+         },
       },
     })
 
@@ -159,7 +160,7 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
     const entityName = followUp.lead
       ? `${followUp.lead.companyName} (Lead)`
       : followUp.client
-        ? `${followUp.client.companyName} (Client)`
+        ? `${followUp.client.firstName} ${followUp.client.lastName} (Client)`
         : 'Unknown'
 
     await createActivity({

@@ -1,4 +1,4 @@
-export type JobSource = 'linkedin' | 'indeed' | 'naukri'
+export type JobSource = 'linkedin' | 'indeed' | 'naukri' | 'other'
 
 export interface JobInput {
   title: string

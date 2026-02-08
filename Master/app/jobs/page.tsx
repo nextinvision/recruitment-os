@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DataTable } from '@/ui/DataTable'
-import { Modal } from '@/ui/Modal'
+import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
+import Link from 'next/link'
 
 interface Job {
   id: string
@@ -26,6 +26,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadJobs()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadJobs = async () => {
@@ -60,21 +61,19 @@ export default function JobsPage() {
     setShowCreateModal(true)
   }
 
-  const handleEditJob = (job: Job) => {
-    setSelectedJob(job)
-    setShowCreateModal(true)
-  }
-
-
   const columns = [
     {
       key: 'title',
       header: 'Title',
       render: (job: Job) => (
-        <div>
-          <div className="font-medium text-gray-900">{job.title}</div>
-          <div className="text-sm text-gray-700">{job.company} • {job.location}</div>
-        </div>
+        <Link 
+          href={`/jobs/${job.id}`} 
+          className="block hover:opacity-80 transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="font-medium text-careerist-text-primary">{job.title}</div>
+          <div className="text-sm text-careerist-text-secondary">{job.company} • {job.location}</div>
+        </Link>
       ),
     },
     {
@@ -113,31 +112,26 @@ export default function JobsPage() {
   return (
     <DashboardLayout>
       {loading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
+        <Spinner fullScreen />
       ) : (
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Jobs</h2>
-              <p className="mt-1 text-sm text-gray-700">
-                Manage and track all job postings
-              </p>
-            </div>
-            <button
-              onClick={handleCreateJob}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Add Job
-            </button>
-          </div>
+          <PageHeader
+            title="Jobs"
+            description="Manage and track all job postings"
+            action={{
+              label: 'Add Job',
+              onClick: handleCreateJob,
+            }}
+          />
 
           <DataTable
             data={jobs}
             columns={columns}
             searchable
-            onRowClick={handleEditJob}
+            onRowClick={(job) => {
+              // Navigate to detail page using client-side navigation
+              router.push(`/jobs/${job.id}`)
+            }}
           />
 
           <Modal
@@ -211,10 +205,19 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
       if (response.ok) {
         onSuccess()
       } else {
-        const data = await response.json()
-        setError(data.error || 'Failed to save job')
+        const data = await response.json().catch(() => ({ error: 'Failed to save job' }))
+        // Handle Zod validation errors
+        if (Array.isArray(data.error)) {
+          setError(data.error.join(', '))
+        } else if (typeof data.error === 'string') {
+          setError(data.error)
+        } else if (data.message) {
+          setError(data.message)
+        } else {
+          setError('Failed to save job. Please check your input and try again.')
+        }
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setLoading(false)
@@ -223,100 +226,69 @@ function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error">{error}</Alert>}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900">Title</label>
-        <input
+      <Input
+        label="Title"
+        type="text"
+        required
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+      />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Company"
           type="text"
           required
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          value={formData.company}
+          onChange={(e) => setFormData({ ...formData, company: e.target.value })}
         />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900">Company</label>
-          <input
-            type="text"
-            required
-            value={formData.company}
-            onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900">Location</label>
-          <input
-            type="text"
-            required
-            value={formData.location}
-            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900">Description</label>
-        <textarea
+        <Input
+          label="Location"
+          type="text"
           required
-          rows={4}
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          value={formData.location}
+          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
         />
       </div>
 
+      <Textarea
+        label="Description"
+        required
+        rows={4}
+        value={formData.description}
+        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+      />
+
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900">Source</label>
-          <select
-            value={formData.source}
-            onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="LINKEDIN">LinkedIn</option>
-            <option value="INDEED">Indeed</option>
-            <option value="NAUKRI">Naukri</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900">Status</label>
-          <select
-            value={formData.status}
-            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="ACTIVE">Active</option>
-            <option value="CLOSED">Closed</option>
-            <option value="FILLED">Filled</option>
-          </select>
-        </div>
+        <Select
+          label="Source"
+          value={formData.source}
+          onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+          options={[
+            { value: 'LINKEDIN', label: 'LinkedIn' },
+            { value: 'INDEED', label: 'Indeed' },
+            { value: 'NAUKRI', label: 'Naukri' },
+          ]}
+        />
+        <Select
+          label="Status"
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+          options={[
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'CLOSED', label: 'Closed' },
+            { value: 'FILLED', label: 'Filled' },
+          ]}
+        />
       </div>
 
-      <div className="flex justify-end space-x-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : job ? 'Update' : 'Create'}
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        submitLabel={job ? 'Update' : 'Create'}
+        isLoading={loading}
+      />
     </form>
   )
 }

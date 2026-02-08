@@ -103,17 +103,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-900">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F4B400] border-t-[#1F3A5F] mx-auto"></div>
+          <p className="mt-4 text-[#0F172A] font-medium">Loading...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar user={user} onSidebarToggle={toggleSidebar} isSidebarOpen={isSidebarOpen} />
       <Sidebar user={user} isOpen={isSidebarOpen} onToggle={toggleSidebar} />
       <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>

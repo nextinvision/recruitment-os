@@ -2,20 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DataTable } from '@/ui/DataTable'
-import { Modal } from '@/ui/Modal'
+import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Button, Badge, Spinner } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import Link from 'next/link'
 
 interface Client {
   id: string
-  companyName: string
-  contactName: string
+  firstName: string
+  lastName: string
   email?: string
   phone?: string
   status: 'ACTIVE' | 'INACTIVE'
   industry?: string
-  website?: string
+  currentJobTitle?: string
+  experience?: string
+  skills?: string[]
   address?: string
   notes?: string
   assignedUser?: {
@@ -35,6 +36,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     loadClients()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadClients = async () => {
@@ -76,33 +78,45 @@ export default function ClientsPage() {
 
   const columns = [
     {
-      key: 'companyName',
-      header: 'Company',
+      key: 'name',
+      header: 'Name',
       render: (client: Client) => (
-        <Link href={`/clients/${client.id}`} className="font-medium text-blue-600 hover:text-blue-800">
-          {client.companyName}
+        <Link 
+          href={`/clients/${client.id}`} 
+          className="font-medium text-careerist-text-primary hover:text-careerist-primary-yellow transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {client.firstName} {client.lastName}
         </Link>
       ),
     },
     {
-      key: 'contactName',
-      header: 'Contact',
-      render: (client: Client) => <span className="text-gray-900">{client.contactName}</span>,
-    },
-    {
       key: 'email',
       header: 'Email',
-      render: (client: Client) => <span className="text-gray-700">{client.email || '-'}</span>,
+      render: (client: Client) => <span className="text-careerist-text-primary">{client.email || '-'}</span>,
+    },
+    {
+      key: 'phone',
+      header: 'Phone',
+      render: (client: Client) => <span className="text-careerist-text-primary">{client.phone || '-'}</span>,
+    },
+    {
+      key: 'industry',
+      header: 'Industry',
+      render: (client: Client) => <span className="text-careerist-text-secondary">{client.industry || '-'}</span>,
+    },
+    {
+      key: 'currentJobTitle',
+      header: 'Current Job',
+      render: (client: Client) => <span className="text-careerist-text-secondary">{client.currentJobTitle || '-'}</span>,
     },
     {
       key: 'status',
       header: 'Status',
       render: (client: Client) => (
-        <span className={`px-2 py-1 rounded text-xs font-medium ${
-          client.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-        }`}>
+        <Badge variant={client.status === 'ACTIVE' ? 'success' : 'neutral'}>
           {client.status}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -111,7 +125,7 @@ export default function ClientsPage() {
       render: (client: Client) => (
         <button
           onClick={() => handleEditClient(client)}
-          className="text-blue-600 hover:text-blue-800 text-sm"
+          className="text-careerist-primary-navy hover:text-careerist-primary-yellow text-sm transition-colors"
         >
           Edit
         </button>
@@ -122,9 +136,7 @@ export default function ClientsPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
+        <Spinner fullScreen />
       </DashboardLayout>
     )
   }
@@ -132,21 +144,20 @@ export default function ClientsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-          <button
-            onClick={handleCreateClient}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Add Client
-          </button>
-        </div>
+        <PageHeader
+          title="Clients"
+          description="Manage job seekers who are taking our placement services"
+          action={{
+            label: 'Add Client',
+            onClick: handleCreateClient,
+          }}
+        />
 
         <DataTable
           data={clients}
           columns={columns}
           searchable
-          searchPlaceholder="Search clients..."
+          searchPlaceholder="Search clients by name, email, or industry..."
         />
 
         {showCreateModal && (
@@ -157,6 +168,7 @@ export default function ClientsPage() {
               setSelectedClient(null)
             }}
             title={selectedClient ? 'Edit Client' : 'Create Client'}
+            size="lg"
           >
             <ClientForm
               client={selectedClient}
@@ -187,13 +199,15 @@ function ClientForm({
   onCancel: () => void
 }) {
   const [formData, setFormData] = useState({
-    companyName: client?.companyName || '',
-    contactName: client?.contactName || '',
+    firstName: client?.firstName || '',
+    lastName: client?.lastName || '',
     email: client?.email || '',
     phone: client?.phone || '',
     address: client?.address || '',
     industry: client?.industry || '',
-    website: client?.website || '',
+    currentJobTitle: client?.currentJobTitle || '',
+    experience: client?.experience || '',
+    skills: client?.skills?.join(', ') || '',
     notes: client?.notes || '',
     status: client?.status || 'ACTIVE',
   })
@@ -213,14 +227,23 @@ function ClientForm({
       const url = client ? `/api/clients/${client.id}` : '/api/clients'
       const method = client ? 'PATCH' : 'POST'
 
-      const payload: any = {
-        ...formData,
-        email: formData.email || undefined,
-        website: formData.website || undefined,
+      const payload: Record<string, unknown> = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email && formData.email.trim() !== '' ? formData.email.trim() : undefined,
+        phone: formData.phone && formData.phone.trim() !== '' ? formData.phone.trim() : undefined,
+        address: formData.address && formData.address.trim() !== '' ? formData.address.trim() : undefined,
+        industry: formData.industry && formData.industry.trim() !== '' ? formData.industry.trim() : undefined,
+        currentJobTitle: formData.currentJobTitle && formData.currentJobTitle.trim() !== '' ? formData.currentJobTitle.trim() : undefined,
+        experience: formData.experience && formData.experience.trim() !== '' ? formData.experience.trim() : undefined,
+        skills: formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : [],
+        notes: formData.notes && formData.notes.trim() !== '' ? formData.notes.trim() : undefined,
       }
 
       if (method === 'POST') {
         payload.assignedUserId = user?.id
+      } else if (client) {
+        payload.status = formData.status
       }
 
       const response = await fetch(url, {
@@ -236,10 +259,15 @@ function ClientForm({
       if (response.ok) {
         onSuccess()
       } else {
-        const data = await response.json()
-        setError(data.error || 'Failed to save client')
+        const data = await response.json().catch(() => ({ error: 'Failed to save client' }))
+        const errorMessage = typeof data.error === 'string' 
+          ? data.error 
+          : Array.isArray(data.error) 
+            ? data.error.map((e: { message?: string } | string) => typeof e === 'string' ? e : e.message || 'Error').join(', ')
+            : (data.error as { message?: string })?.message || 'Failed to save client. Please check your input and try again.'
+        setError(errorMessage)
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setLoading(false)
@@ -248,127 +276,105 @@ function ClientForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error">{error}</Alert>}
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Company Name *</label>
-          <input
-            type="text"
-            required
-            value={formData.companyName}
-            onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Contact Name *</label>
-          <input
-            type="text"
-            required
-            value={formData.contactName}
-            onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Email</label>
-          <input
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Phone</label>
-          <input
-            type="tel"
-            value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Industry</label>
-          <input
-            type="text"
-            value={formData.industry}
-            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Website</label>
-          <input
-            type="url"
-            value={formData.website}
-            onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Address</label>
-        <textarea
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          rows={2}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        <Input
+          label="First Name"
+          type="text"
+          required
+          value={formData.firstName}
+          onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+        />
+        <Input
+          label="Last Name"
+          type="text"
+          required
+          value={formData.lastName}
+          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
         />
       </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+        />
+        <Input
+          label="Phone"
+          type="tel"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Industry (Desired)"
+          type="text"
+          value={formData.industry}
+          onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+          placeholder="e.g., IT, Finance, Healthcare"
+        />
+        <Input
+          label="Current Job Title"
+          type="text"
+          value={formData.currentJobTitle}
+          onChange={(e) => setFormData({ ...formData, currentJobTitle: e.target.value })}
+          placeholder="e.g., Software Developer"
+        />
+      </div>
+
+      <Input
+        label="Experience"
+        type="text"
+        value={formData.experience}
+        onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+        placeholder="e.g., 5 years in Software Development"
+      />
+
+      <Input
+        label="Skills (comma-separated)"
+        type="text"
+        value={formData.skills}
+        onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+        placeholder="e.g., React, Node.js, TypeScript, AWS"
+      />
+
+      <Textarea
+        label="Address"
+        value={formData.address}
+        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+        rows={2}
+      />
 
       {client && (
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Status</label>
-          <select
-            value={formData.status}
-            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        </div>
+        <Select
+          label="Status"
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
+          options={[
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'INACTIVE', label: 'Inactive' },
+          ]}
+        />
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Notes</label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          rows={3}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      <Textarea
+        label="Notes"
+        value={formData.notes}
+        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+        rows={3}
+        placeholder="Additional notes about the client..."
+      />
 
-      <div className="flex justify-end gap-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : client ? 'Update' : 'Create'}
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        submitLabel={client ? 'Update' : 'Create'}
+        isLoading={loading}
+      />
     </form>
   )
 }

@@ -41,8 +41,8 @@ export async function checkOverdueFollowUps() {
         client: {
           select: {
             id: true,
-            companyName: true,
-            contactName: true,
+            firstName: true,
+            lastName: true,
           },
         },
       },

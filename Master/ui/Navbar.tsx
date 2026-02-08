@@ -28,14 +28,14 @@ export function Navbar({ user, onSidebarToggle, isSidebarOpen }: NavbarProps) {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
+    <nav className="bg-white border-b border-[#E5E7EB] shadow-sm sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left side - Sidebar toggle and logo */}
           <div className="flex items-center gap-4">
             <button
               onClick={onSidebarToggle}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+              className="p-2 rounded-lg hover:bg-[#F8FAFC] transition-colors text-[#1F3A5F] hover:text-[#F4B400]"
               aria-label="Toggle sidebar"
             >
               {isSidebarOpen ? (
@@ -49,7 +49,7 @@ export function Navbar({ user, onSidebarToggle, isSidebarOpen }: NavbarProps) {
               )}
             </button>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-gray-900">Recruitment OS</h1>
+              <h1 className="text-xl font-bold text-[#1F3A5F]">Careerist</h1>
             </div>
           </div>
 
@@ -62,18 +62,18 @@ export function Navbar({ user, onSidebarToggle, isSidebarOpen }: NavbarProps) {
             <div className="relative">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#F8FAFC] transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                <div className="w-8 h-8 rounded-full bg-[#1F3A5F] flex items-center justify-center text-white font-semibold text-sm">
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
                 </div>
                 <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-[#0F172A]">
                     {user?.firstName} {user?.lastName}
                   </p>
-                  <p className="text-xs text-gray-500">{user?.role}</p>
+                  <p className="text-xs text-[#64748B]">{user?.role}</p>
                 </div>
-                <svg className="hidden md:block w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="hidden md:block w-4 h-4 text-[#64748B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -85,17 +85,17 @@ export function Navbar({ user, onSidebarToggle, isSidebarOpen }: NavbarProps) {
                     className="fixed inset-0 z-10"
                     onClick={() => setIsMobileMenuOpen(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                    <div className="px-4 py-3 border-b border-gray-200">
-                      <p className="text-sm font-medium text-gray-900">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-20">
+                    <div className="px-4 py-3 border-b border-[#E5E7EB]">
+                      <p className="text-sm font-medium text-[#0F172A]">
                         {user?.firstName} {user?.lastName}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                      <p className="text-xs text-gray-400 mt-1">{user?.role}</p>
+                      <p className="text-xs text-[#64748B] truncate">{user?.email}</p>
+                      <p className="text-xs text-[#64748B] mt-1">{user?.role}</p>
                     </div>
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#0F172A] hover:bg-[#F8FAFC] transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

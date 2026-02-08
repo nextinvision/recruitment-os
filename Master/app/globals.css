@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
+/* Careerist Brand Theme - Root Level CSS Variables */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary Brand Colors */
+  --careerist-yellow: #F4B400;
+  --careerist-navy: #1F3A5F;
+  
+  /* Neutral System */
+  --careerist-bg: #F8FAFC;
+  --careerist-card: #FFFFFF;
+  --careerist-border: #E5E7EB;
+  --careerist-text-primary: #0F172A;
+  --careerist-text-secondary: #64748B;
+  
+  /* Functional Colors */
+  --careerist-success: #22C55E;
+  --careerist-warning: #F59E0B;
+  --careerist-error: #EF4444;
+  --careerist-info: #3B82F6;
+  
+  /* Sidebar */
+  --careerist-sidebar-bg: #1F3A5F;
+  --careerist-sidebar-text: #CBD5F5;
+  --careerist-sidebar-active: #F4B400;
+  --careerist-sidebar-hover: rgba(244, 180, 0, 0.1);
+  
+  /* Legacy variables for compatibility */
+  --background: var(--careerist-bg);
+  --foreground: var(--careerist-text-primary);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--careerist-bg);
+  --color-foreground: var(--careerist-text-primary);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--careerist-bg);
+  color: var(--careerist-text-primary);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--careerist-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--careerist-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--careerist-text-secondary);
 }

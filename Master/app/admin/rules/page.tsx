@@ -172,8 +172,8 @@ export default function RulesPage() {
       ),
     },
     {
-      key: 'actions',
-      header: 'Actions',
+      key: 'actionCount',
+      header: 'Rule Actions',
       render: (rule: AutomationRule) => (
         <div className="text-sm text-gray-600">
           {rule.actions.length} action{rule.actions.length !== 1 ? 's' : ''}

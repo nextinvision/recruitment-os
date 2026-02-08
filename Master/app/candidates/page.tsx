@@ -175,6 +175,14 @@ export default function CandidatesPage() {
   )
 }
 
+interface Resume {
+  id: string
+  fileName: string
+  fileUrl: string
+  version: number
+  uploadedAt: string
+}
+
 function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidate | null; onSuccess: () => void; onCancel: () => void }) {
   const [formData, setFormData] = useState({
     firstName: candidate?.firstName || '',
@@ -183,8 +191,77 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
     phone: candidate?.phone || '',
     linkedinUrl: candidate?.linkedinUrl || '',
   })
+  const [resumes, setResumes] = useState<Resume[]>([])
+  const [uploadingResume, setUploadingResume] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (candidate?.id) {
+      loadResumes()
+    }
+  }, [candidate?.id])
+
+  const loadResumes = async () => {
+    if (!candidate?.id) return
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      // Load resumes from candidate detail - we'll need to fetch candidate with resumes
+      const response = await fetch(`/api/candidates/${candidate.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setResumes(data.resumes || [])
+      }
+    } catch (err) {
+      console.error('Failed to load resumes:', err)
+    }
+  }
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !candidate?.id) return
+
+    setUploadingResume(true)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      // Upload file
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('fileType', 'RESUME')
+
+      const uploadResponse = await fetch('/api/files/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: formData,
+      })
+
+      if (uploadResponse.ok) {
+        const fileRecord = await uploadResponse.json()
+        // Create resume record - we'll need a resume API endpoint for this
+        // For now, just reload resumes
+        await loadResumes()
+      }
+    } catch (err) {
+      console.error('Failed to upload resume:', err)
+    } finally {
+      setUploadingResume(false)
+      e.target.value = '' // Reset input
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -217,8 +294,17 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
       if (response.ok) {
         onSuccess()
       } else {
-        const data = await response.json()
-        setError(data.error || 'Failed to save candidate')
+        const data = await response.json().catch(() => ({ error: 'Failed to save candidate' }))
+        // Handle Zod validation errors
+        if (Array.isArray(data.error)) {
+          setError(data.error.join(', '))
+        } else if (typeof data.error === 'string') {
+          setError(data.error)
+        } else if (data.message) {
+          setError(data.message)
+        } else {
+          setError('Failed to save candidate. Please check your input and try again.')
+        }
       }
     } catch {
       setError('Network error. Please try again.')
@@ -289,6 +375,49 @@ function CandidateForm({ candidate, onSuccess, onCancel }: { candidate: Candidat
           placeholder="https://linkedin.com/in/..."
         />
       </div>
+
+      {candidate?.id && (
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Resumes</label>
+          <div className="space-y-2">
+            {resumes.length > 0 && (
+              <div className="space-y-1">
+                {resumes.map((resume) => (
+                  <div key={resume.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="text-sm text-gray-900">{resume.fileName}</span>
+                      <span className="text-xs text-gray-500">v{resume.version}</span>
+                    </div>
+                    <a
+                      href={resume.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      Download
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+            <label className="flex items-center justify-center w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:border-blue-500 transition-colors">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleResumeUpload}
+                disabled={uploadingResume}
+                className="hidden"
+              />
+              <span className="text-sm text-gray-600">
+                {uploadingResume ? 'Uploading...' : '+ Upload Resume (PDF, DOC, DOCX)'}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end space-x-3 pt-4">
         <button

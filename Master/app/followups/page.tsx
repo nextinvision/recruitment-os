@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal } from '@/ui/Modal'
+import { Modal, Input, Textarea, Alert, FormActions, PageHeader, Button, Badge, Spinner } from '@/ui'
 import Link from 'next/link'
 
 interface FollowUp {
@@ -26,8 +26,8 @@ interface FollowUp {
   }
   client?: {
     id: string
-    companyName: string
-    contactName: string
+    firstName: string
+    lastName: string
   }
 }
 
@@ -213,7 +213,7 @@ export default function FollowUpsPage() {
                               href={`/clients/${followUp.client.id}`}
                               className="text-blue-600 hover:text-blue-800"
                             >
-                              Client: {followUp.client.companyName}
+                              Client: {followUp.client.firstName} {followUp.client.lastName}
                             </Link>
                           )}
                         </div>
@@ -271,7 +271,7 @@ export default function FollowUpsPage() {
                             href={`/clients/${followUp.client.id}`}
                             className="text-blue-600 hover:text-blue-800"
                           >
-                            Client: {followUp.client.companyName}
+                            Client: {followUp.client.firstName} {followUp.client.lastName}
                           </Link>
                         )}
                       </div>
@@ -328,7 +328,7 @@ export default function FollowUpsPage() {
                             href={`/clients/${followUp.client.id}`}
                             className="text-blue-600 hover:text-blue-800"
                           >
-                            Client: {followUp.client.companyName}
+                            Client: {followUp.client.firstName} {followUp.client.lastName}
                           </Link>
                         )}
                       </div>
@@ -445,70 +445,43 @@ function FollowUpForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error">{error}</Alert>}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Title *</label>
-        <input
-          type="text"
-          required
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      <Input
+        label="Title"
+        type="text"
+        required
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Description</label>
-        <textarea
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          rows={3}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      <Textarea
+        label="Description"
+        value={formData.description}
+        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        rows={3}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Scheduled Date & Time *</label>
-        <input
-          type="datetime-local"
-          required
-          value={formData.scheduledDate}
-          onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      <Input
+        label="Scheduled Date & Time"
+        type="datetime-local"
+        required
+        value={formData.scheduledDate}
+        onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Notes</label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          rows={2}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      <Textarea
+        label="Notes"
+        value={formData.notes}
+        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+        rows={2}
+      />
 
-      <div className="flex justify-end gap-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : followUp ? 'Update' : 'Schedule'}
-        </button>
-      </div>
+      <FormActions
+        onCancel={onCancel}
+        submitLabel={followUp ? 'Update' : 'Schedule'}
+        isLoading={loading}
+      />
     </form>
   )
 }

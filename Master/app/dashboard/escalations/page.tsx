@@ -26,7 +26,8 @@ interface EscalatedFollowUp {
   }
   client?: {
     id: string
-    companyName: string
+    firstName: string
+    lastName: string
   }
   hoursOverdue: number
   escalationLevel: 'manager' | 'admin'
@@ -184,7 +185,7 @@ export default function EscalationsPage() {
                               href={`/clients/${escalation.client.id}`}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {escalation.client.companyName}
+                              {escalation.client.firstName} {escalation.client.lastName}
                             </Link>
                           </div>
                         )}
@@ -253,7 +254,7 @@ export default function EscalationsPage() {
                               href={`/clients/${escalation.client.id}`}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {escalation.client.companyName}
+                              {escalation.client.firstName} {escalation.client.lastName}
                             </Link>
                           </div>
                         )}

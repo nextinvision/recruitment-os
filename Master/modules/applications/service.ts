@@ -105,11 +105,17 @@ export async function getApplicationById(applicationId: string) {
   })
 }
 
-export async function getApplications(userId: string, userRole: UserRole) {
-  const where =
+export async function getApplications(userId: string, userRole: UserRole, jobId?: string, candidateId?: string) {
+  const baseWhere =
     userRole === UserRole.ADMIN || userRole === UserRole.MANAGER
       ? {}
       : { recruiterId: userId }
+
+  const where = {
+    ...baseWhere,
+    ...(jobId && { jobId }),
+    ...(candidateId && { candidateId }),
+  }
 
   return db.application.findMany({
     where,

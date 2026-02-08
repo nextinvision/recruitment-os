@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       action: 'CREATE',
       entity: 'Client',
       entityId: client.id,
-      entityName: client.companyName,
+      entityName: `${client.firstName} ${client.lastName}`,
       newData: client,
       metadata: { clientId: client.id, leadId: client.leadId || undefined },
     }).catch((err) => {

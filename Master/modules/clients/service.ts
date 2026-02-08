@@ -16,7 +16,7 @@ export async function createClient(input: CreateClientInput) {
     data: {
       ...validated,
       email: validated.email || null,
-      website: validated.website || null,
+      skills: validated.skills || [],
       leadId: validated.leadId || null,
     },
     include: {
@@ -109,8 +109,8 @@ export async function updateClient(input: UpdateClientInput) {
     updateData.email = null
   }
   
-  if (updateData.website === '') {
-    updateData.website = null
+  if (updateData.skills === undefined) {
+    updateData.skills = []
   }
 
   const client = await db.client.update({

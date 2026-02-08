@@ -3,6 +3,25 @@ import { LinkedInSelectors } from './selectors/linkedin'
 import { IndeedSelectors } from './selectors/indeed'
 import { NaukriSelectors } from './selectors/naukri'
 
+// Type definition for selector structure - ensures type safety
+type JobSelectors = {
+  jobCard: string
+  jobTitle: string
+  jobCompany: string
+  jobLocation: string
+  jobDescription: string
+  detailTitle: string
+  detailCompany: string
+  detailLocation: string
+  detailDescription: string
+  altJobCard: string
+  altJobTitle: string
+  altJobCompany: string
+  altJobLocation: string
+  isJobListingPage?: () => boolean
+  isJobDetailPage?: () => boolean
+}
+
 export class DOMExtractor {
   private source: JobSource
 
@@ -10,7 +29,7 @@ export class DOMExtractor {
     this.source = source
   }
 
-  private getSelectors() {
+  private getSelectors(): JobSelectors {
     switch (this.source) {
       case 'linkedin':
         return LinkedInSelectors
@@ -18,6 +37,9 @@ export class DOMExtractor {
         return IndeedSelectors
       case 'naukri':
         return NaukriSelectors
+      default:
+        // Defensive programming: throw error if invalid source (should never happen)
+        throw new Error(`Unsupported job source: ${this.source}`)
     }
   }
 

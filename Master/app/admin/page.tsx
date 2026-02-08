@@ -225,13 +225,13 @@ export default function AdminPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleEditUser(user)}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            className="text-[#1F3A5F] hover:text-[#F4B400] text-sm font-medium transition-colors"
           >
             Edit
           </button>
           <button
             onClick={() => handleDeleteUser(user.id)}
-            className="text-red-600 hover:text-red-800 text-sm font-medium"
+            className="text-[#EF4444] hover:text-[#DC2626] text-sm font-medium transition-colors"
           >
             Delete
           </button>
@@ -251,7 +251,7 @@ export default function AdminPage() {
           </div>
           <button
             onClick={handleCreateUser}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-4 py-2 bg-[#F4B400] text-[#1F3A5F] rounded-lg hover:bg-[#E0A300] focus:outline-none focus:ring-2 focus:ring-[#F4B400] focus:ring-offset-2 font-semibold transition-colors"
           >
             Add User
           </button>
@@ -383,17 +383,21 @@ function UserForm({
         isActive: formData.isActive,
       }
 
-      if (!user || formData.password) {
-        if (!formData.password) {
-          setError('Password is required')
+      // Password is required for new users, optional for updates
+      if (!user) {
+        if (!formData.password || formData.password.trim() === '') {
+          setError('Password is required for new users')
           setLoading(false)
           return
         }
         payload.password = formData.password
+      } else if (formData.password && formData.password.trim() !== '') {
+        // Only include password in update if it's provided
+        payload.password = formData.password
       }
 
-      if (formData.role === 'RECRUITER' && formData.managerId) {
-        payload.managerId = formData.managerId
+      if (formData.role === 'RECRUITER') {
+        payload.managerId = formData.managerId && formData.managerId.trim() !== '' ? formData.managerId : null
       }
 
       const response = await fetch(url, {
@@ -409,8 +413,17 @@ function UserForm({
       if (response.ok) {
         onSuccess()
       } else {
-        const errorData = await response.json()
-        setError(errorData.error || 'Failed to save user')
+        const errorData = await response.json().catch(() => ({ error: 'Failed to save user' }))
+        // Handle Zod validation errors
+        if (Array.isArray(errorData.error)) {
+          setError(errorData.error.join(', '))
+        } else if (typeof errorData.error === 'string') {
+          setError(errorData.error)
+        } else if (errorData.message) {
+          setError(errorData.message)
+        } else {
+          setError('Failed to save user. Please check your input and try again.')
+        }
       }
     } catch (err) {
       setError('Network error. Please try again.')
@@ -543,7 +556,7 @@ function UserForm({
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          className="px-4 py-2 bg-[#F4B400] text-[#1F3A5F] rounded-lg hover:bg-[#E0A300] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F4B400] disabled:opacity-50 font-semibold transition-colors"
         >
           {loading ? 'Saving...' : user ? 'Update User' : 'Create User'}
         </button>

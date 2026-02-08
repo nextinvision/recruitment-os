@@ -24,7 +24,8 @@ export class ConditionEvaluator {
 
     // Handle special computed fields
     if (field.startsWith('daysSince') || field.startsWith('daysUntil')) {
-      return this.evaluateDateCondition(field, operator, value, entityData)
+      // Type assert operator since Zod infers it as string union, but we know it's a valid RuleConditionOperator
+      return this.evaluateDateCondition(field, operator as RuleConditionOperator, value, entityData)
     }
 
     // Evaluate based on operator

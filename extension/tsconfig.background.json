@@ -4,6 +4,9 @@
     "outDir": "./dist/background",
     "rootDir": "./src",
     "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["chrome", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }
