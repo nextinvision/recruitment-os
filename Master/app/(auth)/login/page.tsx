@@ -198,7 +198,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center">
                 <label className="flex items-center">
                   <input
                     type="checkbox"
@@ -208,16 +208,6 @@ export default function LoginPage() {
                     Remember me
                   </span>
                 </label>
-                <a
-                  href="#"
-                  className="text-sm font-medium text-[#F4B400] hover:text-[#E0A300] transition-colors"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    // TODO: Implement forgot password
-                  }}
-                >
-                  Forgot password?
-                </a>
               </div>
 
               <Button
@@ -238,27 +228,6 @@ export default function LoginPage() {
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
-
-            {/* Demo Credentials Info */}
-            <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
-              <p className="text-xs text-[#64748B] text-center mb-3">
-                Demo Credentials
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between items-center p-2 bg-[#F4B400]/10 rounded-lg border border-[#F4B400]/20">
-                  <span className="text-[#64748B]">Admin:</span>
-                  <span className="font-mono text-[#0F172A]">admin@careerist.com</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-[#F4B400]/10 rounded-lg border border-[#F4B400]/20">
-                  <span className="text-[#64748B]">Manager:</span>
-                  <span className="font-mono text-[#0F172A]">manager1@careerist.com</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-[#F4B400]/10 rounded-lg border border-[#F4B400]/20">
-                  <span className="text-[#64748B]">Password:</span>
-                  <span className="font-mono text-[#0F172A]">password123</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Footer */}
