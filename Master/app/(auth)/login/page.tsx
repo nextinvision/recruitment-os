@@ -65,17 +65,19 @@ export default function LoginPage() {
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-center px-12 text-white">
           <div className="mb-8">
-            <h1 className="text-5xl font-bold mb-4">
-              <span className="bg-gradient-to-r from-[#F4B400] via-[#F4B400] to-[#E0A300] bg-clip-text text-transparent">
-                Careerist
-              </span>
-            </h1>
-            <p className="text-xl text-white/90 font-light">
+            <div className="flex justify-center mb-2">
+              <img
+                src="/logo.png"
+                alt="Careerist Logo"
+                className="w-64 h-64 object-contain"
+              />
+            </div>
+            <p className="text-xl text-white/90 font-light text-center">
               Recruitment Management System
             </p>
           </div>
           
-          <div className="mt-12 space-y-6">
+          <div className="mt-6 space-y-6">
             <div className="flex items-start space-x-4">
               <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
                 <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +125,13 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
-            <h1 className="text-4xl font-bold text-[#1F3A5F] mb-2">Careerist</h1>
+            <div className="flex justify-center mb-4">
+              <img
+                src="/logo.png"
+                alt="Careerist Logo"
+                className="w-52 h-52 object-contain"
+              />
+            </div>
             <p className="text-[#64748B]">Recruitment Management System</p>
           </div>
 
