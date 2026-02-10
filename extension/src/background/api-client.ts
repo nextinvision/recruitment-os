@@ -7,7 +7,7 @@ export class ApiClient {
    * Test connection to the backend API
    */
   async testConnection(): Promise<{ connected: boolean; error?: string }> {
-    const url = getApiUrl(API_ENDPOINTS.LOGIN)
+    const url = await getApiUrl(API_ENDPOINTS.LOGIN)
     console.log('[API Client] Testing connection to:', url)
     
     try {
@@ -52,7 +52,7 @@ export class ApiClient {
   }
 
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    const url = getApiUrl(API_ENDPOINTS.LOGIN)
+    const url = await getApiUrl(API_ENDPOINTS.LOGIN)
     console.log('[API Client] Attempting login to:', url)
     
     try {
@@ -138,7 +138,7 @@ export class ApiClient {
       throw new Error('Not authenticated. Please login first.')
     }
 
-    const url = getApiUrl(API_ENDPOINTS.BULK_JOBS)
+    const url = await getApiUrl(API_ENDPOINTS.BULK_JOBS)
     console.log('[API Client] Submitting', jobs.length, 'jobs to:', url)
 
     try {
