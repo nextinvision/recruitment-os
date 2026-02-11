@@ -36,13 +36,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div
-          className="fixed inset-0 z-40 transition-opacity bg-[#1F3A5F] bg-opacity-50 backdrop-blur-sm"
+          className="fixed inset-0 z-40 transition-opacity bg-[#1F3A5F] opacity-[0.5] bg-opacity-50 backdrop-blur-sm"
           onClick={onClose}
           aria-hidden
         />
 
         <div
-          className={`relative z-50 inline-block align-bottom bg-white rounded-xl text-left overflow-visible shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}
+          className={`relative z-50 inline-block align-bottom bg-white text-left overflow-visible shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
