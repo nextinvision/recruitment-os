@@ -11,6 +11,7 @@ export interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+  
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -35,17 +36,23 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div
-          className="fixed inset-0 transition-opacity bg-[#0F172A] bg-opacity-60 backdrop-blur-sm"
+          className="fixed inset-0 z-40 transition-opacity bg-[#1F3A5F] bg-opacity-50 backdrop-blur-sm"
           onClick={onClose}
+          aria-hidden
         />
 
-        <div className={`inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}>
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6">
+        <div
+          className={`relative z-50 inline-block align-bottom bg-white rounded-xl text-left overflow-visible shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
+          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 text-gray-900">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#0F172A]">{title}</h3>
+              <h3 id="modal-title" className="text-lg font-semibold text-gray-900">{title}</h3>
               <button
                 onClick={onClose}
-                className="text-[#64748B] hover:text-[#0F172A] focus:outline-none transition-colors"
+                className="text-gray-500 hover:text-gray-900 focus:outline-none transition-colors"
               >
                 <span className="sr-only">Close</span>
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -53,7 +60,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
                 </svg>
               </button>
             </div>
-            {children}
+            <div className="text-gray-900">
+              {children}
+            </div>
           </div>
         </div>
       </div>

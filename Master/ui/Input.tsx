@@ -21,7 +21,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-careerist-text-primary mb-2"
+            className="block text-sm font-medium text-gray-900 mb-2"
           >
             {label}
             {props.required && <span className="text-red-500 ml-1">*</span>}
@@ -30,7 +30,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <div className="relative">
           {leftIcon && (
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <div className="text-careerist-text-secondary">{leftIcon}</div>
+              <div className="text-gray-500">{leftIcon}</div>
             </div>
           )}
           <input
@@ -40,10 +40,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               'block w-full px-3 py-2 border rounded-md shadow-sm',
               'focus:outline-none focus:ring-2 focus:ring-careerist-primary-yellow focus:border-careerist-primary-yellow',
               'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
-              'placeholder:text-careerist-text-secondary',
+              'placeholder:text-gray-500',
               hasError
                 ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500'
-                : 'border-careerist-border text-careerist-text-primary bg-white',
+                : 'border-gray-300 text-gray-900 bg-white',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
               className
@@ -54,7 +54,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           />
           {rightIcon && (
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <div className="text-careerist-text-secondary">{rightIcon}</div>
+              <div className="text-gray-500">{rightIcon}</div>
             </div>
           )}
         </div>
@@ -64,7 +64,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </p>
         )}
         {helperText && !error && (
-          <p id={`${inputId}-helper`} className="mt-1 text-sm text-careerist-text-secondary">
+            <p id={`${inputId}-helper`} className="mt-1 text-sm text-gray-500">
             {helperText}
           </p>
         )}

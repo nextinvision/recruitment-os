@@ -19,7 +19,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={textareaId}
-            className="block text-sm font-medium text-careerist-text-primary mb-2"
+            className="block text-sm font-medium text-gray-900 mb-2"
           >
             {label}
             {props.required && <span className="text-red-500 ml-1">*</span>}
@@ -32,10 +32,10 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             'block w-full px-3 py-2 border rounded-md shadow-sm',
             'focus:outline-none focus:ring-2 focus:ring-careerist-primary-yellow focus:border-careerist-primary-yellow',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
-            'placeholder:text-careerist-text-secondary resize-y',
+            'placeholder:text-gray-500 resize-y',
             hasError
               ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500'
-              : 'border-careerist-border text-careerist-text-primary bg-white',
+              : 'border-gray-300 text-gray-900 bg-white',
             className
           )}
           aria-invalid={hasError}
@@ -48,7 +48,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           </p>
         )}
         {helperText && !error && (
-          <p id={`${textareaId}-helper`} className="mt-1 text-sm text-careerist-text-secondary">
+          <p id={`${textareaId}-helper`} className="mt-1 text-sm text-gray-500">
             {helperText}
           </p>
         )}

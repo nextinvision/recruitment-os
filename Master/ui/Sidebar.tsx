@@ -197,7 +197,7 @@ export function Sidebar({ user, isOpen, onToggle }: SidebarProps) {
       {/* Mobile overlay - behind sidebar, below navbar */}
       {isMobile && isOpen && (
         <div
-          className="fixed top-16 left-0 right-0 bottom-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed top-16 left-0 right-0 bottom-0 bg-opacity-50 z-40 lg:hidden"
           onClick={onToggle}
           aria-hidden="true"
         />

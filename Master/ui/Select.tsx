@@ -27,7 +27,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         {label && (
           <label
             htmlFor={selectId}
-            className="block text-sm font-medium text-careerist-text-primary mb-2"
+            className="block text-sm font-medium text-gray-900 mb-2"
           >
             {label}
             {props.required && <span className="text-red-500 ml-1">*</span>}
@@ -42,7 +42,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
             hasError
               ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500'
-              : 'border-careerist-border text-careerist-text-primary bg-white',
+              : 'border-gray-300 text-gray-900 bg-white',
             className
           )}
           aria-invalid={hasError}
@@ -70,7 +70,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </p>
         )}
         {helperText && !error && (
-          <p id={`${selectId}-helper`} className="mt-1 text-sm text-careerist-text-secondary">
+          <p id={`${selectId}-helper`} className="mt-1 text-sm text-gray-500">
             {helperText}
           </p>
         )}
