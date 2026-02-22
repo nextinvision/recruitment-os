@@ -86,7 +86,15 @@ export async function PATCH(
     // Get old data for change tracking
     const oldApplication = application
     
-    const updatedApplication = await updateApplication({ id, ...body })
+    // Process date strings
+    const processedBody: any = { ...body }
+    if (processedBody.followUpDate === null || processedBody.followUpDate === '') {
+      processedBody.followUpDate = null
+    } else if (processedBody.followUpDate) {
+      processedBody.followUpDate = new Date(processedBody.followUpDate)
+    }
+    
+    const updatedApplication = await updateApplication({ id, ...processedBody })
 
     // Log the mutation (Activity + AuditLog)
     await logMutation({
@@ -95,7 +103,7 @@ export async function PATCH(
       action: 'UPDATE',
       entity: 'Application',
       entityId: id,
-      entityName: `Application for ${updatedApplication.job.title}`,
+      entityName: updatedApplication.job ? `Application for ${updatedApplication.job.title}` : 'Application (no job)',
       oldData: oldApplication,
       newData: updatedApplication,
     }).catch((err) => {
@@ -151,7 +159,7 @@ export async function DELETE(
       action: 'DELETE',
       entity: 'Application',
       entityId: id,
-      entityName: `Application for ${application.job.title}`,
+      entityName: application.job ? `Application for ${application.job.title}` : 'Application (no job)',
       oldData: application,
     }).catch((err) => {
       console.error('Failed to log mutation:', err)

@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { ActivityTimeline } from '@/ui/ActivityTimeline'
+import { ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 import { formatINR } from '@/lib/currency'
 
 interface Lead {
   id: string
-  companyName: string
-  contactName: string
+  firstName: string
+  lastName: string
+  currentCompany?: string
   email?: string
   phone?: string
   status: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'LOST'
@@ -25,7 +27,8 @@ interface Lead {
   }
   client?: {
     id: string
-    companyName: string
+    firstName: string
+    lastName: string
   }
 }
 
@@ -42,6 +45,20 @@ interface Activity {
   }
 }
 
+interface LeadDocument {
+  id: string
+  originalFileName: string
+  fileSize: number
+  fileUrl: string
+  uploadedAt: string
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function LeadProfilePage() {
   const router = useRouter()
   const params = useParams()
@@ -49,12 +66,16 @@ export default function LeadProfilePage() {
 
   const [lead, setLead] = useState<Lead | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [documents, setDocuments] = useState<LeadDocument[]>([])
   const [loading, setLoading] = useState(true)
+  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
+  const { toasts, showToast, removeToast } = useToast()
 
   useEffect(() => {
     if (leadId) {
       loadLead()
       loadActivities()
+      loadDocuments()
     }
   }, [leadId])
 
@@ -85,6 +106,23 @@ export default function LeadProfilePage() {
     }
   }
 
+  const loadDocuments = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res = await fetch(`/api/leads/${leadId}/documents`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setDocuments(Array.isArray(data) ? data : [])
+      }
+    } catch (err) {
+      console.error('Failed to load documents:', err)
+    }
+  }
+
   const loadActivities = async () => {
     try {
       const token = localStorage.getItem('token')
@@ -100,7 +138,7 @@ export default function LeadProfilePage() {
 
       if (response.ok) {
         const data = await response.json()
-        setActivities(data)
+        setActivities(Array.isArray(data) ? data : (data?.activities ?? []))
       }
     } catch (err) {
       console.error('Failed to load activities:', err)
@@ -108,61 +146,72 @@ export default function LeadProfilePage() {
   }
 
   const handleConvertToClient = async () => {
-    if (!confirm('Convert this lead to a client? This action cannot be undone.')) return
+    showConfirm(
+      'Convert Lead to Client',
+      'Convert this lead to a client? This action cannot be undone.',
+      async () => {
+        try {
+          const token = localStorage.getItem('token')
+          if (!token) return
 
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return
+          const response = await fetch(`/api/leads/${leadId}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ status: 'QUALIFIED' }),
+          })
 
-      const response = await fetch(`/api/leads/${leadId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ status: 'QUALIFIED' }),
-      })
+          if (response.ok) {
+            // Create client from lead (lead is already the person / job seeker)
+            const clientResponse = await fetch('/api/clients', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                firstName: lead?.firstName,
+                lastName: lead?.lastName,
+                email: lead?.email,
+                phone: lead?.phone,
+                industry: lead?.industry,
+                notes: lead?.notes && lead?.currentCompany
+                  ? `Converted from lead (${lead.currentCompany})\n${lead.notes}`
+                  : lead?.currentCompany
+                    ? `Converted from lead: ${lead.currentCompany}`
+                    : lead?.notes || 'Converted from lead',
+                leadId: leadId,
+                assignedUserId: lead?.assignedUser.id,
+              }),
+            })
 
-      if (response.ok) {
-        // Create client from lead
-        // Convert lead contact to client (job seeker)
-        // Split contactName into firstName and lastName
-        const nameParts = lead?.contactName?.split(' ') || ['Client', 'Name']
-        const firstName = nameParts[0] || 'Client'
-        const lastName = nameParts.slice(1).join(' ') || 'Name'
-        
-        const clientResponse = await fetch('/api/clients', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            firstName: firstName,
-            lastName: lastName,
-            email: lead?.email,
-            phone: lead?.phone,
-            industry: lead?.industry,
-            notes: lead?.notes && lead?.companyName 
-              ? `Converted from lead: ${lead.companyName}\n${lead.notes}` 
-              : lead?.companyName 
-                ? `Converted from lead: ${lead.companyName}` 
-                : 'Converted from lead',
-            leadId: leadId,
-            assignedUserId: lead?.assignedUser.id,
-          }),
-        })
-
-        if (clientResponse.ok) {
-          const client = await clientResponse.json()
-          router.push(`/clients/${client.id}`)
+            if (clientResponse.ok) {
+              const client = await clientResponse.json()
+              showToast('Lead converted to client successfully', 'success')
+              router.push(`/clients/${client.id}`)
+            } else {
+              const data = await clientResponse.json()
+              showToast(data.error || 'Failed to create client', 'error')
+            }
+          } else {
+            const data = await response.json()
+            showToast(data.error || 'Failed to convert lead', 'error')
+          }
+        } catch (err) {
+          console.error('Failed to convert lead:', err)
+          showToast('Failed to convert lead', 'error')
         }
+      },
+      {
+        variant: 'warning',
+        confirmText: 'Convert',
+        cancelText: 'Cancel',
       }
-    } catch (err) {
-      console.error('Failed to convert lead:', err)
-    }
+    )
   }
 
   if (loading) {
@@ -197,6 +246,17 @@ export default function LeadProfilePage() {
 
   return (
     <DashboardLayout>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        variant={dialogState.variant || 'warning'}
+        confirmText={dialogState.confirmText}
+        cancelText={dialogState.cancelText}
+      />
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -204,8 +264,12 @@ export default function LeadProfilePage() {
             <Link href="/leads" className="text-careerist-primary-yellow hover:underline text-sm mb-2 inline-block">
               ← Back to Leads
             </Link>
-            <h1 className="text-2xl font-bold text-careerist-text-primary">{lead.companyName}</h1>
-            <p className="text-careerist-text-secondary mt-1">{lead.contactName}</p>
+            <h1 className="text-2xl font-bold text-careerist-text-primary">{lead.firstName} {lead.lastName}</h1>
+            {(lead.currentCompany || lead.email) && (
+              <p className="text-careerist-text-secondary mt-1">
+                {lead.currentCompany || lead.email}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[lead.status]}`}>
@@ -234,6 +298,10 @@ export default function LeadProfilePage() {
         <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
           <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Lead Information</h2>
           <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-careerist-text-secondary">Current Company</label>
+              <p className="text-careerist-text-primary">{lead.currentCompany || '-'}</p>
+            </div>
             <div>
               <label className="text-sm font-medium text-careerist-text-secondary">Email</label>
               <p className="text-careerist-text-primary">{lead.email || '-'}</p>
@@ -273,10 +341,40 @@ export default function LeadProfilePage() {
           </div>
         </div>
 
+        {/* Documents */}
+        {Array.isArray(documents) && documents.length > 0 && (
+          <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+            <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Documents</h2>
+            <ul className="space-y-2">
+              {(Array.isArray(documents) ? documents : []).map((doc) => (
+                <li
+                  key={doc.id}
+                  className="flex items-center justify-between py-2 px-3 bg-careerist-bg-secondary rounded border border-careerist-border"
+                >
+                  <span className="text-careerist-text-primary truncate flex-1" title={doc.originalFileName}>
+                    {doc.originalFileName}
+                  </span>
+                  <span className="text-careerist-text-secondary text-sm ml-2 shrink-0">
+                    {formatFileSize(doc.fileSize)}
+                  </span>
+                  <a
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-3 text-careerist-primary-yellow hover:underline text-sm font-medium shrink-0"
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Activity Timeline */}
         <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
           <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Activity Timeline</h2>
-          <ActivityTimeline activities={activities} entityName={lead.companyName} />
+          <ActivityTimeline activities={activities} entityName={`${lead.firstName} ${lead.lastName}`} />
         </div>
       </div>
     </DashboardLayout>

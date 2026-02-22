@@ -5,35 +5,58 @@
   /* Primary Brand Colors */
   --careerist-yellow: #F4B400;
   --careerist-navy: #1F3A5F;
-  
+  --careerist-yellow-hover: #E0A300;
+  --careerist-navy-hover: #152A4A;
+
   /* Neutral System */
   --careerist-bg: #F8FAFC;
+  --careerist-bg-secondary: #F1F5F9;
   --careerist-card: #FFFFFF;
   --careerist-border: #E5E7EB;
   --careerist-text-primary: #0F172A;
   --careerist-text-secondary: #64748B;
-  
+  --careerist-yellow-light: #FEF3C7;
+
   /* Functional Colors */
   --careerist-success: #22C55E;
   --careerist-warning: #F59E0B;
   --careerist-error: #EF4444;
   --careerist-info: #3B82F6;
-  
+
   /* Sidebar */
   --careerist-sidebar-bg: #1F3A5F;
   --careerist-sidebar-text: #CBD5F5;
   --careerist-sidebar-active: #F4B400;
   --careerist-sidebar-hover: rgba(244, 180, 0, 0.1);
-  
+
   /* Legacy variables for compatibility */
   --background: var(--careerist-bg);
   --foreground: var(--careerist-text-primary);
 }
 
+/*
+ * Tailwind theme: --color-* generates bg-*, text-*, border-*, etc.
+ * Without these, classes like bg-careerist-primary-yellow produce no CSS and
+ * buttons/headings can appear white-on-white or invisible.
+ */
 @theme inline {
   --color-background: var(--careerist-bg);
   --color-foreground: var(--careerist-text-primary);
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Careerist palette - single source for all careerist-* utilities */
+  --color-careerist-primary-yellow: var(--careerist-yellow);
+  --color-careerist-primary-navy: var(--careerist-navy);
+  --color-careerist-yellow: var(--careerist-yellow);
+  --color-careerist-yellow-hover: var(--careerist-yellow-hover);
+  --color-careerist-navy-hover: var(--careerist-navy-hover);
+  --color-careerist-border: var(--careerist-border);
+  --color-careerist-text-primary: var(--careerist-text-primary);
+  --color-careerist-text-secondary: var(--careerist-text-secondary);
+  --color-careerist-card: var(--careerist-card);
+  --color-careerist-bg: var(--careerist-bg);
+  --color-careerist-bg-secondary: var(--careerist-bg-secondary);
+  --color-careerist-yellow-light: var(--careerist-yellow-light);
 }
 
 * {
@@ -46,6 +69,11 @@ body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure headings and labels stay visible when components omit text-* classes */
+h1, h2, h3, h4, h5, h6, label {
+  color: var(--careerist-text-primary);
 }
 
 /* Custom scrollbar styling */

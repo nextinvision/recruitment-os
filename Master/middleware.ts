@@ -1,116 +1,102 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getAuthContext } from './lib/rbac'
+import { getApplicableRoles, PAGE_ACCESS_DEFAULTS } from './lib/page-access'
+import type { PageAccessRules } from './lib/page-access'
 
-// Routes that don't require authentication
 const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/api/auth/login']
+const CACHE_TTL_MS = 60_000
 
-// Admin-only routes
-const adminRoutes = ['/admin']
+let pageRulesCache: { rules: PageAccessRules; ts: number } = {
+  rules: PAGE_ACCESS_DEFAULTS,
+  ts: 0,
+}
 
-// Manager and Admin routes
-const managerRoutes = ['/reports', '/analytics']
+async function getPageRules(origin: string): Promise<PageAccessRules> {
+  if (Date.now() - pageRulesCache.ts < CACHE_TTL_MS) {
+    return pageRulesCache.rules
+  }
+  try {
+    const res = await fetch(`${origin}/api/access/page-rules`, {
+      headers: { 'Accept': 'application/json' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const rules = (data.rules ?? PAGE_ACCESS_DEFAULTS) as PageAccessRules
+      pageRulesCache = { rules, ts: Date.now() }
+      return rules
+    }
+  } catch {
+    // use existing cache or defaults
+  }
+  return pageRulesCache.rules
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Handle root path redirect
   if (pathname === '/') {
-    // Check authentication for root path
     const cookieToken = request.cookies.get('token')?.value
-    const authHeader = request.headers.get('authorization') || 
-      (cookieToken ? `Bearer ${cookieToken}` : null)
-    
+    const authHeader =
+      request.headers.get('authorization') || (cookieToken ? `Bearer ${cookieToken}` : null)
     try {
       const authContext = await getAuthContext(authHeader)
       if (authContext) {
-        // Authenticated - redirect to dashboard
-        const dashboardUrl = new URL('/dashboard', request.url)
-        return NextResponse.redirect(dashboardUrl)
-      } else {
-        // Not authenticated - redirect to login
-        const loginUrl = new URL('/login', request.url)
-        return NextResponse.redirect(loginUrl)
+        return NextResponse.redirect(new URL('/dashboard', request.url))
       }
+      return NextResponse.redirect(new URL('/login', request.url))
     } catch {
-      // On error, redirect to login
-      const loginUrl = new URL('/login', request.url)
-      return NextResponse.redirect(loginUrl)
+      return NextResponse.redirect(new URL('/login', request.url))
     }
   }
 
-  // Allow public routes
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next()
   }
 
-  // Allow API routes (they handle auth internally)
   if (pathname.startsWith('/api/')) {
     return NextResponse.next()
   }
 
-  // Check authentication for protected routes
-  // Priority: Authorization header > Cookie > null
   const cookieToken = request.cookies.get('token')?.value
-  const authHeader = request.headers.get('authorization') || 
-    (cookieToken ? `Bearer ${cookieToken}` : null)
+  const authHeader =
+    request.headers.get('authorization') || (cookieToken ? `Bearer ${cookieToken}` : null)
 
   try {
     const authContext = await getAuthContext(authHeader)
 
     if (!authContext) {
-      // Redirect to login if not authenticated
-      // Only redirect if not already on login page to avoid redirect loops
       if (!pathname.startsWith('/login')) {
         const loginUrl = new URL('/login', request.url)
-        // Add return URL as query param for redirect after login
         loginUrl.searchParams.set('redirect', pathname)
         return NextResponse.redirect(loginUrl)
       }
-      // If already on login page and not authenticated, allow access
       return NextResponse.next()
     }
 
-    // If authenticated and trying to access login page, redirect to dashboard
     if (pathname.startsWith('/login')) {
-      const dashboardUrl = new URL('/dashboard', request.url)
-      return NextResponse.redirect(dashboardUrl)
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    // Check role-based access
-    if (adminRoutes.some((route) => pathname.startsWith(route))) {
-      if (authContext.role !== 'ADMIN') {
-        return NextResponse.json(
-          { error: 'Access denied. Admin role required.' },
-          { status: 403 }
-        )
-      }
+    const rules = await getPageRules(request.nextUrl.origin)
+    const allowedRoles = getApplicableRoles(pathname, rules)
+    if (allowedRoles.length > 0 && !allowedRoles.includes(authContext.role)) {
+      return NextResponse.json(
+        { error: 'Access denied. You do not have permission to access this page.' },
+        { status: 403 }
+      )
     }
 
-    if (managerRoutes.some((route) => pathname.startsWith(route))) {
-      if (authContext.role !== 'ADMIN' && authContext.role !== 'MANAGER') {
-        return NextResponse.json(
-          { error: 'Access denied. Manager or Admin role required.' },
-          { status: 403 }
-        )
-      }
-    }
-
-    // Add user info to headers for use in pages
     const response = NextResponse.next()
     response.headers.set('x-user-id', authContext.userId)
     response.headers.set('x-user-role', authContext.role)
-
     return response
   } catch {
-    // Redirect to login on auth error (only if not already on login page)
     if (!pathname.startsWith('/login')) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(loginUrl)
     }
-    
-    // If already on login page, allow access
     return NextResponse.next()
   }
 }

@@ -15,6 +15,7 @@ export async function createLead(input: CreateLeadInput) {
   const lead = await db.lead.create({
     data: {
       ...validated,
+      currentCompany: validated.currentCompany || null,
       email: validated.email || null,
       estimatedValue: validated.estimatedValue ? validated.estimatedValue.toString() : null,
     },
@@ -81,6 +82,7 @@ export async function getLeads(userId: string, userRole: UserRole, status?: Lead
           lastName: true,
         },
       },
+      client: { select: { id: true } },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -114,6 +116,9 @@ export async function updateLead(input: UpdateLeadInput) {
   
   if (updateData.email === '') {
     updateData.email = null
+  }
+  if (updateData.currentCompany === '') {
+    updateData.currentCompany = null
   }
   
       // If status changes to QUALIFIED, set convertedAt

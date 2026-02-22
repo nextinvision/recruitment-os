@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Spinner, Badge, Button } from '@/ui'
+import { Modal, Spinner, Badge, Button, JobAssignmentModal, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 
 interface Job {
@@ -35,11 +35,11 @@ interface Application {
   notes?: string
   followUpDate?: string
   createdAt: string
-  candidate: {
+  client: {
     id: string
     firstName: string
     lastName: string
-    email: string
+    email?: string
     phone?: string
   }
   recruiter: {
@@ -70,6 +70,11 @@ export default function JobDetailPage() {
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false)
+  const [assignmentJobId, setAssignmentJobId] = useState<string>('')
+  const [assignmentJobTitle, setAssignmentJobTitle] = useState<string>('')
+  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
+  const { toasts, showToast, removeToast } = useToast()
 
   useEffect(() => {
     if (jobId) {
@@ -130,29 +135,41 @@ export default function JobDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this job? This will also delete all associated applications.')) {
-      return
-    }
+    showConfirm(
+      'Delete Job',
+      'Are you sure you want to delete this job? This will also delete all associated applications. This action cannot be undone.',
+      async () => {
+        try {
+          const token = localStorage.getItem('token')
+          if (!token) return
 
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return
+          const response = await fetch(`/api/jobs/${jobId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          })
 
-      const response = await fetch(`/api/jobs/${jobId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      })
-
-      if (response.ok) {
-        router.push('/jobs')
+          if (response.ok) {
+            showToast('Job deleted successfully', 'success')
+            router.push('/jobs')
+          } else {
+            const data = await response.json()
+            showToast(data.error || 'Failed to delete job', 'error')
+          }
+        } catch (err) {
+          console.error('Failed to delete job:', err)
+          showToast('Failed to delete job', 'error')
+        }
+      },
+      {
+        variant: 'danger',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
       }
-    } catch (err) {
-      console.error('Failed to delete job:', err)
-    }
+    )
   }
 
   if (loading) {
@@ -184,6 +201,17 @@ export default function JobDetailPage() {
 
   return (
     <DashboardLayout>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        variant={dialogState.variant || 'danger'}
+        confirmText={dialogState.confirmText}
+        cancelText={dialogState.cancelText}
+      />
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -198,6 +226,13 @@ export default function JobDetailPage() {
             <Badge variant={job.status === 'ACTIVE' ? 'success' : job.status === 'CLOSED' ? 'neutral' : 'info'}>
               {job.status}
             </Badge>
+            <Button onClick={() => {
+              setAssignmentJobId(job.id)
+              setAssignmentJobTitle(job.title)
+              setShowAssignmentModal(true)
+            }}>
+              Assign to Candidate
+            </Button>
             <Button onClick={() => setShowEditModal(true)}>
               Edit Job
             </Button>
@@ -310,7 +345,7 @@ export default function JobDetailPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <span className="font-semibold text-careerist-text-primary">
-                          {application.candidate.firstName} {application.candidate.lastName}
+                          {application.client.firstName} {application.client.lastName}
                         </span>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
@@ -322,8 +357,8 @@ export default function JobDetailPage() {
                         </span>
                       </div>
                       <div className="text-sm text-careerist-text-secondary space-y-1">
-                        <p>{application.candidate.email}</p>
-                        {application.candidate.phone && <p>{application.candidate.phone}</p>}
+                        <p>{application.client.email || '-'}</p>
+                        {application.client.phone && <p>{application.client.phone}</p>}
                         {application.followUpDate && (
                           <p className="text-careerist-primary-yellow font-medium">
                             Follow-up: {new Date(application.followUpDate).toLocaleDateString()}
@@ -372,6 +407,17 @@ export default function JobDetailPage() {
             />
           </Modal>
         )}
+
+        <JobAssignmentModal
+          isOpen={showAssignmentModal}
+          onClose={() => setShowAssignmentModal(false)}
+          jobId={jobId}
+          jobTitle={job?.title || ''}
+          onSuccess={() => {
+            loadApplications()
+            loadJob()
+          }}
+        />
       </div>
     </DashboardLayout>
   )
@@ -386,6 +432,7 @@ function JobEditForm({
   onSuccess: () => void
   onCancel: () => void
 }) {
+  const { showToast } = useToast()
   const [formData, setFormData] = useState({
     title: job.title,
     company: job.company,
@@ -431,6 +478,7 @@ function JobEditForm({
       })
 
       if (response.ok) {
+        showToast('Job updated successfully', 'success')
         onSuccess()
       } else {
         const data = await response.json().catch(() => ({ error: 'Failed to update job' }))

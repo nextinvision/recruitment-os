@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       action: 'CREATE',
       entity: 'Lead',
       entityId: lead.id,
-      entityName: lead.companyName,
+      entityName: `${lead.firstName} ${lead.lastName}`,
       newData: lead,
       metadata: { leadId: lead.id },
     }).catch((err) => {

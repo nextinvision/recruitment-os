@@ -83,8 +83,9 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
         },
         lead: {
           select: {
-            companyName: true,
-            contactName: true,
+            firstName: true,
+            lastName: true,
+            currentCompany: true,
           },
         },
          client: {
@@ -158,7 +159,7 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
 
     // Create activity log for escalation
     const entityName = followUp.lead
-      ? `${followUp.lead.companyName} (Lead)`
+      ? `${followUp.lead.firstName} ${followUp.lead.lastName} (Lead)`
       : followUp.client
         ? `${followUp.client.firstName} ${followUp.client.lastName} (Client)`
         : 'Unknown'

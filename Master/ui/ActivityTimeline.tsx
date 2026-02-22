@@ -63,7 +63,8 @@ const activityColors: Record<string, string> = {
 }
 
 export function ActivityTimeline({ activities, entityName }: ActivityTimelineProps) {
-  if (activities.length === 0) {
+  const list = Array.isArray(activities) ? activities : []
+  if (list.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
         <p>No activities yet</p>
@@ -74,9 +75,9 @@ export function ActivityTimeline({ activities, entityName }: ActivityTimelinePro
   return (
     <div className="flow-root">
       <ul className="-mb-8">
-        {activities.map((activity, activityIdx) => {
+        {list.map((activity, activityIdx) => {
           const date = new Date(activity.occurredAt)
-          const isLast = activityIdx === activities.length - 1
+          const isLast = activityIdx === list.length - 1
 
           return (
             <li key={activity.id}>

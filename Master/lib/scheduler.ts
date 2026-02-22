@@ -34,8 +34,9 @@ export async function checkOverdueFollowUps() {
         lead: {
           select: {
             id: true,
-            companyName: true,
-            contactName: true,
+            firstName: true,
+            lastName: true,
+            currentCompany: true,
           },
         },
         client: {

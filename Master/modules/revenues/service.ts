@@ -37,7 +37,9 @@ export async function createRevenue(input: CreateRevenueInput) {
       lead: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
+          currentCompany: true,
         },
       },
       client: {
@@ -134,7 +136,9 @@ export async function getRevenues(
       lead: {
         select: {
           id: true,
-          companyName: true,
+          firstName: true,
+          lastName: true,
+          currentCompany: true,
         },
       },
       client: {

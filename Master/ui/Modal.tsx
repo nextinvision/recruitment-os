@@ -8,9 +8,11 @@ export interface ModalProps {
   title: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Use 'high' when this modal must appear above other modals (e.g. confirm dialogs) */
+  stackOrder?: 'default' | 'high'
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, size = 'md', stackOrder = 'default' }: ModalProps) {
   
   useEffect(() => {
     if (isOpen) {
@@ -25,6 +27,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
 
   if (!isOpen) return null
 
+  const zLayer = stackOrder === 'high' ? 'z-[100]' : 'z-50'
+  const zBackdrop = stackOrder === 'high' ? 'z-[99]' : 'z-40'
+
   const sizeClasses = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -33,16 +38,16 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className={`fixed inset-0 ${zLayer} overflow-y-auto`}>
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div
-          className="fixed inset-0 z-40 transition-opacity bg-[#1F3A5F] opacity-[0.5] bg-opacity-50 backdrop-blur-sm"
+          className={`fixed inset-0 ${zBackdrop} transition-opacity bg-[#1F3A5F] opacity-[0.5] bg-opacity-50 backdrop-blur-sm`}
           onClick={onClose}
           aria-hidden
         />
 
         <div
-          className={`relative z-50 inline-block align-bottom bg-white text-left overflow-visible shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}
+          className={`relative ${stackOrder === 'high' ? 'z-[100]' : 'z-50'} inline-block align-bottom bg-white text-left overflow-visible shadow-2xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full border border-[#E5E7EB]`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"

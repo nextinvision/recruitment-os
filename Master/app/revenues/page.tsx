@@ -22,7 +22,9 @@ interface Revenue {
   }
   lead?: {
     id: string
-    companyName: string
+    firstName: string
+    lastName: string
+    currentCompany?: string
   }
   client?: {
     id: string
@@ -67,8 +69,16 @@ export default function RevenuesPage() {
       const params = new URLSearchParams()
       if (filters.status) params.append('status', filters.status)
       if (filters.clientId) params.append('clientId', filters.clientId)
-      if (filters.startDate) params.append('startDate', new Date(filters.startDate).toISOString())
-      if (filters.endDate) params.append('endDate', new Date(filters.endDate).toISOString())
+      if (filters.startDate) {
+        const startDate = new Date(filters.startDate)
+        startDate.setHours(0, 0, 0, 0)
+        params.append('startDate', startDate.toISOString())
+      }
+      if (filters.endDate) {
+        const endDate = new Date(filters.endDate)
+        endDate.setHours(23, 59, 59, 999)
+        params.append('endDate', endDate.toISOString())
+      }
 
       const response = await fetch(`/api/revenues?${params.toString()}`, {
         headers: {
@@ -80,19 +90,45 @@ export default function RevenuesPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setRevenues(data)
+        // Handle both array and paginated response
+        if (Array.isArray(data)) {
+          setRevenues(data)
+        } else if (data.revenues && Array.isArray(data.revenues)) {
+          setRevenues(data.revenues)
+        } else if (data.data && Array.isArray(data.data)) {
+          setRevenues(data.data)
+        } else {
+          setRevenues([])
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to load revenues' }))
+        console.error('Failed to load revenues:', errorData.error || 'Unknown error')
+        setRevenues([])
       }
     } catch (err) {
       console.error('Failed to load revenues:', err)
+      setRevenues([])
     } finally {
       setLoading(false)
     }
   }
 
-  const totalRevenue = revenues.reduce((sum, r) => sum + parseFloat(r.amount), 0)
-  const pendingRevenue = revenues.filter(r => r.status === 'PENDING').reduce((sum, r) => sum + parseFloat(r.amount), 0)
-  const paidRevenue = revenues.filter(r => r.status === 'PAID').reduce((sum, r) => sum + parseFloat(r.amount), 0)
-  const partialRevenue = revenues.filter(r => r.status === 'PARTIAL').reduce((sum, r) => sum + parseFloat(r.amount), 0)
+  const totalRevenue = revenues.reduce((sum, r) => {
+    const amount = typeof r.amount === 'string' ? parseFloat(r.amount) : (r.amount || 0)
+    return sum + (isNaN(amount) ? 0 : amount)
+  }, 0)
+  const pendingRevenue = revenues.filter(r => r.status === 'PENDING').reduce((sum, r) => {
+    const amount = typeof r.amount === 'string' ? parseFloat(r.amount) : (r.amount || 0)
+    return sum + (isNaN(amount) ? 0 : amount)
+  }, 0)
+  const paidRevenue = revenues.filter(r => r.status === 'PAID').reduce((sum, r) => {
+    const amount = typeof r.amount === 'string' ? parseFloat(r.amount) : (r.amount || 0)
+    return sum + (isNaN(amount) ? 0 : amount)
+  }, 0)
+  const partialRevenue = revenues.filter(r => r.status === 'PARTIAL').reduce((sum, r) => {
+    const amount = typeof r.amount === 'string' ? parseFloat(r.amount) : (r.amount || 0)
+    return sum + (isNaN(amount) ? 0 : amount)
+  }, 0)
 
   const columns = [
     {
@@ -133,7 +169,7 @@ export default function RevenuesPage() {
         <div className="text-sm">
           {revenue.lead && (
             <Link href={`/leads/${revenue.lead.id}`} className="text-careerist-primary-yellow hover:underline">
-              Lead: {revenue.lead.companyName}
+              Lead: {revenue.lead.firstName} {revenue.lead.lastName}
             </Link>
           )}
           {revenue.client && (
@@ -344,7 +380,7 @@ function RevenueForm({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [leads, setLeads] = useState<Array<{ id: string; companyName: string }>>([])
+  const [leads, setLeads] = useState<Array<{ id: string; firstName: string; lastName: string; currentCompany?: string }>>([])
   const [clients, setClients] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
 
   useEffect(() => {
@@ -369,11 +405,24 @@ function RevenueForm({
 
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json()
-        setLeads(leadsData)
+        // Handle both array and paginated response
+        const leadsArray = Array.isArray(leadsData) ? leadsData : (leadsData.leads || leadsData.data || [])
+        setLeads(leadsArray.map((lead: any) => ({
+          id: lead.id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          currentCompany: lead.currentCompany,
+        })))
       }
       if (clientsRes.ok) {
         const clientsData = await clientsRes.json()
-        setClients(clientsData)
+        // Handle both array and paginated response
+        const clientsArray = Array.isArray(clientsData) ? clientsData : (clientsData.clients || clientsData.data || [])
+        setClients(clientsArray.map((client: any) => ({
+          id: client.id,
+          firstName: client.firstName,
+          lastName: client.lastName,
+        })))
       }
     } catch (err) {
       console.error('Failed to load options:', err)
@@ -486,7 +535,7 @@ function RevenueForm({
             { value: '', label: 'None' },
             ...leads.map((lead) => ({
               value: lead.id,
-              label: lead.companyName,
+              label: `${lead.firstName} ${lead.lastName}` + (lead.currentCompany ? ` (${lead.currentCompany})` : ''),
             })),
           ]}
         />

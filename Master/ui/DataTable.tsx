@@ -29,16 +29,18 @@ export function DataTable<T extends { id: string }>({
   const [sortKey, setSortKey] = useState<keyof T | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
+  const safeData = Array.isArray(data) ? data.filter((item): item is T => item != null && typeof item === 'object' && 'id' in item) : []
+
   const filteredData = searchable && searchTerm
-    ? data.filter((item) =>
+    ? safeData.filter((item) =>
         columns.some((col) => {
           const value = typeof col.key === 'string' 
             ? (item as any)[col.key]
             : item[col.key as keyof T]
-          return String(value).toLowerCase().includes(searchTerm.toLowerCase())
+          return String(value ?? '').toLowerCase().includes(searchTerm.toLowerCase())
         })
       )
-    : data
+    : safeData
 
   const sortedData = sortKey
     ? [...filteredData].sort((a, b) => {
