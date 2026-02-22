@@ -14,6 +14,8 @@ interface PipelineBoardProps<T extends PipelineItem> {
   onStageChange: (itemId: string, newStage: string) => void
   renderItem: (item: T) => React.ReactNode
   stageLabels?: Record<string, string>
+  /** When set, clicking an item opens it (e.g. detail modal); a drag handle is shown for stage change */
+  onItemClick?: (item: T) => void
 }
 
 export function PipelineBoard<T extends PipelineItem>({
@@ -23,11 +25,13 @@ export function PipelineBoard<T extends PipelineItem>({
   onStageChange,
   renderItem,
   stageLabels = {},
+  onItemClick,
 }: PipelineBoardProps<T>) {
   const [draggedItem, setDraggedItem] = useState<string | null>(null)
 
+  const safeItems = Array.isArray(items) ? items : []
   const getItemsByStage = (stage: string) => {
-    return items.filter((item) => getStage(item) === stage)
+    return safeItems.filter((item) => getStage(item) === stage)
   }
 
   const handleDragStart = (itemId: string) => {
@@ -66,14 +70,45 @@ export function PipelineBoard<T extends PipelineItem>({
               </span>
             </div>
             <div className="space-y-2 min-h-[200px]">
-              {stageItems.map((item) => (
+              {(Array.isArray(stageItems) ? stageItems : []).map((item) => (
                 <div
                   key={item.id}
-                  draggable
-                  onDragStart={() => handleDragStart(item.id)}
-                  className="p-3 bg-gray-50 rounded border border-gray-200 hover:border-blue-600 cursor-move transition-colors"
+                  className={`flex gap-1 p-3 bg-gray-50 rounded border border-gray-200 hover:border-blue-600 transition-colors ${onItemClick ? '' : 'cursor-move'}`}
                 >
-                  {renderItem(item)}
+                  {onItemClick ? (
+                    <>
+                      <div
+                        draggable
+                        onDragStart={() => handleDragStart(item.id)}
+                        className="shrink-0 cursor-move self-center p-1 text-gray-400 hover:text-gray-600 rounded touch-none"
+                        title="Drag to change stage"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+                          <circle cx="4" cy="4" r="1" />
+                          <circle cx="8" cy="4" r="1" />
+                          <circle cx="4" cy="8" r="1" />
+                          <circle cx="8" cy="8" r="1" />
+                        </svg>
+                      </div>
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => onItemClick(item)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && onItemClick(item)}
+                      >
+                        {renderItem(item)}
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      draggable
+                      onDragStart={() => handleDragStart(item.id)}
+                      className="flex-1 min-w-0"
+                    >
+                      {renderItem(item)}
+                    </div>
+                  )}
                 </div>
               ))}
               {stageItems.length === 0 && (

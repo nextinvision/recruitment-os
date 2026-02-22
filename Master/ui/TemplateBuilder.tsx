@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useToast } from './Toast'
 
 interface MessageTemplate {
   id?: string
@@ -35,6 +36,7 @@ const CHANNELS = [
 ]
 
 export function TemplateBuilder({ template, onSave, onCancel }: TemplateBuilderProps) {
+  const { showToast } = useToast()
   const [formData, setFormData] = useState<MessageTemplate>({
     name: template?.name || '',
     type: template?.type || 'CUSTOM',
@@ -70,14 +72,15 @@ export function TemplateBuilder({ template, onSave, onCancel }: TemplateBuilderP
       })
 
       if (response.ok) {
+        showToast(template?.id ? 'Template updated successfully' : 'Template created successfully', 'success')
         onSave()
       } else {
         const error = await response.json()
-        alert(`Failed to save template: ${error.error}`)
+        showToast(`Failed to save template: ${error.error}`, 'error')
       }
     } catch (err) {
       console.error('Failed to save template:', err)
-      alert('Failed to save template')
+      showToast('Failed to save template', 'error')
     } finally {
       setSaving(false)
     }

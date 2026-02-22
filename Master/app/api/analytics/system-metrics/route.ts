@@ -24,14 +24,18 @@ export async function GET(request: NextRequest) {
     const startDate = new Date(searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     const endDate = new Date(searchParams.get('endDate') || new Date())
 
-    const [platformUsage, funnelPerformance] = await Promise.all([
+    const [platformUsage, funnelPerformance, systemMetrics, averageTime] = await Promise.all([
       analyticsService.getPlatformUsage(startDate, endDate),
       analyticsService.getFunnelPerformance(startDate, endDate),
+      analyticsService.getSystemMetrics(startDate, endDate),
+      analyticsService.getAverageTimePerStage(startDate, endDate),
     ])
 
     const response = NextResponse.json({
       platformUsage,
       funnelPerformance,
+      systemMetrics,
+      averageTimePerStage: averageTime,
       period: { start: startDate, end: endDate },
     }, { status: 200 })
     const origin = request.headers.get('origin')

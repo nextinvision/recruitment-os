@@ -22,7 +22,9 @@ interface EscalatedFollowUp {
   }
   lead?: {
     id: string
-    companyName: string
+    firstName: string
+    lastName: string
+    currentCompany?: string
   }
   client?: {
     id: string
@@ -174,7 +176,7 @@ export default function EscalationsPage() {
                               href={`/leads/${escalation.lead.id}`}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {escalation.lead.companyName}
+                              {escalation.lead.firstName} {escalation.lead.lastName}
                             </Link>
                           </div>
                         )}
@@ -243,7 +245,7 @@ export default function EscalationsPage() {
                               href={`/leads/${escalation.lead.id}`}
                               className="text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {escalation.lead.companyName}
+                              {escalation.lead.firstName} {escalation.lead.lastName}
                             </Link>
                           </div>
                         )}

@@ -72,7 +72,7 @@ export async function PATCH(
       action: 'UPDATE',
       entity: 'Lead',
       entityId: id,
-      entityName: lead.companyName,
+      entityName: `${lead.firstName} ${lead.lastName}`,
       oldData: oldLead,
       newData: lead,
       metadata: { leadId: id },
@@ -118,7 +118,7 @@ export async function DELETE(
         action: 'DELETE',
         entity: 'Lead',
         entityId: id,
-        entityName: oldLead.companyName,
+        entityName: `${oldLead.firstName} ${oldLead.lastName}`,
         oldData: oldLead,
         metadata: { leadId: id },
       }).catch((err) => {

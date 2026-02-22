@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { getFollowUpById, updateFollowUp, deleteFollowUp } from '@/modules/followups/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
+import { logMutation } from '@/lib/mutation-logger'
 
 export async function OPTIONS(request: NextRequest) {
   return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -52,9 +53,31 @@ export async function PATCH(
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const { id } = await params
-    const body = await request.json()
     
+    // Get old data for change tracking
+    const oldFollowUp = await getFollowUpById(id)
+    if (!oldFollowUp) {
+      const response = NextResponse.json({ error: 'Follow-up not found' }, { status: 404 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+    
+    const body = await request.json()
     const followUp = await updateFollowUp({ id, ...body })
+
+    // Log the mutation
+    await logMutation({
+      request,
+      userId: authContext.userId,
+      action: 'UPDATE',
+      entity: 'FollowUp',
+      entityId: id,
+      entityName: followUp.title,
+      oldData: oldFollowUp,
+      newData: followUp,
+    }).catch((err) => {
+      console.error('Failed to log mutation:', err)
+    })
 
     const response = NextResponse.json(followUp, { status: 200 })
     const origin = request.headers.get('origin')
@@ -77,10 +100,29 @@ export async function DELETE(
 
     const authHeader = request.headers.get('authorization') || 
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
-    requireAuth(await getAuthContext(authHeader))
+    const authContext = requireAuth(await getAuthContext(authHeader))
 
     const { id } = await params
+    
+    // Get old data before deletion
+    const oldFollowUp = await getFollowUpById(id)
+    
     await deleteFollowUp(id)
+
+    // Log the mutation
+    if (oldFollowUp) {
+      await logMutation({
+        request,
+        userId: authContext.userId,
+        action: 'DELETE',
+        entity: 'FollowUp',
+        entityId: id,
+        entityName: oldFollowUp.title,
+        oldData: oldFollowUp,
+      }).catch((err) => {
+        console.error('Failed to log mutation:', err)
+      })
+    }
 
     const response = NextResponse.json({ message: 'Follow-up deleted' }, { status: 200 })
     const origin = request.headers.get('origin')

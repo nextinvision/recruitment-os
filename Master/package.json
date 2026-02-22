@@ -15,6 +15,9 @@
     "db:generate:safe": "node scripts/safe-generate.js",
     "db:clean": "node scripts/clean-prisma.js",
     "db:seed": "tsx prisma/seed.ts",
+    "db:migrate-lead": "tsx scripts/run-lead-migration.ts",
+    "db:onboarding-tables": "prisma db execute --file ./scripts/apply-onboarding-tables.sql --schema prisma/schema.prisma",
+    "db:application-job-optional": "prisma db execute --file ./scripts/apply-application-job-optional.sql --schema prisma/schema.prisma",
     "storage:init": "tsx scripts/init-storage.ts",
     "worker": "tsx scripts/start-worker.ts"
   },

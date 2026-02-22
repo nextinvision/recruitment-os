@@ -56,7 +56,9 @@ export class StorageService {
    * Generate unique file name
    */
   private generateFileName(originalName: string): string {
-    const ext = originalName.split('.').pop()
+    const safeName = originalName?.trim() || 'file'
+    const parts = safeName.split('.')
+    const ext = parts.length > 1 ? parts.pop()! : 'bin'
     const timestamp = Date.now()
     const random = randomBytes(8).toString('hex')
     return `${timestamp}-${random}.${ext}`
@@ -79,6 +81,16 @@ export class StorageService {
   }
 
   /**
+   * Ensure bucket exists (create if not)
+   */
+  private async ensureBucket(bucket: string): Promise<void> {
+    const exists = await this.client.bucketExists(bucket)
+    if (!exists) {
+      await this.client.makeBucket(bucket, 'us-east-1')
+    }
+  }
+
+  /**
    * Upload file to MinIO
    */
   async uploadFile(
@@ -89,6 +101,8 @@ export class StorageService {
   ): Promise<{ fileName: string; fileUrl: string; fileSize: number }> {
     try {
       const bucket = this.getBucket(fileType)
+      await this.ensureBucket(bucket)
+
       const fileName = this.generateFileName(originalName)
       const fileSize = file.length
 
@@ -107,7 +121,8 @@ export class StorageService {
       }
     } catch (error) {
       console.error('Error uploading file to MinIO:', error)
-      throw new Error('Failed to upload file')
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to upload file: ${message}`)
     }
   }
 

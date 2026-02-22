@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useToast } from './Toast'
 
 interface RuleCondition {
   field: string
@@ -67,6 +68,7 @@ const ACTION_TYPE_OPTIONS = [
 ]
 
 export function RuleBuilder({ rule, onSave, onCancel }: RuleBuilderProps) {
+  const { showToast } = useToast()
   const [formData, setFormData] = useState<AutomationRule>({
     name: rule?.name || '',
     description: rule?.description || '',
@@ -101,14 +103,15 @@ export function RuleBuilder({ rule, onSave, onCancel }: RuleBuilderProps) {
       })
 
       if (response.ok) {
+        showToast(rule?.id ? 'Rule updated successfully' : 'Rule created successfully', 'success')
         onSave()
       } else {
         const error = await response.json()
-        alert(`Failed to save rule: ${error.error}`)
+        showToast(`Failed to save rule: ${error.error}`, 'error')
       }
     } catch (err) {
       console.error('Failed to save rule:', err)
-      alert('Failed to save rule')
+      showToast('Failed to save rule', 'error')
     } finally {
       setSaving(false)
     }

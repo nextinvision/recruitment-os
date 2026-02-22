@@ -317,12 +317,13 @@ async function main() {
   }
   console.log('✅ Created applications')
 
-  // Create Leads
+  // Create Leads (person = job seeker / future client)
   console.log('🎯 Creating leads...')
   const leads = [
     {
-      companyName: 'Global Tech Services',
-      contactName: 'Rajesh Kumar',
+      firstName: 'Rajesh',
+      lastName: 'Kumar',
+      currentCompany: 'Global Tech Services',
       email: 'rajesh@globaltech.com',
       phone: '+91 98765 11111',
       status: LeadStatus.NEW,
@@ -333,8 +334,9 @@ async function main() {
       notes: 'Large enterprise client, potential for multiple positions.',
     },
     {
-      companyName: 'Digital Solutions Pvt Ltd',
-      contactName: 'Priya Sharma',
+      firstName: 'Priya',
+      lastName: 'Sharma',
+      currentCompany: 'Digital Solutions Pvt Ltd',
       email: 'priya@digitalsolutions.com',
       phone: '+91 98765 22222',
       status: LeadStatus.CONTACTED,
@@ -345,8 +347,9 @@ async function main() {
       notes: 'Initial contact made, waiting for response.',
     },
     {
-      companyName: 'Innovation Labs',
-      contactName: 'Amit Patel',
+      firstName: 'Amit',
+      lastName: 'Patel',
+      currentCompany: 'Innovation Labs',
       email: 'amit@innovationlabs.com',
       phone: '+91 98765 33333',
       status: LeadStatus.QUALIFIED,
@@ -357,8 +360,9 @@ async function main() {
       notes: 'Qualified lead, ready to convert to client.',
     },
     {
-      companyName: 'Startup Ventures',
-      contactName: 'Sneha Reddy',
+      firstName: 'Sneha',
+      lastName: 'Reddy',
+      currentCompany: 'Startup Ventures',
       email: 'sneha@startupventures.com',
       phone: '+91 98765 44444',
       status: LeadStatus.LOST,

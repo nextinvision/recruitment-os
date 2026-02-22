@@ -48,8 +48,10 @@ export class CommunicationAutomation {
     const content = this.renderTemplate(template.content, {
       title: followUp.title,
       scheduledDate: followUp.scheduledDate.toLocaleDateString(),
-      companyName: (entity as any).companyName || 'Client',
-      contactName: (entity as any).contactName || '',
+      companyName: (entity as any).currentCompany || (entity as any).companyName || 'Client',
+      contactName: (entity as any).firstName && (entity as any).lastName
+        ? `${(entity as any).firstName} ${(entity as any).lastName}`
+        : (entity as any).contactName || '',
     })
 
     // Send message
@@ -73,12 +75,12 @@ export class CommunicationAutomation {
     const application = await db.application.findUnique({
       where: { id: applicationId },
       include: {
-        candidate: true,
+        client: true,
         job: true,
       },
     })
 
-    if (!application || application.stage !== 'INTERVIEW_SCHEDULED') {
+    if (!application || application.stage !== 'INTERVIEW_SCHEDULED' || !application.client) {
       return
     }
 
@@ -89,9 +91,11 @@ export class CommunicationAutomation {
       return
     }
 
+    if (!application.job) return
+
     // Render template
     const content = this.renderTemplate(template.content, {
-      candidateName: `${application.candidate.firstName} ${application.candidate.lastName}`,
+      candidateName: `${application.client.firstName} ${application.client.lastName}`,
       jobTitle: application.job.title,
       company: application.job.company,
       interviewDate: new Date().toLocaleDateString(), // You may want to store actual interview date
@@ -101,10 +105,10 @@ export class CommunicationAutomation {
     await messageService.sendMessage({
       templateId: template.id,
       channel,
-      recipientType: 'candidate',
-      recipientId: application.candidateId,
-      recipientPhone: channel === MessageChannel.WHATSAPP ? (application.candidate.phone ?? undefined) : undefined,
-      recipientEmail: channel === MessageChannel.EMAIL ? application.candidate.email : undefined,
+      recipientType: 'client',
+      recipientId: application.clientId || '',
+      recipientPhone: channel === MessageChannel.WHATSAPP ? (application.client.phone ?? undefined) : undefined,
+      recipientEmail: channel === MessageChannel.EMAIL ? application.client.email ?? undefined : undefined,
       subject: template.subject || 'Interview Reminder',
       content,
       sentBy: application.recruiterId,
@@ -118,12 +122,12 @@ export class CommunicationAutomation {
     const application = await db.application.findUnique({
       where: { id: applicationId },
       include: {
-        candidate: true,
+        client: true,
         job: true,
       },
     })
 
-    if (!application || application.stage !== 'OFFER') {
+    if (!application || application.stage !== 'OFFER' || !application.client || !application.job) {
       return
     }
 
@@ -136,7 +140,7 @@ export class CommunicationAutomation {
 
     // Render template
     const content = this.renderTemplate(template.content, {
-      candidateName: `${application.candidate.firstName} ${application.candidate.lastName}`,
+      candidateName: `${application.client.firstName} ${application.client.lastName}`,
       jobTitle: application.job.title,
       company: application.job.company,
       salary: application.job.salaryRange || 'TBD',
@@ -147,10 +151,10 @@ export class CommunicationAutomation {
     await messageService.sendMessage({
       templateId: template.id,
       channel,
-      recipientType: 'candidate',
-      recipientId: application.candidateId,
-      recipientPhone: channel === MessageChannel.WHATSAPP ? (application.candidate.phone ?? undefined) : undefined,
-      recipientEmail: channel === MessageChannel.EMAIL ? application.candidate.email : undefined,
+      recipientType: 'client',
+      recipientId: application.clientId || '',
+      recipientPhone: channel === MessageChannel.WHATSAPP ? (application.client.phone ?? undefined) : undefined,
+      recipientEmail: channel === MessageChannel.EMAIL ? application.client.email ?? undefined : undefined,
       subject: template.subject || 'Job Offer',
       content,
       sentBy: application.recruiterId,
