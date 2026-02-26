@@ -2,12 +2,14 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum UserRole {
@@ -20,6 +22,10 @@ enum JobSource {
   LINKEDIN
   INDEED
   NAUKRI
+  GOOGLE
+  SERPAPI
+  ADZUNA
+  JOOBLE
   OTHER
 }
 
@@ -159,6 +165,7 @@ model User {
   systemConfigs           SystemConfig[]
   leadDocuments           LeadDocument[]
   onboardingForms         OnboardingForm[]
+  resumeDrafts            ResumeDraft[]
 
   @@map("users")
 }
@@ -179,6 +186,9 @@ model Job {
   notes              String?   @db.Text
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  // Vector Search
+  embedding Unsupported("vector(384)")?
 
   // Duplicate Detection
   isDuplicate     Boolean @default(false)
@@ -219,13 +229,13 @@ model Candidate {
 
 model Application {
   id             String           @id @default(cuid())
-  jobId          String?          // Optional: application can exist without a linked job
-  clientId       String?          // Changed from candidateId to clientId (nullable for migration)
+  jobId          String? // Optional: application can exist without a linked job
+  clientId       String? // Changed from candidateId to clientId (nullable for migration)
   stage          ApplicationStage @default(IDENTIFIED)
   recruiterId    String
   notes          String?          @db.Text
   followUpDate   DateTime?
-  stageChangedAt DateTime?       // Track when stage was last changed for days calculation
+  stageChangedAt DateTime? // Track when stage was last changed for days calculation
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -320,6 +330,23 @@ model CoverLetter {
   @@map("cover_letters")
 }
 
+model ResumeDraft {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String?
+  content   Json     // Structured resume: contact, profile, experience, education, etc.
+  template  String?  @default("professional") // Template ID for layout
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([clientId])
+  @@map("resume_drafts")
+}
+
 model ClientDocument {
   id          String       @id @default(cuid())
   clientId    String
@@ -391,9 +418,9 @@ model File {
 
 model Lead {
   id             String     @id @default(cuid())
-  firstName      String     // Person (job seeker) first name
-  lastName       String     // Person (job seeker) last name
-  currentCompany String?    // Optional: where they work or referring company
+  firstName      String // Person (job seeker) first name
+  lastName       String // Person (job seeker) last name
+  currentCompany String? // Optional: where they work or referring company
   email          String?
   phone          String?
   status         LeadStatus @default(NEW)
@@ -407,8 +434,8 @@ model Lead {
   updatedAt      DateTime   @updatedAt
 
   // Relations
-  assignedUser User            @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
-  client       Client?         @relation("LeadToClient")
+  assignedUser User           @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
+  client       Client?        @relation("LeadToClient")
   activities   Activity[]
   followUps    FollowUp[]
   revenues     Revenue[]
@@ -420,15 +447,15 @@ model Lead {
 }
 
 model LeadDocument {
-  id              String   @id @default(cuid())
-  leadId          String
-  fileName        String   // Storage object key (for delete)
-  fileUrl         String
-  originalFileName String  // Display name
-  fileSize        Int      // bytes
-  mimeType        String?
-  uploadedBy      String
-  uploadedAt      DateTime @default(now())
+  id               String   @id @default(cuid())
+  leadId           String
+  fileName         String // Storage object key (for delete)
+  fileUrl          String
+  originalFileName String // Display name
+  fileSize         Int // bytes
+  mimeType         String?
+  uploadedBy       String
+  uploadedAt       DateTime @default(now())
 
   // Relations
   lead     Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -442,12 +469,12 @@ model OnboardingForm {
   id          String   @id @default(cuid())
   title       String
   description String?  @db.Text
-  fields      Json     // JSON array of field definitions: key, label, type, required?, options?
+  fields      Json // JSON array of field definitions: key, label, type, required?, options?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  createdBy   User                      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User                       @relation(fields: [createdById], references: [id], onDelete: Cascade)
   submissions OnboardingFormSubmission[]
 
   @@index([createdById])
@@ -455,10 +482,10 @@ model OnboardingForm {
 }
 
 model OnboardingFormSubmission {
-  id        String   @id @default(cuid())
-  formId    String
-  data      Json       // JSON object of field key -> value (answers)
-  clientId  String?  // Set when converted to client
+  id          String   @id @default(cuid())
+  formId      String
+  data        Json // JSON object of field key -> value (answers)
+  clientId    String? // Set when converted to client
   submittedAt DateTime @default(now())
 
   form   OnboardingForm @relation(fields: [formId], references: [id], onDelete: Cascade)
@@ -506,18 +533,19 @@ model Client {
   updatedAt       DateTime @updatedAt
 
   // Relations
-  assignedUser      User             @relation("ClientAssignedUser", fields: [assignedUserId], references: [id], onDelete: Cascade)
-  reverseRecruiter  User?            @relation("ClientReverseRecruiter", fields: [reverseRecruiterId], references: [id], onDelete: SetNull)
-  lead              Lead?            @relation("LeadToClient", fields: [leadId], references: [id], onDelete: SetNull)
-  jobSearchStrategy ClientDocument?  @relation("ClientJobSearchStrategy", fields: [jobSearchStrategyDocId], references: [id], onDelete: SetNull)
-  activities        Activity[]
-  followUps         FollowUp[]
-  revenues          Revenue[]
-  payments          Payment[]
-  coverLetters      CoverLetter[]
-  documents         ClientDocument[] @relation("ClientDocuments")
-  applications      Application[]
+  assignedUser          User                       @relation("ClientAssignedUser", fields: [assignedUserId], references: [id], onDelete: Cascade)
+  reverseRecruiter      User?                      @relation("ClientReverseRecruiter", fields: [reverseRecruiterId], references: [id], onDelete: SetNull)
+  lead                  Lead?                      @relation("LeadToClient", fields: [leadId], references: [id], onDelete: SetNull)
+  jobSearchStrategy     ClientDocument?            @relation("ClientJobSearchStrategy", fields: [jobSearchStrategyDocId], references: [id], onDelete: SetNull)
+  activities            Activity[]
+  followUps             FollowUp[]
+  revenues              Revenue[]
+  payments              Payment[]
+  coverLetters          CoverLetter[]
+  documents             ClientDocument[]           @relation("ClientDocuments")
+  applications          Application[]
   onboardingSubmissions OnboardingFormSubmission[]
+  resumeDrafts          ResumeDraft[]
 
   @@unique([leadId])
   @@index([status])
@@ -587,6 +615,11 @@ model Revenue {
   dueDate        DateTime?
   paidDate       DateTime?
   description    String?       @db.Text
+  items          Json? // Array of objects: { description, quantity, rate, amount }
+  subTotal       Decimal?      @db.Decimal(10, 2)
+  taxAmount      Decimal?      @db.Decimal(10, 2)
+  notes          String?       @db.Text
+  terms          String?       @db.Text
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

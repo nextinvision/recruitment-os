@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner, Button, JobFilters, Pagination, JobAssignmentModal, DuplicateResolutionModal } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { JobFetchPanel } from '@/components/jobs/JobFetchPanel'
+import { GoogleFetchPanel } from '@/components/jobs/GoogleFetchPanel'
 import Link from 'next/link'
 import type { JobFilters as JobFiltersType } from '@/ui'
 
@@ -34,7 +35,7 @@ interface JobsResponse {
   totalPages: number
 }
 
-type TabType = 'all' | 'fetch' | 'linkedin' | 'indeed' | 'naukri' | 'other'
+type TabType = 'all' | 'fetch' | 'google' | 'linkedin' | 'indeed' | 'naukri' | 'other'
 
 export default function JobsPage() {
   const router = useRouter()
@@ -66,10 +67,10 @@ export default function JobsPage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab !== 'fetch') {
+    if (activeTab !== 'fetch' && activeTab !== 'google') {
       loadJobs()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, sortBy, sortOrder, filters, activeTab])
 
   const loadRecruiters = async () => {
@@ -109,7 +110,7 @@ export default function JobsPage() {
 
       // Build query string
       const params = new URLSearchParams()
-      
+
       // Apply source filter based on active tab
       if (activeTab === 'linkedin') {
         params.append('source', 'LINKEDIN')
@@ -120,8 +121,8 @@ export default function JobsPage() {
       } else if (activeTab === 'other') {
         params.append('source', 'OTHER')
       }
-      // 'all' tab shows all sources, no filter needed
-      
+      // 'all'/'fetch'/'google' tabs show all sources, no filter needed
+
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
       if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
@@ -179,7 +180,7 @@ export default function JobsPage() {
       else if (activeTab === 'indeed') params.append('source', 'INDEED')
       else if (activeTab === 'naukri') params.append('source', 'NAUKRI')
       else if (activeTab === 'other') params.append('source', 'OTHER')
-      
+
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
       if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
@@ -271,6 +272,7 @@ export default function JobsPage() {
   const tabs = [
     { id: 'all' as TabType, label: 'All Jobs', count: jobsData?.total },
     { id: 'fetch' as TabType, label: 'Fetch Jobs', count: null },
+    { id: 'google' as TabType, label: '🔍 Google Fetch', count: null },
     { id: 'linkedin' as TabType, label: 'LinkedIn', count: null },
     { id: 'indeed' as TabType, label: 'Indeed', count: null },
     { id: 'naukri' as TabType, label: 'Naukri', count: null },
@@ -282,8 +284,8 @@ export default function JobsPage() {
       key: 'title',
       header: 'Title',
       render: (job: Job) => (
-        <Link 
-          href={`/jobs/${job.id}`} 
+        <Link
+          href={`/jobs/${job.id}`}
           className="block hover:opacity-80 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
@@ -310,11 +312,10 @@ export default function JobsPage() {
       key: 'status',
       header: 'Status',
       render: (job: Job) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
-          job.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border-green-200' :
-          job.status === 'CLOSED' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-          'bg-yellow-100 text-yellow-800 border-yellow-200'
-        }`}>
+        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${job.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border-green-200' :
+            job.status === 'CLOSED' ? 'bg-gray-100 text-gray-800 border-gray-200' :
+              'bg-yellow-100 text-yellow-800 border-yellow-200'
+          }`}>
           {job.status}
         </span>
       ),
@@ -409,20 +410,18 @@ export default function JobsPage() {
                   }}
                   className={`
                     whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
-                    ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ${activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }
                   `}
                 >
                   {tab.label}
                   {tab.count !== null && tab.count !== undefined && (
-                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
-                      activeTab === tab.id
+                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${activeTab === tab.id
                         ? 'bg-blue-100 text-blue-800'
                         : 'bg-gray-100 text-gray-600'
-                    }`}>
+                      }`}>
                       {tab.count}
                     </span>
                   )}
@@ -434,6 +433,8 @@ export default function JobsPage() {
           {/* Tab Content */}
           {activeTab === 'fetch' ? (
             <JobFetchPanel onFetchComplete={handleFetchComplete} />
+          ) : activeTab === 'google' ? (
+            <GoogleFetchPanel onFetchComplete={handleFetchComplete} />
           ) : (
             <>
               <JobFilters

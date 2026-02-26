@@ -3,6 +3,7 @@
  * Run with: npm test
  */
 
+import { describe, beforeEach, test, expect } from 'vitest'
 import { JobScraper } from '../../src/content/job-scraper'
 import { JobSource } from '../../src/shared/types'
 
@@ -10,16 +11,16 @@ import { JobSource } from '../../src/shared/types'
 function createMockDOM() {
   document.body.innerHTML = `
     <div data-job-id="1">
-      <a class="job-title">Software Engineer</a>
-      <a class="company">Tech Corp</a>
-      <span class="location">Remote</span>
-      <div class="description">Job description here</div>
+      <a class="job-card-list__title">Software Engineer</a>
+      <a class="job-card-container__company-name">Tech Corp</a>
+      <span class="job-card-container__metadata-item">Remote</span>
+      <div class="job-card-list__description">Job description here</div>
     </div>
     <div data-job-id="2">
-      <a class="job-title">Frontend Developer</a>
-      <a class="company">Startup Inc</a>
-      <span class="location">San Francisco</span>
-      <div class="description">React developer needed</div>
+      <a class="job-card-list__title">Frontend Developer</a>
+      <a class="job-card-container__company-name">Startup Inc</a>
+      <span class="job-card-container__metadata-item">San Francisco</span>
+      <div class="job-card-list__description">React developer needed</div>
     </div>
   `
 }
@@ -31,7 +32,8 @@ describe('JobScraper', () => {
     Object.defineProperty(window, 'location', {
       value: {
         href: 'https://www.linkedin.com/jobs/',
-        pathname: '/jobs/'
+        pathname: '/jobs/',
+        hostname: 'www.linkedin.com'
       },
       writable: true
     })
@@ -45,7 +47,7 @@ describe('JobScraper', () => {
   test('should scrape visible jobs', () => {
     const scraper = new JobScraper('linkedin')
     const jobs = scraper.scrapeVisibleJobs()
-    
+
     expect(jobs.length).toBeGreaterThan(0)
     expect(jobs[0]).toHaveProperty('title')
     expect(jobs[0]).toHaveProperty('company')
@@ -55,7 +57,7 @@ describe('JobScraper', () => {
   test('should validate scraped jobs', () => {
     const scraper = new JobScraper('linkedin')
     const jobs = scraper.scrapeVisibleJobs()
-    
+
     jobs.forEach(job => {
       expect(job).toHaveProperty('isValid')
       expect(job).toHaveProperty('errors')

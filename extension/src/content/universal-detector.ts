@@ -41,7 +41,7 @@ export class UniversalJobDetector {
     ]
 
     // Check URL
-    const urlMatch = jobUrlPatterns.some(pattern => 
+    const urlMatch = jobUrlPatterns.some(pattern =>
       url.includes(pattern) || pathname.includes(pattern)
     )
 
@@ -49,7 +49,7 @@ export class UniversalJobDetector {
     const titleMatch = jobTitlePatterns.some(pattern => title.includes(pattern))
 
     // Check body text (at least 2 matches)
-    const bodyMatches = jobBodyPatterns.filter(pattern => 
+    const bodyMatches = jobBodyPatterns.filter(pattern =>
       bodyText.includes(pattern)
     ).length
 
@@ -144,6 +144,14 @@ export class UniversalJobDetector {
       })
     }
 
+    // Strategy 4: Structural Pattern Detection (IDS Logic Fallback)
+    if (candidates.length === 0) {
+      const patternJobs = this.findPatternClusters()
+      patternJobs.forEach(job => {
+        candidates.push(job)
+      })
+    }
+
     // Remove duplicates (same element)
     const unique = new Map<Element, JobElement>()
     candidates.forEach(job => {
@@ -202,6 +210,79 @@ export class UniversalJobDetector {
       description: description || text.substring(0, 500),
       confidence: Math.min(confidence, 1.0),
     }
+  }
+
+  /**
+   * Pattern-based Detection (IDS Logic)
+   * Finds repeating clusters of DOM elements even if they lack job-related keywords
+   */
+  static findPatternClusters(): JobElement[] {
+    const body = document.body;
+    const allElements = body.querySelectorAll('*');
+    const clusterMap = new Map<string, Element[]>();
+
+    // 1. Generate structural fingerprints for all elements
+    allElements.forEach(el => {
+      // Skip very small or hidden elements
+      if (el.textContent && el.textContent.length < 20) return;
+      if (el.children.length < 2) return; // Must have sub-structure
+
+      const fingerprint = this.generateFingerprint(el);
+      if (!clusterMap.has(fingerprint)) {
+        clusterMap.set(fingerprint, []);
+      }
+      clusterMap.get(fingerprint)!.push(el);
+    });
+
+    const candidates: JobElement[] = [];
+
+    // 2. Analyze clusters with high repetition (>= 3)
+    clusterMap.forEach((elements, fingerprint) => {
+      if (elements.length >= 3) {
+        // This is a repeating pattern!
+        elements.forEach(el => {
+          const job = this.extractFromPattern(el);
+          if (job) {
+            candidates.push(job);
+          }
+        });
+      }
+    });
+
+    return candidates;
+  }
+
+  /**
+   * Generate a structural fingerprint for an element
+   */
+  private static generateFingerprint(el: Element): string {
+    const childTags = Array.from(el.children)
+      .map(c => c.tagName.toLowerCase())
+      .join('>');
+
+    // Combine tag sequence with class count for a unique but flexible fingerprint
+    return `${el.tagName.toLowerCase()}[${childTags}](${el.className.split(' ').length})`;
+  }
+
+  /**
+   * Extract data from a pattern-detected element
+   */
+  private static extractFromPattern(el: Element): JobElement | null {
+    const title = this.findTitle(el);
+    if (!title) return null;
+
+    const company = this.findCompany(el);
+    const location = this.findLocation(el);
+    const description = this.findDescription(el, el.textContent || '');
+
+    return {
+      element: el,
+      title,
+      company,
+      location,
+      description,
+      confidence: 0.5 // Base confidence for pattern matches
+    };
   }
 
   /**
@@ -269,8 +350,8 @@ export class UniversalJobDetector {
       const text = link.textContent?.trim() || ''
       const href = link.getAttribute('href') || ''
       // If link text looks like a company name and href doesn't look like a job URL
-      if (text.length > 2 && text.length < 50 && 
-          !href.includes('/job') && !href.includes('/apply')) {
+      if (text.length > 2 && text.length < 50 &&
+        !href.includes('/job') && !href.includes('/apply')) {
         return text
       }
     }

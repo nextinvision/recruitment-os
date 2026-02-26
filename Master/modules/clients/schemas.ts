@@ -59,10 +59,10 @@ export const clientSortSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 })
 
-// Pagination schemas
+// Pagination schemas - max 500 to support picker/dropdown use cases (e.g. job assign, application form)
 export const clientPaginationSchema = z.object({
   page: z.number().int().min(1).default(1),
-  pageSize: z.number().int().min(1).max(100).default(25),
+  pageSize: z.number().int().min(1).max(500).default(25),
 })
 
 export type CreateClientInput = z.infer<typeof createClientSchema>

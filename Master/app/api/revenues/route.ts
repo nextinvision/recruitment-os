@@ -14,13 +14,22 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const searchParams = request.nextUrl.searchParams
+
+    if (searchParams.get('summary') === 'true') {
+      const { getRevenueClientsSummary } = await import('@/modules/revenues/service')
+      const summary = await getRevenueClientsSummary()
+      const response = NextResponse.json(summary, { status: 200 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+
     const filters: any = {}
-    
+
     if (searchParams.get('leadId')) {
       filters.leadId = searchParams.get('leadId')
     }
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
@@ -64,7 +73,7 @@ export async function POST(request: NextRequest) {
     if (!body.assignedUserId) {
       body.assignedUserId = authContext.userId
     }
-    
+
     const revenue = await createRevenue(body)
 
     const response = NextResponse.json(revenue, { status: 201 })

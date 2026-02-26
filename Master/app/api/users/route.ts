@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
-    
+
     // Only ADMIN can view all users
     requireRole(authContext, [UserRole.ADMIN])
 
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       const allUsers = await db.user.findMany({
         orderBy: { createdAt: 'desc' },
       })
-      
+
       // Fetch manager and counts separately
       users = await Promise.all(allUsers.map(async (user) => {
         const userWithExtras = user as typeof user & { managerId?: string | null; isActive?: boolean; lastLogin?: Date | null }
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
             },
           }),
         ])
-        
+
         return {
           id: user.id,
           email: user.email,
@@ -105,10 +105,10 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
-    
+
     // Only ADMIN can create users
     requireRole(authContext, [UserRole.ADMIN])
 

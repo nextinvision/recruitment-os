@@ -14,9 +14,20 @@ export async function POST(request: NextRequest) {
     if (corsResponse) return corsResponse
 
     const authHeader = request.headers.get('authorization')
-    requireAuth(await getAuthContext(authHeader))
+    const authContext = await getAuthContext(authHeader)
+    const user = requireAuth(authContext)
 
     const body = await request.json()
+
+    // Inject recruiterId and normalize source for each job
+    if (body.jobs && Array.isArray(body.jobs)) {
+      body.jobs = body.jobs.map((job: any) => ({
+        ...job,
+        recruiterId: user.userId,
+        source: typeof job.source === 'string' ? job.source.toUpperCase() : job.source
+      }))
+    }
+
     const result = await bulkCreateJobs(body)
 
     const response = NextResponse.json(result, { status: 201 })

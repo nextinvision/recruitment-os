@@ -14,13 +14,13 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    
+
     // Filters
     const filters: any = {}
     if (searchParams.get('source')) filters.source = searchParams.get('source')
@@ -65,12 +65,16 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
-    const job = await createJob(body)
+    const job = await createJob({
+      ...body,
+      recruiterId: authContext.userId,
+      source: typeof body.source === 'string' ? body.source.toUpperCase() : body.source
+    })
 
     // Log the mutation
     await logMutation({

@@ -124,27 +124,46 @@ export class JobFetchService {
   }
   
   /**
+   * Normalize user location to Adzuna country code for API path.
+   * Adzuna uses country codes in path: gb, us, in, au, etc.
+   */
+  private normalizeAdzunaCountry(location?: string): string {
+    if (!location || !location.trim()) return 'in'
+    const loc = location.trim().toLowerCase()
+    if (loc === 'us' || loc === 'usa' || loc === 'united states') return 'us'
+    if (loc === 'gb' || loc === 'uk' || loc === 'united kingdom') return 'gb'
+    if (loc === 'in' || loc === 'india') return 'in'
+    if (loc === 'au' || loc === 'australia') return 'au'
+    if (loc === 'de' || loc === 'germany') return 'de'
+    if (loc === 'br' || loc === 'brazil') return 'br'
+    if (loc === 'fr' || loc === 'france') return 'fr'
+    return 'in' // Default to India for unspecified or city names
+  }
+
+  /**
    * Fetch jobs from Adzuna API
    */
   async fetchFromAdzuna(options: JobFetchOptions): Promise<FetchedJob[]> {
-    const { query = 'software engineer', location = 'us', limit = 50 } = options
-    
-    const appId = process.env.ADZUNA_APP_ID
+    const { query = 'software engineer', location, limit = 50 } = options
+    const country = this.normalizeAdzunaCountry(location)
+    const whereParam = (location?.trim() || country) // "where" can be country or city
+
+    const appId = process.env.ADZUNA_APP_ID || process.env.ADZUNA_APP_KEY
     const appKey = process.env.ADZUNA_APP_KEY
-    
-    if (!appId || !appKey) {
-      throw new Error('Adzuna API credentials not configured')
+
+    if (!appKey) {
+      throw new Error('Adzuna API credentials not configured. Add ADZUNA_APP_KEY (and ADZUNA_APP_ID) to .env')
     }
-    
-    const url = `https://api.adzuna.com/v1/api/jobs/${location}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=${Math.min(limit, 50)}&what=${encodeURIComponent(query)}&where=${encodeURIComponent(location)}&content-type=application/json`
+
+    const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId || appKey}&app_key=${appKey}&results_per_page=${Math.min(limit, 50)}&what=${encodeURIComponent(query)}&where=${encodeURIComponent(whereParam)}&content-type=application/json`
     
     try {
       const response = await fetch(url)
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(`Adzuna API error: ${response.statusText}`)
+        const errMsg = (data as { error?: string })?.error || response.statusText
+        throw new Error(`Adzuna API error: ${errMsg}`)
       }
-      
-      const data = await response.json()
       
       if (!data.results || data.results.length === 0) {
         return []

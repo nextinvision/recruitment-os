@@ -110,6 +110,9 @@ export async function getClientById(clientId: string) {
       documents: {
         orderBy: { version: 'desc' },
       },
+      resumeDrafts: {
+        orderBy: { updatedAt: 'desc' },
+      },
       _count: {
         select: {
           activities: true,
@@ -118,6 +121,7 @@ export async function getClientById(clientId: string) {
           payments: true,
           coverLetters: true,
           documents: true,
+          resumeDrafts: true,
         },
       },
     },

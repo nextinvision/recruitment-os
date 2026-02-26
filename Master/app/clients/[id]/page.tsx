@@ -43,7 +43,16 @@ interface Client {
     payments: number
     coverLetters?: number
     documents?: number
+    resumeDrafts?: number
   }
+  resumeDrafts?: ResumeDraft[]
+}
+
+interface ResumeDraft {
+  id: string
+  content: any
+  template: string
+  updatedAt: string
 }
 
 interface Activity {
@@ -69,7 +78,7 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'preparation' | 'activities'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'preparation' | 'resumes' | 'activities'>('overview')
   const [preparationStatus, setPreparationStatus] = useState<any>(null)
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showStepModal, setShowStepModal] = useState(false)
@@ -82,7 +91,7 @@ export default function ClientProfilePage() {
       setLoading(false)
       return
     }
-    
+
     loadClient()
     loadActivities()
     loadPreparationStatus()
@@ -247,6 +256,41 @@ export default function ClientProfilePage() {
     )
   }
 
+  const handleDeleteDraft = async (draftId: string) => {
+    showConfirm(
+      'Delete Resume',
+      'Are you sure you want to delete this resume? This action cannot be undone.',
+      async () => {
+        try {
+          const token = localStorage.getItem('token')
+          const response = await fetch(`/api/resume-drafts/${draftId}`, {
+            method: 'DELETE',
+            headers: {
+              ...(token && { 'Authorization': `Bearer ${token}` }),
+            },
+            credentials: 'include',
+          })
+
+          if (response.ok) {
+            showToast('Resume deleted successfully', 'success')
+            loadClient() // Refresh to show updated list
+          } else {
+            const data = await response.json()
+            showToast(data.error || 'Failed to delete resume', 'error')
+          }
+        } catch (err) {
+          console.error('Failed to delete resume:', err)
+          showToast('Failed to delete resume', 'error')
+        }
+      },
+      {
+        variant: 'danger',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+      }
+    )
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -345,31 +389,37 @@ export default function ClientProfilePage() {
             <nav className="flex -mb-px">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'overview'
-                    ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
-                    : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
-                }`}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'overview'
+                  ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
+                  : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
+                  }`}
               >
                 Overview
               </button>
               <button
                 onClick={() => setActiveTab('preparation')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'preparation'
-                    ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
-                    : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
-                }`}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'preparation'
+                  ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
+                  : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
+                  }`}
               >
                 Preparation Pipeline
               </button>
               <button
+                onClick={() => setActiveTab('resumes')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'resumes'
+                  ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
+                  : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
+                  }`}
+              >
+                Resumes
+              </button>
+              <button
                 onClick={() => setActiveTab('activities')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'activities'
-                    ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
-                    : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
-                }`}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'activities'
+                  ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
+                  : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
+                  }`}
               >
                 Activities
               </button>
@@ -379,67 +429,67 @@ export default function ClientProfilePage() {
           <div className="p-6">
             {activeTab === 'overview' && (
               <>
-        {/* Client Details */}
-        <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
-          <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Client Information</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-careerist-text-secondary">Email</label>
-              <p className="text-careerist-text-primary">{client.email || '-'}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-careerist-text-secondary">Phone</label>
-              <p className="text-careerist-text-primary">{client.phone || '-'}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-careerist-text-secondary">Industry (Desired)</label>
-              <p className="text-careerist-text-primary">{client.industry || '-'}</p>
-            </div>
-            {client.currentJobTitle && (
-              <div>
-                <label className="text-sm font-medium text-careerist-text-secondary">Current Job Title</label>
-                <p className="text-careerist-text-primary">{client.currentJobTitle}</p>
-              </div>
-            )}
-            {client.experience && (
-              <div>
-                <label className="text-sm font-medium text-careerist-text-secondary">Experience</label>
-                <p className="text-careerist-text-primary">{client.experience}</p>
-              </div>
-            )}
-            <div className="col-span-2">
-              <label className="text-sm font-medium text-careerist-text-secondary">Address</label>
-              <p className="text-careerist-text-primary">{client.address || '-'}</p>
-            </div>
-            {client.skills && client.skills.length > 0 && (
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-careerist-text-secondary mb-2 block">Skills</label>
-                <div className="flex flex-wrap gap-2">
-                  {client.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 bg-careerist-yellow-light text-careerist-primary-navy rounded-full text-sm font-medium border border-careerist-yellow"
-                    >
-                      {skill}
-                    </span>
-                  ))}
+                {/* Client Details */}
+                <div className="bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+                  <h2 className="text-lg font-semibold text-careerist-text-primary mb-4">Client Information</h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-careerist-text-secondary">Email</label>
+                      <p className="text-careerist-text-primary">{client.email || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-careerist-text-secondary">Phone</label>
+                      <p className="text-careerist-text-primary">{client.phone || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-careerist-text-secondary">Industry (Desired)</label>
+                      <p className="text-careerist-text-primary">{client.industry || '-'}</p>
+                    </div>
+                    {client.currentJobTitle && (
+                      <div>
+                        <label className="text-sm font-medium text-careerist-text-secondary">Current Job Title</label>
+                        <p className="text-careerist-text-primary">{client.currentJobTitle}</p>
+                      </div>
+                    )}
+                    {client.experience && (
+                      <div>
+                        <label className="text-sm font-medium text-careerist-text-secondary">Experience</label>
+                        <p className="text-careerist-text-primary">{client.experience}</p>
+                      </div>
+                    )}
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium text-careerist-text-secondary">Address</label>
+                      <p className="text-careerist-text-primary">{client.address || '-'}</p>
+                    </div>
+                    {client.skills && client.skills.length > 0 && (
+                      <div className="col-span-2">
+                        <label className="text-sm font-medium text-careerist-text-secondary mb-2 block">Skills</label>
+                        <div className="flex flex-wrap gap-2">
+                          {client.skills.map((skill, index) => (
+                            <span
+                              key={index}
+                              className="px-3 py-1 bg-careerist-yellow-light text-careerist-primary-navy rounded-full text-sm font-medium border border-careerist-yellow"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm font-medium text-careerist-text-secondary">Assigned To</label>
+                      <p className="text-careerist-text-primary">
+                        {client.assignedUser.firstName} {client.assignedUser.lastName}
+                      </p>
+                    </div>
+                    {client.notes && (
+                      <div className="col-span-2">
+                        <label className="text-sm font-medium text-careerist-text-secondary">Notes</label>
+                        <p className="text-careerist-text-primary whitespace-pre-wrap">{client.notes}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-            <div>
-              <label className="text-sm font-medium text-careerist-text-secondary">Assigned To</label>
-              <p className="text-careerist-text-primary">
-                {client.assignedUser.firstName} {client.assignedUser.lastName}
-              </p>
-            </div>
-            {client.notes && (
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-careerist-text-secondary">Notes</label>
-                <p className="text-careerist-text-primary whitespace-pre-wrap">{client.notes}</p>
-              </div>
-            )}
-          </div>
-        </div>
 
               </>
             )}
@@ -477,9 +527,76 @@ export default function ClientProfilePage() {
               </div>
             )}
 
+            {activeTab === 'resumes' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-careerist-text-primary">Tailored Resumes</h2>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/resume-builder?clientId=${clientId}`)}
+                  >
+                    Create New Resume
+                  </Button>
+                </div>
+
+                {client.resumeDrafts && client.resumeDrafts.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {client.resumeDrafts.map((draft) => (
+                      <div
+                        key={draft.id}
+                        className="bg-careerist-card border border-careerist-border rounded-lg p-4 hover:border-careerist-primary-yellow transition-colors group"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="text-careerist-text-primary font-bold truncate">
+                              {draft.content?.contact?.name || 'Untitled Resume'}
+                            </div>
+                            <div className="text-xs text-careerist-text-secondary">
+                              Last updated: {new Date(draft.updatedAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <Badge variant="neutral" className="text-[10px] uppercase">
+                            {draft.template}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="flex-1 text-xs py-1"
+                            onClick={() => router.push(`/resume-builder?id=${draft.id}&clientId=${clientId}`)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            className="text-xs py-1 px-2"
+                            onClick={() => handleDeleteDraft(draft.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 border-2 border-dashed border-careerist-border rounded-lg">
+                    <p className="text-careerist-text-secondary mb-4">No tailored resumes found for this client.</p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => router.push(`/resume-builder?clientId=${clientId}`)}
+                    >
+                      Start Building
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'activities' && (
               <div>
-          <ActivityTimeline activities={activities} entityName={`${client.firstName} ${client.lastName}`} />
+                <ActivityTimeline activities={activities} entityName={`${client.firstName} ${client.lastName}`} />
               </div>
             )}
           </div>
@@ -517,11 +634,11 @@ export default function ClientProfilePage() {
             clientId={clientId}
             currentValue={
               selectedStep === 'Service Type' ? client.serviceType :
-              selectedStep === 'Reverse Recruiter' ? client.reverseRecruiterId :
-              selectedStep === 'Gmail ID Creation' ? { gmailId: client.gmailId, gmailCreated: client.gmailCreated } :
-              selectedStep === 'WhatsApp Group Created' ? { whatsappGroupCreated: client.whatsappGroupCreated, whatsappGroupId: (client as any).whatsappGroupId } :
-              selectedStep === 'LinkedIn Optimized' ? client.linkedInOptimized :
-              undefined
+                selectedStep === 'Reverse Recruiter' ? client.reverseRecruiterId :
+                  selectedStep === 'Gmail ID Creation' ? { gmailId: client.gmailId, gmailCreated: client.gmailCreated } :
+                    selectedStep === 'WhatsApp Group Created' ? { whatsappGroupCreated: client.whatsappGroupCreated, whatsappGroupId: (client as any).whatsappGroupId } :
+                      selectedStep === 'LinkedIn Optimized' ? client.linkedInOptimized :
+                        undefined
             }
             onSuccess={() => {
               loadClient()

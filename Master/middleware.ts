@@ -35,7 +35,7 @@ async function getPageRules(origin: string): Promise<PageAccessRules> {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (pathname === '/') {
+  if (pathname === '/' || pathname === '/index.html') {
     const cookieToken = request.cookies.get('token')?.value
     const authHeader =
       request.headers.get('authorization') || (cookieToken ? `Bearer ${cookieToken}` : null)

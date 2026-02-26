@@ -10,8 +10,8 @@ export const maxDuration = 300
 const fetchJobsSchema = z.object({
   query: z.string().optional(),
   location: z.string().optional(),
-  source: z.enum(['GOOGLE', 'ADZUNA', 'JOOBLE', 'INDEED_RSS', 'JOBSPY', 'ALL']).default('ALL'),
-  limit: z.number().int().min(1).max(100).optional().default(50),
+  source: z.enum(['GOOGLE', 'ADZUNA', 'JOOBLE', 'INDEED_RSS', 'JOBSPY', 'SERPAPI', 'ALL']).default('ALL'),
+  limit: z.number().int().min(1).max(500).optional().default(50),
   /** JobSpy: sites to scrape (e.g. indeed, linkedin, naukri). Accepts array or comma-separated string. */
   sites: z
     .union([z.array(z.string()), z.string()])
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
@@ -46,14 +46,14 @@ export async function POST(request: NextRequest) {
       const validated = fetchJobsSchema.parse(body)
 
       const fetchService = new JobFetchService()
-      
+
       // Fetch jobs based on source
       let jobs: any[] = []
-      
+
       if (validated.source === 'ALL') {
         // Fetch from all available sources in parallel (excluding JOBSPY to avoid long waits)
         const fetchPromises = []
-        
+
         // Try Google
         try {
           fetchPromises.push(
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           console.error('Google fetch setup error:', err)
         }
-        
+
         // Try Adzuna
         try {
           fetchPromises.push(
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           console.error('Adzuna fetch setup error:', err)
         }
-        
+
         // Try Jooble
         try {
           fetchPromises.push(
@@ -104,11 +104,11 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           console.error('Jooble fetch setup error:', err)
         }
-        
+
         // Wait for all fetches to complete
         const results = await Promise.all(fetchPromises)
         jobs = results.flat()
-        
+
         // Deduplicate jobs using the service method
         const tempService = new JobFetchService()
         jobs = (tempService as any).deduplicateJobs(jobs)
@@ -116,6 +116,38 @@ export async function POST(request: NextRequest) {
         // Fetch from single source
         try {
           switch (validated.source) {
+            case 'SERPAPI': {
+              // Call Python backend which uses SerpApi (real Google Jobs) with pagination
+              const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:8080'
+              const serpResponse = await fetch(`${pythonBackendUrl}/api/fetch-jobs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  query: validated.query,
+                  location: validated.location || 'India',
+                  limit: validated.limit,
+                  skills: [],
+                }),
+              })
+              if (!serpResponse.ok) {
+                const errText = await serpResponse.text().catch(() => 'Unknown error')
+                throw new Error(`Python backend (SerpApi) error: ${errText}`)
+              }
+              const serpData = await serpResponse.json()
+              // Map Python backend job format to FetchedJob shape expected by storeJobs()
+              jobs = (serpData.jobs || []).map((job: any) => ({
+                title: job.title || 'Untitled',
+                company: job.company || 'Unknown',
+                location: job.location || validated.location || 'India',
+                description: job.description || '',
+                source: 'SERPAPI' as any,
+                sourceUrl: job.url || job.sourceUrl || '',
+                skills: Array.isArray(job.requirements) ? job.requirements : [],
+                salaryRange: job.salary || job.salaryRange || undefined,
+                experienceRequired: job.experience_level || undefined,
+              }))
+              break
+            }
             case 'GOOGLE':
               jobs = await fetchService.fetchFromGoogle({
                 query: validated.query,
@@ -164,7 +196,7 @@ export async function POST(request: NextRequest) {
         } catch (fetchError: any) {
           // Provide helpful error messages
           const errorMessage = fetchError?.message || 'Unknown error occurred'
-          
+
           if (errorMessage.includes('Custom Search JSON API') || errorMessage.includes('does not have the access')) {
             throw new Error('Custom Search API is not enabled. Please enable it in Google Cloud Console: https://console.cloud.google.com/apis/library/customsearch.googleapis.com')
           } else if (errorMessage.includes('referer') || errorMessage.includes('blocked')) {
@@ -187,7 +219,7 @@ export async function POST(request: NextRequest) {
         skipped: jobs.length - storedCount,
         jobs: jobs.slice(0, 10), // Return first 10 for preview
       }, { status: 200 })
-      
+
       const origin = request.headers.get('origin')
       return addCorsHeaders(response, origin)
     } else {
@@ -200,10 +232,10 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error fetching jobs:', error)
-    
+
     let message = 'Failed to fetch jobs'
     let statusCode = 400
-    
+
     if (error instanceof z.ZodError) {
       message = `Validation error: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
       statusCode = 400
@@ -214,8 +246,8 @@ export async function POST(request: NextRequest) {
         statusCode = 500
       }
     }
-    
-    const response = NextResponse.json({ 
+
+    const response = NextResponse.json({
       error: message,
       details: error instanceof z.ZodError ? error.issues : undefined
     }, { status: statusCode })

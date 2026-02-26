@@ -556,9 +556,9 @@ server {
         proxy_set_header X-Forwarded-Port $server_port;
         
         # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
         
         # Cache bypass
         proxy_cache_bypass $http_upgrade;

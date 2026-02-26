@@ -12,7 +12,7 @@ import {
 // Normalize job data
 function normalizeJobData(data: any): any {
   const normalized: any = {}
-  
+
   if (data.title) normalized.title = data.title.trim()
   if (data.company) normalized.company = data.company.trim()
   if (data.location) normalized.location = data.location.trim()
@@ -24,14 +24,18 @@ function normalizeJobData(data: any): any {
   if (data.skills && Array.isArray(data.skills)) {
     normalized.skills = data.skills.map((s: string) => s.trim()).filter((s: string) => s.length > 0)
   }
-  
+
   // Copy other fields
   Object.keys(data).forEach(key => {
     if (!normalized.hasOwnProperty(key)) {
-      normalized[key] = data[key]
+      if (key === 'source' && typeof data[key] === 'string') {
+        normalized[key] = data[key].toUpperCase()
+      } else {
+        normalized[key] = data[key]
+      }
     }
   })
-  
+
   return normalized
 }
 
@@ -98,7 +102,7 @@ function calculateSimilarity(job1: any, job2: any): number {
 // Detect duplicates for a job
 async function detectDuplicates(jobData: any): Promise<{ jobId: string; similarityScore: number }[]> {
   const duplicates: { jobId: string; similarityScore: number }[] = []
-  
+
   // Get all active jobs (excluding the current job if updating)
   const existingJobs = await db.job.findMany({
     where: {
@@ -155,6 +159,33 @@ export interface JobsResult {
   totalPages: number
 }
 
+// Generate an embedding by calling the Python backend and injecting it directly via raw SQL
+async function injectEmbedding(jobId: string, title: string, company: string, skills: string[], description: string, dbClient: any = db) {
+  try {
+    // Construct rich text representation of the job
+    const textToEmbed = `${title} at ${company}. Skills: ${(skills || []).join(', ')}. ${description}`.substring(0, 8000)
+    const pythonUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:8080'
+    const res = await fetch(`${pythonUrl}/api/generate-embedding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: textToEmbed })
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      if (data.embedding) {
+        const vectorStr = `[${data.embedding.join(',')}]`
+        // Inject via executeRawUnsafe because Prisma doesn't fully support inserting Unsupported column typed safely yet
+        await dbClient.$executeRawUnsafe(`UPDATE "jobs" SET embedding = $1::vector WHERE id = $2`, vectorStr, jobId)
+      }
+    } else {
+      console.error('Failed to get embeddings HTTP status:', res.status)
+    }
+  } catch (err) {
+    console.error('Failed to generate/save embedding for job:', err)
+  }
+}
+
 export async function createJob(input: CreateJobInput) {
   const validated = createJobSchema.parse(input)
   const normalized = normalizeJobData(validated)
@@ -188,6 +219,9 @@ export async function createJob(input: CreateJobInput) {
       },
     },
   })
+
+  // Generate and append the vector embedding in postgres
+  await injectEmbedding(job.id, job.title, job.company, job.skills, job.description)
 
   return job
 }
@@ -228,7 +262,7 @@ export async function getJobs(
   pagination?: JobPaginationOptions
 ): Promise<JobsResult> {
   const where: any = {}
-  
+
   // Role-based filtering
   if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
     where.recruiterId = userId
@@ -274,7 +308,7 @@ export async function getJobs(
   const sortBy = sortOptions?.sortBy || 'createdAt'
   const sortOrder = sortOptions?.sortOrder || 'desc'
   const orderBy: any = {}
-  
+
   switch (sortBy) {
     case 'title':
       orderBy.title = sortOrder
@@ -341,14 +375,14 @@ export async function updateJob(input: UpdateJobInput) {
   if (existingJob) {
     const checkFields = ['title', 'company', 'location', 'sourceUrl']
     const shouldCheckDuplicates = checkFields.some(field => normalized[field] !== undefined)
-    
+
     if (shouldCheckDuplicates) {
       const jobData = { ...existingJob, ...normalized }
       const duplicates = await detectDuplicates(jobData)
       const isDuplicate = duplicates.length > 0
       const duplicateOf = isDuplicate ? duplicates[0].jobId : null
       const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
-      
+
       normalized.isDuplicate = isDuplicate
       normalized.duplicateOf = duplicateOf
       normalized.similarityScore = similarityScore
@@ -386,21 +420,21 @@ export async function deleteJob(jobId: string) {
 
 export async function bulkCreateJobs(input: BulkCreateJobsInput) {
   const validated = bulkCreateJobsSchema.parse(input)
-  
+
   // Normalize all jobs
   const normalizedJobs = validated.jobs.map(job => normalizeJobData(job))
-  
+
   // Use transaction for bulk create
   const result = await db.$transaction(async (tx) => {
     const createdJobs = []
-    
+
     for (const jobData of normalizedJobs) {
       // Detect duplicates
       const duplicates = await detectDuplicates(jobData)
       const isDuplicate = duplicates.length > 0
       const duplicateOf = isDuplicate ? duplicates[0].jobId : null
       const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
-      
+
       try {
         const job = await tx.job.create({
           data: {
@@ -410,13 +444,17 @@ export async function bulkCreateJobs(input: BulkCreateJobsInput) {
             similarityScore,
           },
         })
+
+        // Generate and append the vector embedding in postgres within the transaction
+        await injectEmbedding(job.id, job.title, job.company, job.skills, job.description, tx)
+
         createdJobs.push(job)
       } catch (error) {
         // Skip duplicates or errors, continue with next job
         console.error('Failed to create job:', error)
       }
     }
-    
+
     return {
       count: createdJobs.length,
       jobs: createdJobs,
@@ -438,17 +476,18 @@ export async function assignJobToCandidate(
     throw new Error('Job not found')
   }
 
-  // Validate candidate exists
-  const candidate = await db.candidate.findUnique({ where: { id: candidateId } })
-  if (!candidate) {
-    throw new Error('Candidate not found')
+  // Note: Application.clientId references Client, not Candidate. Use assignJobToClient instead.
+  // Validate client exists (clientId must reference clients table)
+  const client = await db.client.findUnique({ where: { id: candidateId } })
+  if (!client) {
+    throw new Error('Client not found. Job assignment requires a valid Client ID (from Clients, not Candidates).')
   }
 
   // Check if application already exists
   const existingApplication = await db.application.findFirst({
     where: {
       jobId,
-      clientId: candidateId, // Note: This function should be deprecated in favor of assignJobToClient
+      clientId: candidateId,
     },
   })
 
@@ -456,11 +495,11 @@ export async function assignJobToCandidate(
     throw new Error('Application already exists for this job and client')
   }
 
-  // Create application
+  // Create application (clientId references clients table)
   const application = await db.application.create({
     data: {
       jobId,
-      clientId: candidateId, // Note: This function should be deprecated in favor of assignJobToClient
+      clientId: candidateId,
       recruiterId,
       stage: 'IDENTIFIED',
     },
@@ -492,27 +531,30 @@ export async function bulkAssignJobToCandidates(
     throw new Error('Job not found')
   }
 
-  // Validate all candidates exist
-  const candidates = await db.candidate.findMany({
+  // Note: Application.clientId references Client, not Candidate. Use bulkAssignJobToClients instead.
+  // Validate all clients exist (clientIds must reference clients table)
+  const clients = await db.client.findMany({
     where: {
       id: { in: candidateIds },
     },
   })
 
-  if (candidates.length !== candidateIds.length) {
-    throw new Error('One or more candidates not found')
+  if (clients.length !== candidateIds.length) {
+    const foundIds = new Set(clients.map((c) => c.id))
+    const missing = candidateIds.filter((id) => !foundIds.has(id))
+    throw new Error(`One or more clients not found. Job assignment requires valid Client IDs (from Clients, not Candidates). Missing: ${missing.join(', ')}`)
   }
 
   // Create applications in transaction
   const result = await db.$transaction(async (tx) => {
     const createdApplications = []
-    
-    for (const candidateId of candidateIds) {
+
+    for (const clientId of candidateIds) {
       // Check if application already exists
       const existing = await tx.application.findFirst({
         where: {
           jobId,
-          clientId: candidateId, // Note: This function should be deprecated in favor of bulkAssignJobToClients
+          clientId,
         },
       })
 
@@ -520,7 +562,7 @@ export async function bulkAssignJobToCandidates(
         const application = await tx.application.create({
           data: {
             jobId,
-            clientId: candidateId, // Note: This function should be deprecated in favor of bulkAssignJobToClients
+            clientId,
             recruiterId,
             stage: 'IDENTIFIED',
           },
@@ -528,7 +570,7 @@ export async function bulkAssignJobToCandidates(
         createdApplications.push(application)
       }
     }
-    
+
     return {
       count: createdApplications.length,
       applications: createdApplications,
@@ -569,7 +611,7 @@ export async function getDuplicateJobs(userId: string, userRole: UserRole) {
 
   // Group duplicates
   const duplicateGroups: Map<string, any[]> = new Map()
-  
+
   for (const job of duplicates) {
     const key = job.duplicateOf || job.id
     if (!duplicateGroups.has(key)) {
@@ -647,7 +689,7 @@ export async function exportJobsToCSV(
   filters?: JobFilters
 ): Promise<string> {
   const where: any = {}
-  
+
   if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
     where.recruiterId = userId
   }

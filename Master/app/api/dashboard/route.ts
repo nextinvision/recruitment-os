@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
@@ -66,17 +66,17 @@ export async function GET(request: NextRequest) {
       authContext.role
     )
 
-        // Get recent activities (last 10)
-        const recentActivitiesResult = await getActivities(
-          authContext.userId,
-          authContext.role,
-          {
-            endDate: new Date().toISOString(),
-          },
-          undefined,
-          { page: 1, pageSize: 10 }
-        )
-        const recentActivities = recentActivitiesResult.activities
+    // Get recent activities (last 10)
+    const recentActivitiesResult = await getActivities(
+      authContext.userId,
+      authContext.role,
+      {
+        endDate: new Date().toISOString(),
+      },
+      undefined,
+      { page: 1, pageSize: 10 }
+    )
+    const recentActivities = recentActivitiesResult.activities
 
     // Get recent jobs, clients, applications
     const [recentJobs, recentClients, recentApplications] = await Promise.all([

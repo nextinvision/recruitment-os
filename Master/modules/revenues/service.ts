@@ -21,8 +21,11 @@ export async function createRevenue(input: CreateRevenueInput) {
     data: {
       ...validated,
       amount: validated.amount.toString(),
+      subTotal: validated.subTotal ? validated.subTotal.toString() : null,
+      taxAmount: validated.taxAmount ? validated.taxAmount.toString() : null,
       leadId: validated.leadId || null,
       clientId: validated.clientId || null,
+      items: validated.items || [],
       dueDate: validated.dueDate ? new Date(validated.dueDate) : null,
     },
     include: {
@@ -93,25 +96,25 @@ export async function getRevenues(
   }
 ) {
   const where: any = {}
-  
+
   // Role-based filtering
   if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
     where.assignedUserId = userId
   }
-  
+
   // Additional filters
   if (filters?.leadId) {
     where.leadId = filters.leadId
   }
-  
+
   if (filters?.clientId) {
     where.clientId = filters.clientId
   }
-  
+
   if (filters?.status) {
     where.status = filters.status
   }
-  
+
   if (filters?.startDate || filters?.endDate) {
     where.createdAt = {}
     if (filters.startDate) {
@@ -162,15 +165,23 @@ export async function updateRevenue(input: UpdateRevenueInput) {
   const { id, ...data } = updateRevenueSchema.parse(input)
 
   const updateData: any = { ...data }
-  
+
   if (updateData.amount !== undefined) {
     updateData.amount = updateData.amount.toString()
   }
-  
+
+  if (updateData.subTotal !== undefined) {
+    updateData.subTotal = updateData.subTotal?.toString()
+  }
+
+  if (updateData.taxAmount !== undefined) {
+    updateData.taxAmount = updateData.taxAmount?.toString()
+  }
+
   if (updateData.dueDate) {
     updateData.dueDate = new Date(updateData.dueDate)
   }
-  
+
   if (updateData.paidDate) {
     updateData.paidDate = new Date(updateData.paidDate)
     // Auto-update status to PAID if paidDate is set
@@ -178,7 +189,7 @@ export async function updateRevenue(input: UpdateRevenueInput) {
       updateData.status = RevenueStatusValues.PAID
     }
   }
-  
+
   // Auto-update status based on payments
   if (updateData.status === 'PAID' && !updateData.paidDate) {
     updateData.paidDate = new Date()
@@ -252,6 +263,53 @@ export async function updateRevenueStatusFromPayments(revenueId: string) {
       status: newStatus,
       paidDate: newStatus === RevenueStatusValues.PAID ? new Date() : null,
     },
+  })
+}
+
+export async function getRevenueClientsSummary() {
+  const clients = await db.client.findMany({
+    where: {
+      revenues: {
+        some: {}
+      }
+    },
+    include: {
+      revenues: {
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          dueDate: true,
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      },
+      _count: {
+        select: {
+          revenues: true
+        }
+      }
+    }
+  })
+
+  return clients.map(client => {
+    const totalAmount = client.revenues.reduce((sum, r) => sum + parseFloat(r.amount.toString()), 0)
+    const pendingAmount = client.revenues
+      .filter(r => r.status === 'PENDING' || r.status === 'PARTIAL')
+      .reduce((sum, r) => sum + parseFloat(r.amount.toString()), 0) // Simplified logic: assuming status PENDING/PARTIAL means unpaid amount is full/partial
+
+    // Better logic for pending: total - paid
+    return {
+      id: client.id,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      email: client.email,
+      totalInvoices: client._count.revenues,
+      totalAmount,
+      invoiceStatuses: client.revenues.map(r => r.status),
+      latestInvoice: client.revenues[0] || null,
+    }
   })
 }
 

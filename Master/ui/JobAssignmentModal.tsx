@@ -3,11 +3,11 @@
 import React, { useState, useEffect } from 'react'
 import { Modal, Select, Alert, Button } from './index'
 
-interface Candidate {
+interface Client {
   id: string
   firstName: string
   lastName: string
-  email: string
+  email?: string | null
 }
 
 interface JobAssignmentModalProps {
@@ -25,31 +25,31 @@ export function JobAssignmentModal({
   jobTitle,
   onSuccess,
 }: JobAssignmentModalProps) {
-  const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('')
-  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [selectedClientId, setSelectedClientId] = useState<string>('')
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   const [isBulkMode, setIsBulkMode] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [loadingCandidates, setLoadingCandidates] = useState(true)
+  const [loadingClients, setLoadingClients] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (isOpen) {
-      loadCandidates()
+      loadClients()
     } else {
       // Reset state when modal closes
-      setSelectedCandidateId('')
-      setSelectedCandidateIds([])
+      setSelectedClientId('')
+      setSelectedClientIds([])
       setIsBulkMode(false)
       setError('')
     }
   }, [isOpen])
 
-  const loadCandidates = async () => {
+  const loadClients = async () => {
     try {
-      setLoadingCandidates(true)
+      setLoadingClients(true)
       const token = localStorage.getItem('token')
-      const response = await fetch('/api/candidates', {
+      const response = await fetch('/api/clients?pageSize=500', {
         headers: {
           ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json',
@@ -59,12 +59,12 @@ export function JobAssignmentModal({
 
       if (response.ok) {
         const data = await response.json()
-        setCandidates(data)
+        setClients(data.clients || data || [])
       }
     } catch (err) {
-      console.error('Failed to load candidates:', err)
+      console.error('Failed to load clients:', err)
     } finally {
-      setLoadingCandidates(false)
+      setLoadingClients(false)
     }
   }
 
@@ -77,8 +77,8 @@ export function JobAssignmentModal({
       const token = localStorage.getItem('token')
       
       if (isBulkMode) {
-        if (selectedCandidateIds.length === 0) {
-          setError('Please select at least one candidate')
+        if (selectedClientIds.length === 0) {
+          setError('Please select at least one client')
           setLoading(false)
           return
         }
@@ -92,7 +92,7 @@ export function JobAssignmentModal({
           credentials: 'include',
           body: JSON.stringify({
             jobId,
-            candidateIds: selectedCandidateIds,
+            candidateIds: selectedClientIds,
           }),
         })
 
@@ -104,8 +104,8 @@ export function JobAssignmentModal({
           setError(data.error || 'Failed to assign job')
         }
       } else {
-        if (!selectedCandidateId) {
-          setError('Please select a candidate')
+        if (!selectedClientId) {
+          setError('Please select a client')
           setLoading(false)
           return
         }
@@ -119,7 +119,7 @@ export function JobAssignmentModal({
           credentials: 'include',
           body: JSON.stringify({
             jobId,
-            candidateId: selectedCandidateId,
+            candidateId: selectedClientId,
           }),
         })
 
@@ -138,16 +138,16 @@ export function JobAssignmentModal({
     }
   }
 
-  const toggleCandidateSelection = (candidateId: string) => {
-    if (selectedCandidateIds.includes(candidateId)) {
-      setSelectedCandidateIds(selectedCandidateIds.filter(id => id !== candidateId))
+  const toggleClientSelection = (clientId: string) => {
+    if (selectedClientIds.includes(clientId)) {
+      setSelectedClientIds(selectedClientIds.filter(id => id !== clientId))
     } else {
-      setSelectedCandidateIds([...selectedCandidateIds, candidateId])
+      setSelectedClientIds([...selectedClientIds, clientId])
     }
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Assign Job to Candidate(s)" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Assign Job to Client(s)" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <Alert variant="error">{error}</Alert>}
 
@@ -178,33 +178,33 @@ export function JobAssignmentModal({
           </label>
         </div>
 
-        {loadingCandidates ? (
+        {loadingClients ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F4B400] border-t-[#1F3A5F] mx-auto"></div>
-            <p className="mt-2 text-sm text-[#64748B]">Loading candidates...</p>
+            <p className="mt-2 text-sm text-[#64748B]">Loading clients...</p>
           </div>
         ) : isBulkMode ? (
           <div className="max-h-64 overflow-y-auto border border-[#E5E7EB] rounded-lg p-4">
-            {candidates.length === 0 ? (
-              <p className="text-sm text-[#64748B] text-center py-4">No candidates available</p>
+            {clients.length === 0 ? (
+              <p className="text-sm text-[#64748B] text-center py-4">No clients available. Add clients in the Clients section first.</p>
             ) : (
               <div className="space-y-2">
-                {candidates.map((candidate) => (
+                {clients.map((client) => (
                   <label
-                    key={candidate.id}
+                    key={client.id}
                     className="flex items-center p-2 hover:bg-[rgba(244,180,0,0.05)] rounded cursor-pointer"
                   >
                     <input
                       type="checkbox"
-                      checked={selectedCandidateIds.includes(candidate.id)}
-                      onChange={() => toggleCandidateSelection(candidate.id)}
+                      checked={selectedClientIds.includes(client.id)}
+                      onChange={() => toggleClientSelection(client.id)}
                       className="h-4 w-4 text-[#1F3A5F] border-[#E5E7EB] rounded focus:ring-[#F4B400]"
                     />
                     <div className="ml-3">
                       <div className="text-sm font-medium text-[#0F172A]">
-                        {candidate.firstName} {candidate.lastName}
+                        {client.firstName} {client.lastName}
                       </div>
-                      <div className="text-xs text-[#64748B]">{candidate.email}</div>
+                      <div className="text-xs text-[#64748B]">{client.email || 'No email'}</div>
                     </div>
                   </label>
                 ))}
@@ -213,23 +213,23 @@ export function JobAssignmentModal({
           </div>
         ) : (
           <Select
-            label="Select Candidate"
-            value={selectedCandidateId}
-            onChange={(e) => setSelectedCandidateId(e.target.value)}
+            label="Select Client"
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
             options={[
-              { value: '', label: 'Choose a candidate...' },
-              ...candidates.map(c => ({
+              { value: '', label: 'Choose a client...' },
+              ...clients.map(c => ({
                 value: c.id,
-                label: `${c.firstName} ${c.lastName} (${c.email})`,
+                label: `${c.firstName} ${c.lastName}${c.email ? ` (${c.email})` : ''}`,
               })),
             ]}
             required
           />
         )}
 
-        {isBulkMode && selectedCandidateIds.length > 0 && (
+        {isBulkMode && selectedClientIds.length > 0 && (
           <div className="text-sm text-[#64748B]">
-            {selectedCandidateIds.length} candidate(s) selected
+            {selectedClientIds.length} client(s) selected
           </div>
         )}
 
@@ -244,7 +244,7 @@ export function JobAssignmentModal({
           </Button>
           <Button
             type="submit"
-            disabled={loading || (isBulkMode ? selectedCandidateIds.length === 0 : !selectedCandidateId)}
+            disabled={loading || (isBulkMode ? selectedClientIds.length === 0 : !selectedClientId)}
           >
             {loading ? 'Assigning...' : 'Assign Job'}
           </Button>

@@ -3,11 +3,13 @@
  * Use this in your tests to mock Chrome extension APIs
  */
 
+import { vi } from 'vitest'
+
 export const chromeMock = {
   storage: {
     local: {
       data: {} as Record<string, any>,
-      get: jest.fn((keys: string | string[] | null, callback: (result: any) => void) => {
+      get: vi.fn((keys: string | string[] | null, callback: (result: any) => void) => {
         const result: any = {}
         if (keys === null) {
           Object.assign(result, chromeMock.storage.local.data)
@@ -20,11 +22,11 @@ export const chromeMock = {
         }
         callback(result)
       }),
-      set: jest.fn((data: Record<string, any>, callback?: () => void) => {
+      set: vi.fn((data: Record<string, any>, callback?: () => void) => {
         Object.assign(chromeMock.storage.local.data, data)
         if (callback) callback()
       }),
-      remove: jest.fn((keys: string | string[], callback?: () => void) => {
+      remove: vi.fn((keys: string | string[], callback?: () => void) => {
         if (Array.isArray(keys)) {
           keys.forEach(key => delete chromeMock.storage.local.data[key])
         } else {
@@ -35,7 +37,7 @@ export const chromeMock = {
     }
   },
   runtime: {
-    sendMessage: jest.fn((message: any, callback?: (response: any) => void) => {
+    sendMessage: vi.fn((message: any, callback?: (response: any) => void) => {
       // Mock message handling
       if (callback) {
         setTimeout(() => {
@@ -44,8 +46,8 @@ export const chromeMock = {
       }
     }),
     onMessage: {
-      addListener: jest.fn(),
-      removeListener: jest.fn()
+      addListener: vi.fn(),
+      removeListener: vi.fn()
     }
   }
 }
