@@ -13,6 +13,10 @@ import {
 
 export async function createClient(input: CreateClientInput) {
   const validated = createClientSchema.parse(input)
+  const assignedUserId = validated.assignedUserId
+  if (!assignedUserId || assignedUserId.length < 1) {
+    throw new Error('Assigned user ID is required')
+  }
 
   const client = await db.client.create({
     data: {
@@ -21,7 +25,7 @@ export async function createClient(input: CreateClientInput) {
       email: validated.email || null,
       phone: validated.phone || null,
       address: validated.address || null,
-      assignedUserId: validated.assignedUserId,
+      assignedUserId,
       leadId: validated.leadId || null,
       industry: validated.industry || null,
       currentJobTitle: validated.currentJobTitle || null,

@@ -6,12 +6,15 @@ import { PageHeader, Button, Spinner, Alert } from '@/ui'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** Education item: API normalizes to string; legacy or alternate responses may be objects. */
+type EducationItem = string | { institution?: string; degree?: string; specialization?: string }
+
 interface ParsedResume {
   name?: string
   skills: string[]
   experience_years: number
   summary?: string
-  education?: string[]
+  education?: EducationItem[]
   contact?: Record<string, string>
   raw_text?: string
   ats_score?: number
@@ -20,6 +23,13 @@ interface ParsedResume {
   impact_score?: number
   formatting_issues?: string[]
   actionable_recommendations?: string[]
+}
+
+/** Render-safe string for one education entry (avoids React error #31: objects as children). */
+function educationLabel(edu: EducationItem): string {
+  if (typeof edu === 'string') return edu
+  const parts = [edu.degree, edu.specialization, edu.institution].filter(Boolean)
+  return parts.join(' — ') || 'Education'
 }
 
 interface JobMatch {
@@ -313,7 +323,7 @@ export default function ATSResumeAnalysisPage() {
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Education</span>
                       <ul className="mt-1 space-y-0.5">
                         {resumeData.education.map((edu, i) => (
-                          <li key={i} className="text-sm text-gray-800">{edu}</li>
+                          <li key={i} className="text-sm text-gray-800">{educationLabel(edu)}</li>
                         ))}
                       </ul>
                     </div>

@@ -21,7 +21,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     console.log('[App] Component mounted, initializing...')
     let isMounted = true
-    
+
     // Safety timeout - always show login after 2 seconds max
     const safetyTimeout = setTimeout(() => {
       console.warn('[App] Safety timeout reached, forcing login state')
@@ -32,7 +32,7 @@ export const App: React.FC = () => {
 
     // Test API connection on mount
     testApiConnection()
-    
+
     // Ensure chrome.runtime is available
     if (typeof chrome === 'undefined' || !chrome.runtime) {
       console.error('[App] Chrome runtime not available')
@@ -51,19 +51,19 @@ export const App: React.FC = () => {
         console.error('[App] Auth check error:', err)
         setState('login')
       }
-      
+
       try {
         await loadStagingJobs()
       } catch (err) {
         console.error('[App] Load staging jobs error:', err)
       }
-      
+
       clearTimeout(safetyTimeout)
     }
-    
+
     init()
     listenForCapturedJobs()
-    
+
     return () => {
       isMounted = false
       clearTimeout(safetyTimeout)
@@ -90,14 +90,14 @@ export const App: React.FC = () => {
 
   const checkAuth = async () => {
     console.log('[checkAuth] Starting authentication check...')
-    
+
     // Try service worker first with very short timeout
     let serviceWorkerWorked = false
     try {
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Service worker timeout')), 300)
       )
-      
+
       const messagePromise = new Promise((resolve, reject) => {
         try {
           chrome.runtime.sendMessage({ type: 'CHECK_AUTH' }, (response) => {
@@ -111,11 +111,11 @@ export const App: React.FC = () => {
           reject(err)
         }
       })
-      
+
       const response = await Promise.race([messagePromise, timeoutPromise]) as any
       serviceWorkerWorked = true
       console.log('[checkAuth] Service worker responded:', response)
-      
+
       if (response?.success && response.data?.authenticated) {
         console.log('[checkAuth] User authenticated via service worker')
         setUser(response.data.user)
@@ -125,13 +125,13 @@ export const App: React.FC = () => {
     } catch (err) {
       console.warn('[checkAuth] Service worker check failed:', err)
     }
-    
+
     // Fallback: check storage directly (ALWAYS runs)
     console.log('[checkAuth] Using direct storage fallback...')
     try {
       const result = await chrome.storage.local.get([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER])
       console.log('[checkAuth] Storage result:', { hasToken: !!result[STORAGE_KEYS.TOKEN], hasUser: !!result[STORAGE_KEYS.USER] })
-      
+
       if (result[STORAGE_KEYS.TOKEN] && result[STORAGE_KEYS.USER]) {
         console.log('[checkAuth] User authenticated via storage')
         setUser(result[STORAGE_KEYS.USER])
@@ -148,10 +148,10 @@ export const App: React.FC = () => {
 
   const loadStagingJobs = async () => {
     try {
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Timeout')), 300)
       )
-      
+
       const messagePromise = new Promise((resolve, reject) => {
         try {
           chrome.runtime.sendMessage({ type: 'GET_STAGING_JOBS' }, (response) => {
@@ -165,9 +165,9 @@ export const App: React.FC = () => {
           reject(err)
         }
       })
-      
+
       const response = await Promise.race([messagePromise, timeoutPromise]) as any
-      
+
       if (response?.success && response.data) {
         setStagingJobs(response.data)
         return
@@ -175,7 +175,7 @@ export const App: React.FC = () => {
     } catch (err) {
       console.warn('[loadStagingJobs] Service worker failed, using direct storage:', err)
     }
-    
+
     // Fallback: load directly from storage
     try {
       const result = await chrome.storage.local.get([STORAGE_KEYS.STAGING_JOBS])
@@ -192,12 +192,12 @@ export const App: React.FC = () => {
       if (message.type === 'JOBS_CAPTURED') {
         const newJobs = message.jobs || []
         console.log('[App] Received JOBS_CAPTURED message:', newJobs.length, 'jobs')
-        
+
         // Reload staging jobs from storage to get the latest (service worker saved them)
         loadStagingJobs().then(() => {
           console.log('[App] Staging jobs refreshed after capture')
         })
-        
+
         // Also update state immediately if we have the jobs
         if (newJobs.length > 0) {
           setStagingJobs(prev => {
@@ -215,9 +215,9 @@ export const App: React.FC = () => {
       }
       return true // Keep channel open for async response
     }
-    
+
     chrome.runtime.onMessage.addListener(messageListener)
-    
+
     // Return cleanup function
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener)
@@ -227,10 +227,10 @@ export const App: React.FC = () => {
   const saveStagingJobs = async (jobs: ScrapedJob[]) => {
     try {
       // Try service worker first
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Timeout')), 1000)
       )
-      
+
       const messagePromise = new Promise((resolve, reject) => {
         try {
           chrome.runtime.sendMessage(
@@ -273,10 +273,10 @@ export const App: React.FC = () => {
       let serviceWorkerWorked = false
 
       try {
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Service worker timeout')), 2000)
         )
-        
+
         const messagePromise = new Promise<LoginResponse>((resolve, reject) => {
           try {
             chrome.runtime.sendMessage(
@@ -308,7 +308,7 @@ export const App: React.FC = () => {
         console.log('[handleLogin] Using direct API call as fallback')
         const loginResponse = await fetch(`${getBackendUrl()}/api/auth/login`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Client-Type': 'extension',
           },
@@ -318,7 +318,7 @@ export const App: React.FC = () => {
         if (loginResponse.ok) {
           loginResult = await loginResponse.json()
           console.log('[handleLogin] Direct API login successful')
-          
+
           // Store token and user data (service worker should have done this, but ensure it's done)
           if (loginResult) {
             await chrome.storage.local.set({
@@ -329,14 +329,14 @@ export const App: React.FC = () => {
         } else {
           const errorData = await loginResponse.json().catch(() => ({}))
           console.error('[handleLogin] Login failed:', errorData)
-          
+
           // Extract user-friendly error message
           let errorMsg = 'Login failed'
           if (errorData.error) {
             // If error is a string, use it directly
             if (typeof errorData.error === 'string') {
               errorMsg = errorData.error
-            } 
+            }
             // If error is an array (Zod validation errors), format it
             else if (Array.isArray(errorData.error)) {
               errorMsg = errorData.error
@@ -357,7 +357,7 @@ export const App: React.FC = () => {
           } else {
             errorMsg = `Login failed: ${loginResponse.statusText}`
           }
-          
+
           setError(errorMsg)
           return
         }
@@ -367,18 +367,18 @@ export const App: React.FC = () => {
       if (!loginResult) {
         throw new Error('Login failed: No response received')
       }
-      
+
       if (!loginResult.user || !loginResult.token) {
         throw new Error('Invalid login response: Missing user or token')
       }
-      
+
       setUser(loginResult.user)
       setState('dashboard')
       console.log('[handleLogin] Login complete, user:', loginResult.user.email)
     } catch (err) {
       console.error('[handleLogin] Login exception:', err)
       const errorMsg = err instanceof Error ? err.message : 'Login failed'
-      
+
       if (errorMsg.includes('fetch') || errorMsg.includes('Failed to fetch')) {
         setError(`Cannot connect to backend. Is the server running at ${getBackendUrl()}?`)
       } else {
@@ -395,10 +395,10 @@ export const App: React.FC = () => {
       // Try service worker first
       let serviceWorkerWorked = false
       try {
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Service worker timeout')), 1000)
         )
-        
+
         const messagePromise = new Promise((resolve, reject) => {
           try {
             chrome.runtime.sendMessage({ type: 'LOGOUT' }, (response) => {
@@ -468,10 +468,10 @@ export const App: React.FC = () => {
         source: job.source.toUpperCase() as 'LINKEDIN' | 'INDEED' | 'NAUKRI' | 'OTHER',
       }))
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Submission timeout')), 30000)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Submission timeout')), 300000)
       )
-      
+
       const messagePromise = new Promise((resolve, reject) => {
         try {
           chrome.runtime.sendMessage(

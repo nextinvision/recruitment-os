@@ -1,29 +1,47 @@
 import { z } from 'zod'
 import { ServiceType } from '@prisma/client'
 
+// Normalize email: accept any string from leads/forms; store only valid email or undefined (avoids 400 on convert)
+const emailSchema = z
+  .union([z.string(), z.literal(''), z.null(), z.undefined()])
+  .optional()
+  .transform((val) => {
+    if (val == null || typeof val !== 'string') return undefined
+    const trimmed = val.trim()
+    if (!trimmed) return undefined
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(trimmed) ? trimmed : undefined
+  })
+
+// Optional string from API/leads: manual and Tydical-synced leads often send null for missing fields; accept null and normalize to undefined
+const optionalString = z
+  .union([z.string(), z.literal(''), z.null(), z.undefined()])
+  .optional()
+  .transform((v) => (v == null || (typeof v === 'string' && v.trim() === '') ? undefined : v))
+
 export const createClientSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Invalid email address').optional().or(z.literal('')),
-  phone: z.string().optional(),
-  assignedUserId: z.string().min(1, 'Assigned user ID is required'),
-  address: z.string().optional(),
-  industry: z.string().optional(), // Industry they want to work in
-  currentJobTitle: z.string().optional(), // Current job title
-  experience: z.string().optional(), // Years of experience
-  skills: z.array(z.string()).optional(), // Skills/interests
-  notes: z.string().optional(),
+  email: emailSchema,
+  phone: optionalString,
+  assignedUserId: z.string().min(1, 'Assigned user ID is required').optional(),
+  address: optionalString,
+  industry: optionalString, // Industry they want to work in (manual + Tydical leads)
+  currentJobTitle: optionalString,
+  experience: optionalString,
+  skills: z.array(z.string()).optional(),
+  notes: optionalString,
   leadId: z.string().optional(), // For conversion from lead
-  
+
   // Preparation Pipeline Fields
   serviceType: z.nativeEnum(ServiceType).optional(),
   onboardedDate: z.string().datetime().optional(),
-  reverseRecruiterId: z.string().optional(),
+  reverseRecruiterId: optionalString,
   whatsappGroupCreated: z.boolean().optional(),
-  whatsappGroupId: z.string().optional(),
+  whatsappGroupId: optionalString,
   whatsappGroupCreatedAt: z.string().datetime().optional(),
-  jobSearchStrategyDocId: z.string().optional(),
-  gmailId: z.string().optional(),
+  jobSearchStrategyDocId: optionalString,
+  gmailId: optionalString,
   gmailCreated: z.boolean().optional(),
   gmailCreatedAt: z.string().datetime().optional(),
   linkedInOptimized: z.boolean().optional(),
@@ -65,8 +83,9 @@ export const clientPaginationSchema = z.object({
   pageSize: z.number().int().min(1).max(500).default(25),
 })
 
-export type CreateClientInput = z.infer<typeof createClientSchema>
-export type UpdateClientInput = z.infer<typeof updateClientSchema>
+// Input type: what callers pass to parse() / createClient() (partial objects allowed; onboarding/API don't send every key)
+export type CreateClientInput = z.input<typeof createClientSchema>
+export type UpdateClientInput = z.input<typeof updateClientSchema>
 export type ClientFilters = z.infer<typeof clientFilterSchema>
 export type ClientSortOptions = z.infer<typeof clientSortSchema>
 export type ClientPaginationOptions = z.infer<typeof clientPaginationSchema>

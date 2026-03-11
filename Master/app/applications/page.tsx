@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { PipelineBoard, Modal, ApplicationFilters, Pagination, Button, Spinner, PageHeader, ApplicationActionForm, ToastContainer, useToast, ConfirmDialog, useConfirmDialog, Input } from '@/ui'
+import { PipelineBoard, Modal, ApplicationFilters, Pagination, Button, Spinner, PageHeader, ApplicationActionForm, useToast, ConfirmDialog, useConfirmDialog, Input } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import type { ApplicationFilters as ApplicationFiltersType } from '@/ui'
 import { ApplicationStage } from '@prisma/client'
@@ -42,6 +42,7 @@ interface ApplicationsResponse {
 }
 
 const STAGES = [
+  ApplicationStage.PENDING_CLIENT_APPROVAL,
   ApplicationStage.IDENTIFIED,
   ApplicationStage.RESUME_UPDATED,
   ApplicationStage.COLD_MESSAGE_SENT,
@@ -54,6 +55,7 @@ const STAGES = [
 ]
 
 const STAGE_LABELS: Record<string, string> = {
+  PENDING_CLIENT_APPROVAL: 'Pending Approval',
   IDENTIFIED: 'Identified',
   RESUME_UPDATED: 'Resume Updated',
   COLD_MESSAGE_SENT: 'Cold Message Sent',
@@ -90,7 +92,7 @@ export default function ApplicationsPage() {
     }
     loadRecruiters()
     loadApplications()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, sortBy, sortOrder, filters, viewMode])
 
   const loadRecruiters = async () => {
@@ -238,21 +240,19 @@ export default function ApplicationsPage() {
               <div className="flex items-center gap-2 border border-[#E5E7EB] rounded-lg p-1">
                 <button
                   onClick={() => setViewMode('pipeline')}
-                  className={`px-3 py-1 text-sm rounded transition-colors ${
-                    viewMode === 'pipeline'
-                      ? 'bg-[#1F3A5F] text-white'
-                      : 'text-[#64748B] hover:text-[#0F172A]'
-                  }`}
+                  className={`px-3 py-1 text-sm rounded transition-colors ${viewMode === 'pipeline'
+                    ? 'bg-[#1F3A5F] text-white'
+                    : 'text-[#64748B] hover:text-[#0F172A]'
+                    }`}
                 >
                   Pipeline
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1 text-sm rounded transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-[#1F3A5F] text-white'
-                      : 'text-[#64748B] hover:text-[#0F172A]'
-                  }`}
+                  className={`px-3 py-1 text-sm rounded transition-colors ${viewMode === 'list'
+                    ? 'bg-[#1F3A5F] text-white'
+                    : 'text-[#64748B] hover:text-[#0F172A]'
+                    }`}
                 >
                   List
                 </button>
@@ -304,11 +304,10 @@ export default function ApplicationsPage() {
                       </div>
                     )}
                     {app.followUpDate && (
-                      <div className={`text-xs mt-1 font-medium ${
-                        new Date(app.followUpDate) < new Date()
-                          ? 'text-red-600'
-                          : 'text-blue-600'
-                      }`}>
+                      <div className={`text-xs mt-1 font-medium ${new Date(app.followUpDate) < new Date()
+                        ? 'text-red-600'
+                        : 'text-blue-600'
+                        }`}>
                         Follow-up: {new Date(app.followUpDate).toLocaleDateString()}
                         {new Date(app.followUpDate) < new Date() && ' (Overdue)'}
                       </div>
@@ -364,11 +363,10 @@ export default function ApplicationsPage() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               {app.followUpDate ? (
-                                <span className={`text-xs font-medium ${
-                                  new Date(app.followUpDate) < new Date()
-                                    ? 'text-red-600'
-                                    : 'text-blue-600'
-                                }`}>
+                                <span className={`text-xs font-medium ${new Date(app.followUpDate) < new Date()
+                                  ? 'text-red-600'
+                                  : 'text-blue-600'
+                                  }`}>
                                   {new Date(app.followUpDate).toLocaleDateString()}
                                   {new Date(app.followUpDate) < new Date() && ' (Overdue)'}
                                 </span>
@@ -597,102 +595,102 @@ function ApplicationDetails({
         cancelText={dialogState.cancelText}
       />
       <div className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Client</label>
-        <div className="text-sm text-gray-900">
-          {application.client ? `${application.client.firstName} ${application.client.lastName}` : '—'}
-        </div>
-        <div className="text-xs text-gray-700">{application.client?.email || '-'}</div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Job</label>
-        <div className="text-sm text-gray-900">{application.job?.title ?? '—'}</div>
-        <div className="text-xs text-gray-700">{application.job?.company ?? '—'}</div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Stage</label>
-        <select
-          value={stage}
-          onChange={(e) => setStage(e.target.value)}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        >
-          {STAGES.map((s) => (
-            <option key={s} value={s}>
-              {STAGE_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Follow-up Date</label>
-        <input
-          type="date"
-          value={followUpDate}
-          onChange={(e) => setFollowUpDate(e.target.value)}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">Notes</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={4}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Internal notes..."
-        />
-      </div>
-
-      {timeline.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">Action Timeline</label>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {timeline.map((action) => (
-              <div key={action.id} className="border border-gray-200 rounded p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{action.type}</div>
-                    {action.description && (
-                      <div className="text-xs text-gray-700 mt-1">{action.description}</div>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(action.performedAt).toLocaleString()}
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  by {action.performedBy ? `${action.performedBy.firstName} ${action.performedBy.lastName}` : '—'}
-                </div>
-              </div>
-            ))}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex justify-between items-center pt-4 border-t">
-        <div className="flex gap-3">
-          <Button onClick={onLogAction} variant="secondary">
-            Log Action
-          </Button>
-          <Button variant="danger" onClick={handleDeleteClick}>
-            Delete
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Client</label>
+          <div className="text-sm text-gray-900">
+            {application.client ? `${application.client.firstName} ${application.client.lastName}` : '—'}
+          </div>
+          <div className="text-xs text-gray-700">{application.client?.email || '-'}</div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Job</label>
+          <div className="text-sm text-gray-900">{application.job?.title ?? '—'}</div>
+          <div className="text-xs text-gray-700">{application.job?.company ?? '—'}</div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Stage</label>
+          <select
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          >
+            {STAGES.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Follow-up Date</label>
+          <input
+            type="date"
+            value={followUpDate}
+            onChange={(e) => setFollowUpDate(e.target.value)}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">Notes</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={4}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Internal notes..."
+          />
+        </div>
+
+        {timeline.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Action Timeline</label>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {timeline.map((action) => (
+                <div key={action.id} className="border border-gray-200 rounded p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{action.type}</div>
+                      {action.description && (
+                        <div className="text-xs text-gray-700 mt-1">{action.description}</div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(action.performedAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    by {action.performedBy ? `${action.performedBy.firstName} ${action.performedBy.lastName}` : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center pt-4 border-t">
+          <div className="flex gap-3">
+            <Button onClick={onLogAction} variant="secondary">
+              Log Action
+            </Button>
+            <Button variant="danger" onClick={handleDeleteClick}>
+              Delete
+            </Button>
+          </div>
+          <Button onClick={handleUpdate} disabled={loading}>
+            {loading ? 'Updating...' : 'Update'}
           </Button>
         </div>
-        <Button onClick={handleUpdate} disabled={loading}>
-          {loading ? 'Updating...' : 'Update'}
-        </Button>
       </div>
-    </div>
     </>
   )
 }
@@ -731,7 +729,7 @@ function ApplicationForm({ onSuccess, onCancel }: { onSuccess: () => void; onCan
       .then((data) => {
         if (data) setClients(data.clients || data)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   const fetchJobs = useCallback(async (search: string) => {

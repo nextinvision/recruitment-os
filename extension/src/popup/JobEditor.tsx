@@ -111,6 +111,24 @@ export const JobEditor: React.FC<JobEditorProps> = ({ job, onSave, onCancel }) =
         />
       </div>
 
+      <div style={{ marginBottom: '12px' }}>
+        <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: 500 }}>
+          Source URL
+        </label>
+        <input
+          type="text"
+          value={editedJob.sourceUrl || ''}
+          onChange={(e) => handleChange('sourceUrl', e.target.value)}
+          style={{
+            width: '100%',
+            padding: '8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '13px'
+          }}
+        />
+      </div>
+
       {errors.length > 0 && (
         <div style={{
           padding: '8px',

@@ -4,7 +4,7 @@ import type { ResumeDocument } from './types'
 
 export async function createResumeDraft(
   userId: string,
-  input: { content: ResumeDocument; clientId?: string; template?: string }
+  input: { content: ResumeDocument; clientId?: string; template?: string; atsScore?: number; atsAnalysis?: any }
 ) {
   const validated = createResumeDraftSchema.parse(input)
   return db.resumeDraft.create({
@@ -13,6 +13,8 @@ export async function createResumeDraft(
       clientId: validated.clientId ?? null,
       content: validated.content as object,
       template: validated.template ?? 'professional',
+      atsScore: validated.atsScore ?? null,
+      atsAnalysis: validated.atsAnalysis ?? null,
     },
   })
 }
@@ -20,7 +22,7 @@ export async function createResumeDraft(
 export async function updateResumeDraft(
   id: string,
   userId: string,
-  input: Partial<{ content: ResumeDocument; template: string; clientId: string | null }>
+  input: Partial<{ content: ResumeDocument; template: string; clientId: string | null; atsScore: number; atsAnalysis: any }>
 ) {
   const validated = updateResumeDraftSchema.parse(input)
   await db.resumeDraft.findFirstOrThrow({
@@ -32,6 +34,8 @@ export async function updateResumeDraft(
       ...(validated.content && { content: validated.content as object }),
       ...(validated.template && { template: validated.template }),
       ...('clientId' in validated && { clientId: validated.clientId }),
+      ...('atsScore' in validated && { atsScore: validated.atsScore }),
+      ...('atsAnalysis' in validated && { atsAnalysis: validated.atsAnalysis }),
     },
   })
 }

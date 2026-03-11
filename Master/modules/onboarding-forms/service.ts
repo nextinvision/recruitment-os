@@ -71,12 +71,28 @@ export async function submitOnboardingForm(formId: string, input: SubmitOnboardi
   const form = await db.onboardingForm.findUnique({ where: { id: formId } })
   if (!form) throw new Error('Form not found')
   const validated = submitOnboardingFormSchema.parse(input)
-  return db.onboardingFormSubmission.create({
+
+  const submission = await db.onboardingFormSubmission.create({
     data: {
       formId,
       data: validated.data as object,
+      leadId: validated.leadId || null,
     },
   })
+
+  // If submitted by a lead, update lead status
+  if (validated.leadId) {
+    try {
+      await db.lead.update({
+        where: { id: validated.leadId },
+        data: { status: 'RESPONSE_RECEIVED' },
+      })
+    } catch (err) {
+      console.error('Failed to update lead status after submission:', err)
+    }
+  }
+
+  return submission
 }
 
 export async function getSubmissionsByFormId(formId: string, userId: string, userRole: UserRole) {
@@ -97,6 +113,7 @@ export async function getAllSubmissions(userId: string, userRole: UserRole) {
     include: {
       form: { select: { id: true, title: true } },
       client: { select: { id: true, firstName: true, lastName: true } },
+      lead: { select: { id: true, firstName: true, lastName: true } },
     },
     orderBy: { submittedAt: 'desc' },
   })
@@ -108,6 +125,7 @@ export async function getSubmissionById(submissionId: string) {
     include: {
       form: true,
       client: true,
+      lead: true,
     },
   })
 }
@@ -165,15 +183,29 @@ export async function createClientFromSubmission(
       data.education && `Education: ${JSON.stringify(data.education)}`,
     ].filter(Boolean).join('\n') || undefined,
     assignedUserId,
+    leadId: submission.leadId || undefined,
   }
 
   const validated = createClientSchema.parse(clientInput)
   const client = await createClient(validated)
 
+  // Update submission
   await db.onboardingFormSubmission.update({
     where: { id: submissionId },
     data: { clientId: client.id },
   })
+
+  // If converted from lead, update lead status to QUALIFIED
+  if (submission.leadId) {
+    try {
+      await db.lead.update({
+        where: { id: submission.leadId },
+        data: { status: 'QUALIFIED' },
+      })
+    } catch (err) {
+      console.error('Failed to update lead status to QUALIFIED:', err)
+    }
+  }
 
   return client
 }

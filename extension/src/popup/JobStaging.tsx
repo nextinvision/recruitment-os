@@ -149,6 +149,11 @@ export const JobStaging: React.FC<JobStagingProps> = ({
                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
                         {job.location || '(No location)'}
                       </div>
+                      {job.sourceUrl && (
+                        <div style={{ fontSize: '11px', color: '#0073b1', marginBottom: '4px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                          Source: {job.sourceUrl}
+                        </div>
+                      )}
                       {job.description && (
                         <div style={{
                           fontSize: '11px',

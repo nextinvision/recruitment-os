@@ -13,6 +13,7 @@ import { ActivityTimeline } from '@/ui/ActivityTimeline'
 import { RecruiterComparisonWidget } from '@/ui/RecruiterComparisonWidget'
 import { PlatformAnalyticsWidget } from '@/ui/PlatformAnalyticsWidget'
 import { FunnelChartWidget } from '@/ui/FunnelChartWidget'
+import { AccessControl } from '@/components/AccessControl'
 
 interface DashboardData {
   stats: {
@@ -61,7 +62,7 @@ export default function DashboardPage() {
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       }
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
@@ -157,8 +158,6 @@ export default function DashboardPage() {
     )
   }
 
-  const isAdmin = user?.role === 'ADMIN'
-  const isManager = user?.role === 'MANAGER'
 
   return (
     <DashboardLayout>
@@ -193,48 +192,107 @@ export default function DashboardPage() {
           </button>
         </div>
 
+        {/* Quick Actions */}
+        <div className="bg-white shadow-md rounded-xl p-6 border border-[#E5E7EB] mb-8">
+          <h3 className="text-lg font-semibold text-[#0F172A] mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <AccessControl path="/jobs">
+              <Link
+                href="/jobs"
+                className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
+              >
+                <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span className="text-sm font-medium text-[#0F172A]">Add Job</span>
+              </Link>
+            </AccessControl>
+            <AccessControl path="/clients">
+              <Link
+                href="/clients"
+                className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
+              >
+                <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span className="text-sm font-medium text-[#0F172A]">Add Client</span>
+              </Link>
+            </AccessControl>
+            <AccessControl path="/applications">
+              <Link
+                href="/applications"
+                className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
+              >
+                <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="text-sm font-medium text-[#0F172A]">View Pipeline</span>
+              </Link>
+            </AccessControl>
+            <AccessControl path="/reports">
+              <Link
+                href="/reports"
+                className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
+              >
+                <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="text-sm font-medium text-[#0F172A]">View Reports</span>
+              </Link>
+            </AccessControl>
+          </div>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <StatsCard
-            title="Jobs Scraped"
-            value={dashboardData.stats.jobsScraped}
-            color="blue"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            }
-          />
-          <StatsCard
-            title="Clients"
-            value={dashboardData.stats.clientsManaged}
-            color="green"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            }
-          />
-          <StatsCard
-            title="Applications"
-            value={dashboardData.stats.applicationsCreated}
-            color="purple"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            }
-          />
-          <StatsCard
-            title="Active Pipeline"
-            value={dashboardData.stats.activeApplications}
-            color="orange"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
-          />
+          <AccessControl path="/jobs">
+            <StatsCard
+              title="Jobs Scraped"
+              value={dashboardData.stats.jobsScraped}
+              color="blue"
+              icon={
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              }
+            />
+          </AccessControl>
+          <AccessControl path="/clients">
+            <StatsCard
+              title="Clients"
+              value={dashboardData.stats.clientsManaged}
+              color="green"
+              icon={
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              }
+            />
+          </AccessControl>
+          <AccessControl path="/applications">
+            <StatsCard
+              title="Applications"
+              value={dashboardData.stats.applicationsCreated}
+              color="purple"
+              icon={
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              }
+            />
+          </AccessControl>
+          <AccessControl path="/applications">
+            <StatsCard
+              title="Active Pipeline"
+              value={dashboardData.stats.activeApplications}
+              color="orange"
+              icon={
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              }
+            />
+          </AccessControl>
         </div>
 
         {/* Conversion Rates */}
@@ -385,71 +443,30 @@ export default function DashboardPage() {
         </div>
 
         {/* Admin/Manager Specific Widgets */}
-        {(isAdmin || isManager) && dashboardData.admin && (
+        {dashboardData.admin && (
           <div className="space-y-6 mb-8">
-            <div className="border-t border-[#E5E7EB] pt-6">
-              <h2 className="text-xl font-bold text-[#0F172A] mb-6">Admin Analytics</h2>
-            </div>
+            <AccessControl path="/reports">
+              <>
+                <div className="border-t border-[#E5E7EB] pt-6">
+                  <h2 className="text-xl font-bold text-[#0F172A] mb-6">Admin Analytics</h2>
+                </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Platform Analytics */}
-              <PlatformAnalyticsWidget data={dashboardData.admin.platformAnalytics} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Platform Analytics */}
+                  <PlatformAnalyticsWidget data={dashboardData.admin.platformAnalytics} />
 
-              {/* Funnel Chart */}
-              <FunnelChartWidget data={dashboardData.admin.funnelMetrics} />
-            </div>
+                  {/* Funnel Chart */}
+                  <FunnelChartWidget data={dashboardData.admin.funnelMetrics} />
+                </div>
+              </>
+            </AccessControl>
 
             {/* Recruiter Comparison */}
-            {isAdmin && (
+            <AccessControl path="/admin">
               <RecruiterComparisonWidget comparison={dashboardData.admin.recruiterComparison} />
-            )}
+            </AccessControl>
           </div>
         )}
-
-        {/* Quick Actions */}
-        <div className="bg-white shadow-md rounded-xl p-6 border border-[#E5E7EB]">
-          <h3 className="text-lg font-semibold text-[#0F172A] mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link
-              href="/jobs"
-              className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
-            >
-              <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              <span className="text-sm font-medium text-[#0F172A]">Add Job</span>
-            </Link>
-            <Link
-              href="/clients"
-              className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
-            >
-              <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <span className="text-sm font-medium text-[#0F172A]">Add Client</span>
-            </Link>
-            <Link
-              href="/applications"
-              className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
-            >
-              <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <span className="text-sm font-medium text-[#0F172A]">View Pipeline</span>
-            </Link>
-            {(isAdmin || isManager) && (
-              <Link
-                href="/reports"
-                className="flex items-center p-4 border border-[#E5E7EB] rounded-lg hover:border-[#F4B400] hover:bg-[rgba(244,180,0,0.1)] transition-colors"
-              >
-                <svg className="h-6 w-6 text-[#F4B400] mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span className="text-sm font-medium text-[#0F172A]">View Reports</span>
-              </Link>
-            )}
-          </div>
-        </div>
       </div>
     </DashboardLayout>
   )

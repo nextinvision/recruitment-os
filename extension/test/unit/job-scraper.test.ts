@@ -11,13 +11,13 @@ import { JobSource } from '../../src/shared/types'
 function createMockDOM() {
   document.body.innerHTML = `
     <div data-job-id="1">
-      <a class="job-card-list__title">Software Engineer</a>
+      <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/1">Software Engineer</a>
       <a class="job-card-container__company-name">Tech Corp</a>
       <span class="job-card-container__metadata-item">Remote</span>
       <div class="job-card-list__description">Job description here</div>
     </div>
     <div data-job-id="2">
-      <a class="job-card-list__title">Frontend Developer</a>
+      <a class="job-card-list__title" href="https://www.linkedin.com/jobs/view/2">Frontend Developer</a>
       <a class="job-card-container__company-name">Startup Inc</a>
       <span class="job-card-container__metadata-item">San Francisco</span>
       <div class="job-card-list__description">React developer needed</div>
@@ -52,6 +52,8 @@ describe('JobScraper', () => {
     expect(jobs[0]).toHaveProperty('title')
     expect(jobs[0]).toHaveProperty('company')
     expect(jobs[0]).toHaveProperty('source', 'linkedin')
+    expect(jobs[0]).toHaveProperty('sourceUrl')
+    expect(jobs[0].sourceUrl).toContain('linkedin.com/jobs/view/1')
   })
 
   test('should validate scraped jobs', () => {

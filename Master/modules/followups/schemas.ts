@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const createFollowUpSchema = z.object({
   leadId: z.string().optional(),
   clientId: z.string().optional(),
+  companyContactId: z.string().optional(),
   assignedUserId: z.string().min(1, 'Assigned user ID is required'),
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
@@ -19,6 +20,7 @@ export const updateFollowUpSchema = createFollowUpSchema.partial().extend({
 export const followUpFilterSchema = z.object({
   leadId: z.string().optional(),
   clientId: z.string().optional(),
+  companyContactId: z.string().optional(),
   assignedUserId: z.string().optional(),
   completed: z.boolean().optional(),
   overdue: z.boolean().optional(),

@@ -47,8 +47,41 @@ export class NotificationService {
    * Send email
    */
   private async sendEmail(data: NotificationData): Promise<void> {
-    // TODO: Integrate with email service (SendGrid, AWS SES, etc.)
-    console.log('[Email] Sending:', data.message)
+    try {
+      // Import here to avoid circular dependencies
+      const { emailService } = await import('@/modules/communications/email.service')
+
+      // Get user email
+      const user = await db.user.findUnique({
+        where: { id: data.userId },
+        select: { email: true },
+      })
+
+      if (!user?.email) {
+        console.warn(`[Notification Service] Cannot send email: User ${data.userId} has no email address`)
+        return
+      }
+
+      await emailService.sendEmail({
+        to: user.email,
+        subject: data.title,
+        text: data.message,
+        // Optional: Could wrap message in a basic HTML template
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #1F3A5F;">${data.title}</h2>
+            <p>${data.message}</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 12px; color: #999;">
+              This is an automated notification from Recruitment OS.
+            </p>
+          </div>
+        `,
+      })
+      console.log(`[Notification Service] Email sent to ${user.email}`)
+    } catch (error) {
+      console.error('[Notification Service] Failed to send email:', error)
+    }
   }
 
   /**
@@ -56,7 +89,7 @@ export class NotificationService {
    */
   async getUserNotifications(userId: string, unreadOnly = false): Promise<Notification[]> {
     const cacheKey = `notifications:${userId}:${unreadOnly ? 'unread' : 'all'}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<Notification[]>(cacheKey)
     if (cached) {
@@ -105,7 +138,7 @@ export class NotificationService {
    */
   async getUnreadCount(userId: string): Promise<number> {
     const cacheKey = `notifications:${userId}:unread:count`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<number>(cacheKey)
     if (cached !== null) {

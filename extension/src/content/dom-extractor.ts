@@ -10,6 +10,7 @@ type JobSelectors = {
   jobCompany: string
   jobLocation: string
   jobDescription: string
+  jobLink: string
   detailTitle: string
   detailCompany: string
   detailLocation: string
@@ -55,7 +56,7 @@ export class DOMExtractor {
 
   extractJobFromCard(cardElement: Element): Partial<JobInput> | null {
     const selectors = this.getSelectors()
-    
+
     let title = ''
     let company = ''
     let location = ''
@@ -63,15 +64,22 @@ export class DOMExtractor {
 
     // Try primary selectors first
     title = this.getTextContent(selectors.jobTitle, cardElement) ||
-            this.getTextContent(selectors.altJobTitle, cardElement)
-    
+      this.getTextContent(selectors.altJobTitle, cardElement)
+
     company = this.getTextContent(selectors.jobCompany, cardElement) ||
-              this.getTextContent(selectors.altJobCompany, cardElement)
-    
+      this.getTextContent(selectors.altJobCompany, cardElement)
+
     location = this.getTextContent(selectors.jobLocation, cardElement) ||
-               this.getTextContent(selectors.altJobLocation, cardElement)
-    
+      this.getTextContent(selectors.altJobLocation, cardElement)
+
     description = this.getTextContent(selectors.jobDescription, cardElement)
+
+    // Extract job link
+    const linkEl = cardElement.querySelector(selectors.jobLink)
+    let sourceUrl = ''
+    if (linkEl && linkEl instanceof HTMLAnchorElement) {
+      sourceUrl = linkEl.href
+    }
 
     // If no title found, skip this card
     if (!title) {
@@ -84,23 +92,24 @@ export class DOMExtractor {
       location,
       description,
       source: this.source,
+      sourceUrl,
     }
   }
 
   extractJobFromDetailPage(): Partial<JobInput> | null {
     const selectors = this.getSelectors()
-    
+
     const title = this.getTextContent(selectors.detailTitle) ||
-                  this.getTextContent(selectors.altJobTitle)
-    
+      this.getTextContent(selectors.altJobTitle)
+
     const company = this.getTextContent(selectors.detailCompany) ||
-                    this.getTextContent(selectors.altJobCompany)
-    
+      this.getTextContent(selectors.altJobCompany)
+
     const location = this.getTextContent(selectors.detailLocation) ||
-                     this.getTextContent(selectors.altJobLocation)
-    
+      this.getTextContent(selectors.altJobLocation)
+
     const description = this.getTextContent(selectors.detailDescription) ||
-                        this.getAllTextContent('div.job-description').join('\n')
+      this.getAllTextContent('div.job-description').join('\n')
 
     if (!title) {
       return null
@@ -112,6 +121,7 @@ export class DOMExtractor {
       location,
       description,
       source: this.source,
+      sourceUrl: window.location.href,
     }
   }
 
@@ -121,7 +131,7 @@ export class DOMExtractor {
 
     // Get all job cards
     const cards = document.querySelectorAll(selectors.jobCard) ||
-                  document.querySelectorAll(selectors.altJobCard)
+      document.querySelectorAll(selectors.altJobCard)
 
     cards.forEach(card => {
       const job = this.extractJobFromCard(card)

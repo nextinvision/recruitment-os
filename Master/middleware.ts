@@ -4,7 +4,7 @@ import { getAuthContext } from './lib/rbac'
 import { getApplicableRoles, PAGE_ACCESS_DEFAULTS } from './lib/page-access'
 import type { PageAccessRules } from './lib/page-access'
 
-const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/api/auth/login']
+const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/api/auth/login', '/public/reports', '/api/public/reports']
 const CACHE_TTL_MS = 60_000
 
 let pageRulesCache: { rules: PageAccessRules; ts: number } = {

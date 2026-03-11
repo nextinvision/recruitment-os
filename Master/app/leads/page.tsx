@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PipelineBoard, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Button, Spinner, ToastContainer, useToast } from '@/ui'
+import { PipelineBoard, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Button, Spinner, useToast } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { formatINR } from '@/lib/currency'
 
@@ -13,7 +13,7 @@ interface Lead {
   currentCompany?: string
   email?: string
   phone?: string
-  status: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'LOST'
+  status: 'NEW' | 'CONTACTED' | 'RESPONSE_RECEIVED' | 'QUALIFIED' | 'LOST'
   source?: string
   industry?: string
   estimatedValue?: string
@@ -38,10 +38,11 @@ interface LeadDocument {
   uploadedAt: string
 }
 
-const LEAD_STAGES = ['NEW', 'CONTACTED', 'QUALIFIED', 'LOST']
+const LEAD_STAGES = ['NEW', 'CONTACTED', 'RESPONSE_RECEIVED', 'QUALIFIED', 'LOST']
 const STAGE_LABELS: Record<string, string> = {
   NEW: 'New',
   CONTACTED: 'Contacted',
+  RESPONSE_RECEIVED: 'Response Received',
   QUALIFIED: 'Qualified',
   LOST: 'Lost',
 }
@@ -53,7 +54,9 @@ export default function LeadsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [leadToView, setLeadToView] = useState<Lead | null>(null)
-  const { toasts, showToast, removeToast } = useToast()
+  const [showSendOnboardingModal, setShowSendOnboardingModal] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const { showToast } = useToast()
 
   useEffect(() => {
     loadLeads()
@@ -177,6 +180,35 @@ export default function LeadsPage() {
     }
   }
 
+  const handleTidyCalSync = async () => {
+    setSyncing(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/tidycal/sync', {
+        method: 'POST',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        showToast(data.message || 'TidyCal sync complete', 'success')
+        loadLeads()
+      } else {
+        const data = await response.json()
+        showToast(data.error || 'Failed to sync TidyCal', 'error')
+      }
+    } catch (err) {
+      console.error('TidyCal sync error:', err)
+      showToast('TidyCal sync error', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -189,16 +221,24 @@ export default function LeadsPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
-          <button
-            onClick={handleCreateLead}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Add Lead
-          </button>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={handleTidyCalSync}
+              isLoading={syncing}
+            >
+              Sync TidyCal
+            </Button>
+            <button
+              onClick={handleCreateLead}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              + Add Lead
+            </button>
+          </div>
         </div>
 
         <PipelineBoard
@@ -207,25 +247,59 @@ export default function LeadsPage() {
           getStage={(lead) => lead.status}
           onStageChange={handleStageChange}
           onItemClick={handleViewLead}
+          condensed={true}
+          searchable={true}
+          getSearchableFields={(lead) => [
+            lead.firstName ?? '',
+            lead.lastName ?? '',
+            lead.email ?? '',
+            lead.currentCompany ?? '',
+            lead.phone ?? '',
+            lead.industry ?? '',
+            lead.source ?? '',
+          ]}
+          searchPlaceholder="Search leads in this stage…"
           renderItem={(lead) => (
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="font-semibold text-gray-900">{lead.firstName} {lead.lastName}</div>
-              {(lead.currentCompany || lead.email) && (
-                <div className="text-sm text-gray-600 mt-1">
-                  {lead.currentCompany || lead.email}
-                </div>
-              )}
-              {lead.email && lead.currentCompany && (
-                <div className="text-xs text-gray-500 mt-1">{lead.email}</div>
-              )}
-              {lead.estimatedValue && (
-                <div className="text-sm font-medium text-blue-600 mt-2">
-                  {formatINR(lead.estimatedValue)}
-                </div>
-              )}
+            <div className="flex flex-col gap-0.5 w-full min-w-0">
+              <div className="flex justify-between items-start gap-2">
+                <span className="font-bold text-gray-800 truncate text-[13px] leading-tight">
+                  {lead.firstName} {lead.lastName}
+                </span>
+                {lead.estimatedValue && (
+                  <span className="text-[9px] font-bold text-blue-600 bg-blue-50/50 px-1.5 py-0.5 rounded border border-blue-100 shrink-0">
+                    {formatINR(lead.estimatedValue)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                {lead.currentCompany && (
+                  <span className="text-[11px] text-gray-500 truncate font-medium flex items-center gap-1">
+                    <svg className="w-2.5 h-2.5 opacity-50" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd" />
+                    </svg>
+                    {lead.currentCompany}
+                  </span>
+                )}
+                {lead.email && (
+                  <span className="text-[10px] text-gray-400 truncate flex items-center gap-1">
+                    <svg className="w-2.5 h-2.5 opacity-50" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                    </svg>
+                    {lead.email}
+                  </span>
+                )}
+              </div>
+
               {lead.assignedUser && (
-                <div className="text-xs text-gray-500 mt-2">
-                  {lead.assignedUser.firstName} {lead.assignedUser.lastName}
+                <div className="flex items-center gap-1.5 mt-1 border-t border-gray-50 pt-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
+                  <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-extrabold text-blue-600 uppercase border border-blue-100 shrink-0">
+                    {lead.assignedUser.firstName[0]}
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-semibold truncate leading-none">
+                    {lead.assignedUser.firstName} {lead.assignedUser.lastName}
+                  </span>
                 </div>
               )}
             </div>
@@ -250,6 +324,25 @@ export default function LeadsPage() {
               }}
               onClose={() => setLeadToView(null)}
               onConvertToClient={handleConvertToClient}
+              onSendOnboarding={() => setShowSendOnboardingModal(true)}
+            />
+          </Modal>
+        )}
+
+        {showSendOnboardingModal && leadToView && (
+          <Modal
+            isOpen={showSendOnboardingModal}
+            onClose={() => setShowSendOnboardingModal(false)}
+            title="Send Onboarding Form"
+          >
+            <SendOnboardingModal
+              lead={leadToView}
+              onSuccess={() => {
+                setShowSendOnboardingModal(false)
+                loadLeads()
+                showToast('Onboarding form sent successfully', 'success')
+              }}
+              onCancel={() => setShowSendOnboardingModal(false)}
             />
           </Modal>
         )}
@@ -287,15 +380,18 @@ function LeadDetailView({
   onEdit,
   onClose,
   onConvertToClient,
+  onSendOnboarding,
 }: {
   lead: Lead
   onEdit: () => void
   onClose: () => void
   onConvertToClient?: (lead: Lead) => void
+  onSendOnboarding?: () => void
 }) {
   const statusColors: Record<string, string> = {
     NEW: 'bg-blue-100 text-blue-800',
     CONTACTED: 'bg-yellow-100 text-yellow-800',
+    RESPONSE_RECEIVED: 'bg-purple-100 text-purple-800',
     QUALIFIED: 'bg-green-100 text-green-800',
     LOST: 'bg-red-100 text-red-800',
   }
@@ -364,6 +460,15 @@ function LeadDetailView({
             className="px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
           >
             Convert to Client
+          </button>
+        )}
+        {onSendOnboarding && !lead.client && (
+          <button
+            type="button"
+            onClick={onSendOnboarding}
+            className="px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Send to Client
           </button>
         )}
         {lead.client && (
@@ -638,6 +743,7 @@ function LeadForm({
           options={[
             { value: 'NEW', label: 'New' },
             { value: 'CONTACTED', label: 'Contacted' },
+            { value: 'RESPONSE_RECEIVED', label: 'Response Received' },
             { value: 'QUALIFIED', label: 'Qualified' },
             { value: 'LOST', label: 'Lost' },
           ]}
@@ -717,6 +823,141 @@ function LeadForm({
       <FormActions
         onCancel={onCancel}
         submitLabel={lead ? 'Update' : 'Create'}
+        isLoading={loading}
+      />
+    </form>
+  )
+}
+
+function SendOnboardingModal({
+  lead,
+  onSuccess,
+  onCancel,
+}: {
+  lead: Lead
+  onSuccess: () => void
+  onCancel: () => void
+}) {
+  const [forms, setForms] = useState<any[]>([])
+  const [templates, setTemplates] = useState<any[]>([])
+  const [selectedFormId, setSelectedFormId] = useState('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      try {
+        const [formsRes, templatesRes] = await Promise.all([
+          fetch('/api/onboarding-forms', {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+          }),
+          fetch('/api/messages/templates?channel=EMAIL', {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+          }),
+        ])
+
+        if (formsRes.ok) setForms(await formsRes.json())
+        if (templatesRes.ok) setTemplates(await templatesRes.json())
+      } catch (err) {
+        console.error('Failed to fetch modal data:', err)
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedFormId || !selectedTemplateId) {
+      setError('Please select both a form and a template')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/leads/${lead.id}/send-onboarding`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          formId: selectedFormId,
+          templateId: selectedTemplateId,
+        }),
+      })
+
+      if (res.ok) {
+        onSuccess()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to send onboarding form')
+      }
+    } catch (err) {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="flex justify-center p-8">
+        <Spinner />
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <Alert variant="error">{error}</Alert>}
+
+      <p className="text-sm text-gray-600">
+        Sending onboarding form to <strong>{lead.firstName} {lead.lastName}</strong> ({lead.email})
+      </p>
+
+      <Select
+        label="Onboarding Form"
+        value={selectedFormId}
+        onChange={(e) => setSelectedFormId(e.target.value)}
+        required
+        options={[
+          { value: '', label: 'Select a form' },
+          ...forms.map((f) => ({ value: f.id, label: f.title })),
+        ]}
+      />
+
+      <Select
+        label="Email Template"
+        value={selectedTemplateId}
+        onChange={(e) => setSelectedTemplateId(e.target.value)}
+        required
+        options={[
+          { value: '', label: 'Select a template' },
+          ...templates.map((t) => ({ value: t.id, label: t.name })),
+        ]}
+      />
+
+      <div className="bg-blue-50 p-3 rounded text-xs text-blue-700">
+        The email will include a link to the form with the lead's ID automatically attached.
+      </div>
+
+      <FormActions
+        onCancel={onCancel}
+        submitLabel="Send Email"
         isLoading={loading}
       />
     </form>

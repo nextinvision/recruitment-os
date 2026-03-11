@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, ActivityFilters, Pagination, ToastContainer, useToast, ConfirmDialog, useConfirmDialog, ActivityTimeline } from '@/ui'
+import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, ActivityFilters, Pagination, useToast, ConfirmDialog, useConfirmDialog, ActivityTimeline } from '@/ui'
 import Link from 'next/link'
 import type { ActivityFilters as ActivityFiltersType } from '@/ui'
 import { UserRole } from '@prisma/client'
@@ -66,8 +66,9 @@ export default function ActivitiesPage() {
   const [pageSize, setPageSize] = useState(25)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const [syncing, setSyncing] = useState(false)
 
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
   const { dialogState, showConfirm, closeDialog } = useConfirmDialog()
 
   useEffect(() => {
@@ -217,6 +218,35 @@ export default function ActivitiesPage() {
     )
   }
 
+  const handleTidyCalSync = async () => {
+    setSyncing(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/tidycal/sync', {
+        method: 'POST',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        showToast(data.message || 'TidyCal sync complete', 'success')
+        loadActivities()
+      } else {
+        const data = await response.json()
+        showToast(data.error || 'Failed to sync TidyCal', 'error')
+      }
+    } catch (err) {
+      console.error('TidyCal sync error:', err)
+      showToast('TidyCal sync error', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const activities = activitiesData?.activities || []
   const total = activitiesData?.total || 0
   const totalPages = activitiesData?.totalPages || 0
@@ -232,7 +262,6 @@ export default function ActivitiesPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -260,6 +289,13 @@ export default function ActivitiesPage() {
               variant="ghost"
             >
               {viewMode === 'list' ? 'Timeline View' : 'List View'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleTidyCalSync}
+              isLoading={syncing}
+            >
+              Sync TidyCal
             </Button>
             <Button
               onClick={() => {
@@ -558,9 +594,9 @@ function ActivityForm({
         onSuccess()
       } else {
         const data = await response.json()
-        const errorMessage = typeof data.error === 'string' 
-          ? data.error 
-          : Array.isArray(data.error) 
+        const errorMessage = typeof data.error === 'string'
+          ? data.error
+          : Array.isArray(data.error)
             ? data.error.map((e: { message?: string } | string) => typeof e === 'string' ? e : e.message || 'Error').join(', ')
             : (data.error as { message?: string })?.message || 'Failed to save activity'
         setError(errorMessage)

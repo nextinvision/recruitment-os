@@ -61,6 +61,8 @@ export const createResumeDraftSchema = z.object({
   content: resumeDocumentSchema,
   clientId: z.string().optional(),
   template: z.string().optional(),
+  atsScore: z.number().optional(),
+  atsAnalysis: z.any().optional(),
 })
 
 export const updateResumeDraftSchema = createResumeDraftSchema.partial()

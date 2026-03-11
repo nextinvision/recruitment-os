@@ -31,113 +31,170 @@ interface InvoiceTemplateProps {
     }
 }
 
+const numberToWords = (num: number): string => {
+    if (num === 0) return 'ZERO RUPEES ONLY';
+
+    const a = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+    const b = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+
+    const numInt = Math.floor(num);
+
+    const convertLessThanOneThousand = (n: number): string => {
+        if (n === 0) return '';
+        let res = '';
+        if (n >= 100) {
+            res += a[Math.floor(n / 100)] + ' HUNDRED ';
+            n %= 100;
+        }
+        if (n >= 20) {
+            res += b[Math.floor(n / 10)] + ' ';
+            if (n % 10 > 0) {
+                res += a[n % 10] + ' ';
+            }
+        } else if (n > 0) {
+            res += a[n] + ' ';
+        }
+        return res;
+    }
+
+    let result = '';
+    let n = numInt;
+
+    if (n >= 10000000) {
+        result += convertLessThanOneThousand(Math.floor(n / 10000000)) + 'CRORE ';
+        n %= 10000000;
+    }
+
+    if (n >= 100000) {
+        result += convertLessThanOneThousand(Math.floor(n / 100000)) + 'LAKH ';
+        n %= 100000;
+    }
+
+    if (n >= 1000) {
+        result += convertLessThanOneThousand(Math.floor(n / 1000)) + 'THOUSAND ';
+        n %= 1000;
+    }
+
+    result += convertLessThanOneThousand(n);
+
+    return result.replace(/\s+/g, ' ').trim() + ' RUPEES ONLY';
+}
+
 export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({ revenue }) => {
     return (
-        <div className="bg-white p-8 max-w-4xl mx-auto text-gray-800 font-sans print:p-0" id="invoice-template">
+        <div className="bg-white p-12 max-w-4xl mx-auto text-gray-800 font-sans print:p-0" id="invoice-template">
             {/* Header */}
-            <div className="flex justify-between border-b-2 border-careerist-primary-yellow pb-6 mb-8">
+            <div className="flex justify-between items-start mb-10">
                 <div>
-                    <h1 className="text-4xl font-bold text-careerist-primary-navy uppercase tracking-tighter">Invoice</h1>
-                    <p className="text-sm mt-1 text-gray-500">Invoice No: <span className="font-semibold text-gray-900">#{revenue.invoiceNumber}</span></p>
-                    <p className="text-sm text-gray-500">Invoice Date: <span className="font-semibold text-gray-900">{new Date(revenue.createdAt).toLocaleDateString()}</span></p>
+                    <h1 className="text-4xl font-medium mb-6" style={{ color: '#7B52C3' }}>Invoice</h1>
+                    <div className="grid grid-cols-[110px_1fr] gap-x-4 gap-y-2 text-sm">
+                        <span className="text-gray-500">Invoice No #</span>
+                        <span className="font-semibold text-gray-900">{revenue.invoiceNumber}</span>
+                        <span className="text-gray-500">Invoice Date</span>
+                        <span className="font-semibold text-gray-900">
+                            {new Date(revenue.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                    </div>
                 </div>
-                <div className="text-right">
-                    <h2 className="text-2xl font-bold text-careerist-primary-navy">Aspire Global Solutions</h2>
-                    <p className="text-sm text-gray-500 max-w-xs ml-auto">
-                        Golden Palace, Lokhandwala Township, Kandivali East,<br />
-                        Mumbai, Maharashtra, 400101 India
-                    </p>
-                    <p className="text-sm text-gray-500">hello @careerist.pro | +91 72080 34201</p>
+                <div className="text-white p-6 rounded flex items-center justify-center w-[220px] h-[80px]" style={{ backgroundColor: '#1f3a5f' }}>
+                    <div className="flex items-center space-x-2">
+                        <img src="/logo.png" alt="Logo" className="h-20 w-auto object-contain" />
+                    </div>
                 </div>
             </div>
 
             {/* Bill To / By */}
-            <div className="grid grid-cols-2 gap-8 mb-12">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase mb-2">Billed To:</h3>
-                    <p className="text-lg font-bold text-careerist-primary-navy">
-                        {revenue.client.firstName} {revenue.client.lastName}
-                    </p>
-                    {revenue.client.address && <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{revenue.client.address}</p>}
-                    <p className="text-sm text-gray-600 mt-1">{revenue.client.email}</p>
-                    <p className="text-sm text-gray-600">{revenue.client.phone}</p>
-                </div>
-                <div className="p-4 border border-gray-100 rounded-lg">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase mb-2">Payment Details:</h3>
-                    <div className="flex justify-between text-sm py-1 border-b border-gray-50">
-                        <span className="text-gray-500">Due Date:</span>
-                        <span className="font-semibold">{revenue.dueDate ? new Date(revenue.dueDate).toLocaleDateString() : 'N/A'}</span>
+            <div className="flex gap-4 mb-10">
+                <div className="flex-1 p-6 rounded" style={{ backgroundColor: '#EDE7F6' }}>
+                    <h2 className="text-[24px] font-normal mb-3 tracking-tight" style={{ color: '#7B52C3' }}>Billed By</h2>
+                    <div className="text-[14px] text-gray-800 space-y-1">
+                        <p className="font-bold text-gray-900 text-[15px] mb-1">Aspire Global Solutions</p>
+                        <p>Golden Palace, Lokhandwala Township, Kandivali East,</p>
+                        <p>Mumbai, Maharashtra, 400101 India</p>
+                        <p className="pt-1"><span className="font-bold text-gray-900">Email:</span> hello@careerist.pro</p>
+                        <p><span className="font-bold text-gray-900">Phone:</span> +91 72080 34201</p>
                     </div>
-                    <div className="flex justify-between text-sm py-1">
-                        <span className="text-gray-500">Total Due:</span>
-                        <span className="font-bold text-careerist-primary-navy">{formatINR(revenue.amount)}</span>
+                </div>
+                <div className="flex-1 p-6 rounded" style={{ backgroundColor: '#EDE7F6' }}>
+                    <h2 className="text-[24px] font-normal mb-3 tracking-tight" style={{ color: '#7B52C3' }}>Billed To</h2>
+                    <div className="text-[14px] text-gray-800 space-y-1">
+                        <p className="font-bold text-gray-900 text-[15px] mb-1">
+                            {revenue.client.firstName} {revenue.client.lastName}
+                        </p>
+                        {revenue.client.address && (
+                            <p className="whitespace-pre-wrap">{revenue.client.address}</p>
+                        )}
+                        <p className="pt-1"><span className="font-bold text-gray-900">Email:</span> {revenue.client.email || 'N/A'}</p>
+                        <p><span className="font-bold text-gray-900">Phone:</span> {revenue.client.phone || 'N/A'}</p>
                     </div>
                 </div>
             </div>
 
             {/* Items Table */}
-            <table className="w-full mb-8">
-                <thead>
-                    <tr className="bg-careerist-primary-navy text-white text-left">
-                        <th className="py-3 px-4 rounded-l-lg">Item Description</th>
-                        <th className="py-3 px-4 text-center">Qty</th>
-                        <th className="py-3 px-4 text-right">Rate</th>
-                        <th className="py-3 px-4 text-right rounded-r-lg">Amount</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {revenue.items.map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                            <td className="py-4 px-4">
-                                <p className="font-bold text-gray-900">{item.description}</p>
-                            </td>
-                            <td className="py-4 px-4 text-center">{item.quantity}</td>
-                            <td className="py-4 px-4 text-right">{formatINR(item.rate)}</td>
-                            <td className="py-4 px-4 text-right font-bold">{formatINR(item.amount)}</td>
+            <div className="mb-8 rounded-md overflow-hidden" style={{ backgroundColor: '#F4F1F8' }}>
+                <table className="w-full text-sm border-collapse">
+                    <thead className="text-white" style={{ backgroundColor: '#7B52C3' }}>
+                        <tr>
+                            <th className="py-4 px-6 text-left font-medium w-[55%] border-r" style={{ borderColor: '#6939b8' }}>Item</th>
+                            <th className="py-4 px-6 text-center font-medium w-[15%]">Quantity</th>
+                            <th className="py-4 px-6 text-center font-medium w-[15%] border-x" style={{ borderColor: '#6939b8' }}>Rate</th>
+                            <th className="py-4 px-6 text-center font-medium w-[15%]">Amount</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="text-gray-800">
+                        {revenue.items.map((item, index) => (
+                            <tr key={index} className="align-top border-b last:border-0 relative" style={{ borderColor: '#e6e2f1' }}>
+                                <td className="py-6 px-6 relative z-10 w-[55%]">
+                                    <div className="font-medium text-[14px] leading-loose whitespace-pre-wrap" style={{ color: '#2a2d40' }}>
+                                        <div className="flex">
+                                            <span className="mr-3">{index + 1}.</span>
+                                            <div>{item.description}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-6 px-6 text-center border-l" style={{ borderColor: '#e6e2f1' }}>{item.quantity}</td>
+                                <td className="py-6 px-6 text-center border-x" style={{ borderColor: '#e6e2f1' }}>{formatINR(item.rate)}</td>
+                                <td className="py-6 px-6 text-center font-medium">{formatINR(item.amount)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
 
             {/* Totals */}
-            <div className="flex justify-end mb-12">
-                <div className="w-64 space-y-2">
-                    <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-500">Subtotal:</span>
-                        <span className="font-semibold">{formatINR(revenue.subTotal)}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-100">
-                        <span className="text-gray-500">Tax:</span>
-                        <span className="font-semibold">{formatINR(revenue.taxAmount)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 text-lg">
-                        <span className="font-bold text-careerist-primary-navy">Total (INR):</span>
-                        <span className="font-black text-careerist-primary-navy">{formatINR(revenue.amount)}</span>
+            <div className="flex justify-between items-start mt-6 mb-16 px-1">
+                <div className="text-[14px] font-bold text-gray-800 max-w-sm pt-2">
+                    Total (in words) : {numberToWords(revenue.amount)}
+                </div>
+                <div className="w-[340px]">
+                    <div className="border-t-[2px] border-b-[2px] border-black py-2 px-1 flex justify-between items-center">
+                        <span className="font-bold text-[18px] text-gray-900">Total (INR)</span>
+                        <span className="font-bold text-[18px] text-gray-900">{formatINR(revenue.amount)}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Footer / Notes */}
-            <div className="grid grid-cols-2 gap-8 pt-8 border-t border-gray-200 mt-12">
-                <div>
-                    {revenue.notes && (
-                        <div className="mb-4">
-                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Notes:</h4>
-                            <p className="text-xs text-gray-600 italic">{revenue.notes}</p>
-                        </div>
-                    )}
-                    {revenue.terms && (
-                        <div>
-                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Terms & Conditions:</h4>
-                            <p className="text-[10px] text-gray-500 leading-tight">{revenue.terms}</p>
-                        </div>
-                    )}
-                </div>
-                <div className="flex flex-col justify-end items-center text-center">
-                    <div className="h-20 w-40 border-b border-gray-300 mb-2"></div>
-                    <span className="text-xs font-bold text-careerist-primary-navy uppercase">Authorised Signatory</span>
+            {/* Signature */}
+            <div className="flex justify-end pr-10 mt-12 pb-8">
+                <div className="text-center flex flex-col items-center min-w-[200px]">
+                    <div className="mb-2 w-full flex justify-center flex-col items-center">
+                        <span
+                            className="text-xl text-gray-800 block mb-2"
+                            style={{ fontFamily: "'Brush Script MT', 'Caveat', 'Great Vibes', cursive", fontStyle: 'italic' }}>
+                            Karishma Sethi
+                        </span>
+                    </div>
+                    <span className="text-[14px] text-gray-800">Authorised Signatory</span>
                 </div>
             </div>
+
+            {/* Notes / Terms */}
+            {(revenue.notes || revenue.terms) && (
+                <div className="mt-8 pt-4 border-t border-gray-200 text-xs text-gray-500 pl-2">
+                    {revenue.notes && <p className="mb-2"><strong className="text-gray-700">Notes:</strong> {revenue.notes}</p>}
+                    {revenue.terms && <p><strong className="text-gray-700">Terms:</strong> {revenue.terms}</p>}
+                </div>
+            )}
         </div>
     )
 }

@@ -87,11 +87,11 @@ export async function POST(request: NextRequest) {
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
-    // Set assignedUserId from auth context if not provided
-    if (!body.assignedUserId) {
+    // When converting from lead, always assign to current user so missing/stale assignee never causes 400
+    const isConvertFromLead = body.leadId != null && String(body.leadId).trim() !== ''
+    if (isConvertFromLead || !body.assignedUserId) {
       body.assignedUserId = authContext.userId
     }
-    
     // Set default onboardedDate if not provided
     if (!body.onboardedDate) {
       body.onboardedDate = new Date().toISOString()

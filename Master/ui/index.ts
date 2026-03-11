@@ -65,4 +65,6 @@ export { ToastContainer, useToast, showToast, removeToast } from './Toast'
 export type { Toast, ToastType } from './Toast'
 export { ConfirmDialog, useConfirmDialog } from './ConfirmDialog'
 export type { ConfirmDialogProps } from './ConfirmDialog'
+export { FunnelChartWidget } from './FunnelChartWidget'
+export { AppFunnelChart, PlatformSourcePie, StageTimeBarChart, PerformanceComparisonChart } from './AnalyticsCharts'
 

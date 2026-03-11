@@ -88,13 +88,13 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
             currentCompany: true,
           },
         },
-         client: {
-           select: {
-             id: true,
-             firstName: true,
-             lastName: true,
-           },
-         },
+        client: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     })
 
@@ -145,15 +145,30 @@ async function processFollowUpCheck(job: Job<FollowUpCheckJob>) {
     }
 
     // Create notifications for all users
-    const notificationPromises = notifyUserIds.map((userId) =>
-      notificationService.sendNotification({
-        userId,
-        type: 'OVERDUE_TASK',
-        channel: 'IN_APP',
-        title: notificationTitle,
-        message: notificationMessage,
-      })
-    )
+    const notificationPromises = notifyUserIds.flatMap((userId) => {
+      const p = [
+        notificationService.sendNotification({
+          userId,
+          type: 'OVERDUE_TASK',
+          channel: 'IN_APP',
+          title: notificationTitle,
+          message: notificationMessage,
+        })
+      ]
+
+      // Send email for all levels (specialist, manager, admin)
+      p.push(
+        notificationService.sendNotification({
+          userId,
+          type: 'OVERDUE_TASK',
+          channel: 'EMAIL',
+          title: notificationTitle,
+          message: notificationMessage,
+        })
+      )
+
+      return p
+    })
 
     await Promise.all(notificationPromises)
 

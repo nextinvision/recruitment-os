@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Input, Select, Textarea, FormActions, Alert, Button } from '@/ui'
+import { formatINR } from '@/lib/currency'
 
 interface InvoiceItem {
     description: string
@@ -243,7 +244,7 @@ export function RevenueForm({
             <div className="flex flex-col items-end space-y-2 border-t pt-4 border-careerist-border">
                 <div className="flex justify-between w-full max-w-xs text-sm">
                     <span>Subtotal:</span>
-                    <span className="font-semibold">₹{formData.subTotal.toLocaleString('en-IN')}</span>
+                    <span className="font-semibold">{formatINR(formData.subTotal)}</span>
                 </div>
                 <div className="flex justify-between w-full max-w-xs text-sm items-center">
                     <span>Tax Amount:</span>
@@ -259,7 +260,7 @@ export function RevenueForm({
                 </div>
                 <div className="flex justify-between w-full max-w-xs text-lg font-bold">
                     <span>Total:</span>
-                    <span>₹{formData.amount.toLocaleString('en-IN')}</span>
+                    <span>{formatINR(formData.amount)}</span>
                 </div>
             </div>
 

@@ -59,6 +59,24 @@ export async function POST(request: NextRequest) {
         }
 
         const result = await pythonResponse.json()
+
+        // Normalize education to string[] so the frontend never receives objects (React cannot render objects as children).
+        // Python backend may return education as objects { institution, degree, specialization }.
+        if (Array.isArray(result.education)) {
+            result.education = result.education.map((item: unknown) => {
+                if (typeof item === 'string') return item
+                if (item && typeof item === 'object' && !Array.isArray(item)) {
+                    const o = item as Record<string, unknown>
+                    const degree = typeof o.degree === 'string' ? o.degree : ''
+                    const specialization = typeof o.specialization === 'string' ? o.specialization : ''
+                    const institution = typeof o.institution === 'string' ? o.institution : ''
+                    const parts = [degree, specialization, institution].filter(Boolean)
+                    return parts.join(' — ') || 'Education'
+                }
+                return String(item)
+            })
+        }
+
         const response = NextResponse.json(result, { status: 200 })
         return addCorsHeaders(response, request.headers.get('origin'))
     } catch (error) {

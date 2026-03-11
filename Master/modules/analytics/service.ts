@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client'
 
 export interface RecruiterMetrics {
   recruiterId: string
+
   period: {
     start: Date
     end: Date
@@ -41,7 +42,7 @@ export class AnalyticsService {
     endDate: Date
   ): Promise<RecruiterMetrics> {
     const cacheKey = `analytics:recruiter:${recruiterId}:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<RecruiterMetrics>(cacheKey)
     if (cached) {
@@ -136,7 +137,7 @@ export class AnalyticsService {
    */
   async getPlatformUsage(startDate: Date, endDate: Date): Promise<Array<{ source: string; count: number }>> {
     const cacheKey = `analytics:platform:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<Array<{ source: string; count: number }>>(cacheKey)
     if (cached) {
@@ -167,7 +168,7 @@ export class AnalyticsService {
    */
   async getFunnelPerformance(startDate: Date, endDate: Date): Promise<Array<{ stage: string; count: number }>> {
     const cacheKey = `analytics:funnel:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<Array<{ stage: string; count: number }>>(cacheKey)
     if (cached) {
@@ -225,7 +226,7 @@ export class AnalyticsService {
    */
   async getRecruiterComparison(startDate: Date, endDate: Date): Promise<RecruiterComparison[]> {
     const cacheKey = `analytics:recruiter-comparison:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<RecruiterComparison[]>(cacheKey)
     if (cached) {
       return cached
@@ -276,9 +277,14 @@ export class AnalyticsService {
       appliedToInterview: number
       interviewToOffer: number
     }
+    salesMetrics: {
+      totalRevenue: number
+      totalCollected: number
+      pendingBalance: number
+    }
   }> {
     const cacheKey = `analytics:system:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<{
       totalJobs: number
       totalCandidates: number
@@ -289,12 +295,17 @@ export class AnalyticsService {
         appliedToInterview: number
         interviewToOffer: number
       }
+      salesMetrics: {
+        totalRevenue: number
+        totalCollected: number
+        pendingBalance: number
+      }
     }>(cacheKey)
     if (cached) {
       return cached
     }
 
-    const [totalJobs, totalCandidates, totalApplications, activeApplications] = await Promise.all([
+    const [totalJobs, totalCandidates, totalApplications, activeApplications, revenues, payments] = await Promise.all([
       db.job.count({
         where: {
           createdAt: { gte: startDate, lte: endDate },
@@ -318,6 +329,14 @@ export class AnalyticsService {
           },
         },
       }),
+      db.revenue.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { amount: true, status: true },
+      }),
+      db.payment.aggregate({
+        where: { paymentDate: { gte: startDate, lte: endDate } },
+        _sum: { amount: true },
+      }),
     ])
 
     const allApplications = await db.application.findMany({
@@ -331,6 +350,12 @@ export class AnalyticsService {
     const interview = allApplications.filter((a) => a.stage === 'INTERVIEW_SCHEDULED').length
     const offer = allApplications.filter((a) => a.stage === 'OFFER').length
 
+    const totalRevenue = revenues.reduce((sum, r) => sum + Number(r.amount), 0)
+    const totalCollected = Number(payments._sum.amount || 0)
+    const pendingBalance = revenues
+      .filter(r => r.status === 'PENDING' || r.status === 'PARTIAL')
+      .reduce((sum, r) => sum + Number(r.amount), 0) // Simplify pending by summing all unpaid full amounts for now, a more robust way would calculate the diff but this aligns with getClientMetrics
+
     const metrics = {
       totalJobs,
       totalCandidates,
@@ -341,6 +366,11 @@ export class AnalyticsService {
         appliedToInterview: applied > 0 ? (interview / applied) * 100 : 0,
         interviewToOffer: interview > 0 ? (offer / interview) * 100 : 0,
       },
+      salesMetrics: {
+        totalRevenue,
+        totalCollected,
+        pendingBalance,
+      }
     }
 
     // Cache for 1 hour (3600 seconds) as per FR-BE-106
@@ -353,7 +383,7 @@ export class AnalyticsService {
    */
   async getAverageTimePerStage(startDate: Date, endDate: Date, recruiterId?: string): Promise<Array<{ stage: string; averageDays: number; count: number }>> {
     const cacheKey = `analytics:avg-time:${recruiterId || 'system'}:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<Array<{ stage: string; averageDays: number; count: number }>>(cacheKey)
     if (cached) {
       return cached
@@ -417,15 +447,15 @@ export class AnalyticsService {
   }
 
   /**
-   * Export reports to CSV
+   * Get report data formatted for export
    */
-  async exportReportsToCSV(
+  async getReportData(
     startDate: Date,
     endDate: Date,
     reportType: 'system' | 'recruiter-comparison' | 'funnel' | 'platform',
     recruiterId?: string
-  ): Promise<string> {
-    let data: any[] = []
+  ): Promise<{ headers: string[]; data: any[][] }> {
+    let data: any[][] = []
     let headers: string[] = []
 
     switch (reportType) {
@@ -482,12 +512,97 @@ export class AnalyticsService {
       }
     }
 
+    return { headers, data }
+  }
+
+  /**
+   * Export reports to CSV
+   */
+  async exportReportsToCSV(
+    startDate: Date,
+    endDate: Date,
+    reportType: 'system' | 'recruiter-comparison' | 'funnel' | 'platform',
+    recruiterId?: string
+  ): Promise<string> {
+    const { headers, data } = await this.getReportData(startDate, endDate, reportType, recruiterId)
+
     const csv = [
       headers.join(','),
       ...data.map((row) => row.map((field: any) => `"${String(field).replace(/"/g, '""')}"`).join(',')),
     ].join('\n')
 
     return csv
+  }
+
+  /**
+   * Get metrics for a specific client
+   */
+  async getClientMetrics(clientId: string): Promise<{
+    funnelPerformance: Array<{ stage: string; count: number }>
+    activityDistribution: Array<{ type: string; count: number }>
+    financials: {
+      totalBilled: number
+      totalPaid: number
+      totalPending: number
+    }
+  }> {
+    const [applications, activities, revenues, payments] = await Promise.all([
+      db.application.findMany({
+        where: { clientId },
+        select: { stage: true }
+      }),
+      db.activity.groupBy({
+        by: ['type'],
+        where: { clientId },
+        _count: true
+      }),
+      db.revenue.findMany({
+        where: { clientId },
+        select: { amount: true, status: true }
+      }),
+      db.payment.aggregate({
+        where: { clientId },
+        _sum: { amount: true }
+      })
+    ])
+
+    const stages = [
+      'IDENTIFIED',
+      'RESUME_UPDATED',
+      'COLD_MESSAGE_SENT',
+      'CONNECTION_ACCEPTED',
+      'APPLIED',
+      'INTERVIEW_SCHEDULED',
+      'OFFER',
+      'REJECTED',
+      'CLOSED'
+    ]
+
+    const funnelPerformance = stages.map(stage => ({
+      stage,
+      count: applications.filter(a => a.stage === stage).length
+    }))
+
+    const activityDistribution = activities.map(a => ({
+      type: a.type,
+      count: a._count
+    }))
+
+    const totalBilled = revenues.reduce((sum, r) => sum + Number(r.amount), 0)
+    const totalPaid = Number(payments._sum.amount || 0)
+    const totalPending = revenues
+      .filter(r => r.status === 'PENDING')
+      .reduce((sum, r) => sum + Number(r.amount), 0)
+
+    return {
+      funnelPerformance,
+      activityDistribution,
+      financials: {
+        totalBilled,
+        totalPaid,
+        totalPending
+      }
+    }
   }
 }
 

@@ -54,8 +54,8 @@ export function canAccessResource(
     return true
   }
 
-  // Recruiter can only access their own resources
-  if (authContext.role === UserRole.RECRUITER) {
+  // Recruiter and Sales can only access their own resources
+  if (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES) {
     return resourceRecruiterId === authContext.userId
   }
 

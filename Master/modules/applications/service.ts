@@ -13,6 +13,7 @@ import {
 
 // Stage lifecycle definition - only forward transitions allowed
 const STAGE_LIFECYCLE: Record<ApplicationStage, ApplicationStage[]> = {
+  PENDING_CLIENT_APPROVAL: [ApplicationStage.IDENTIFIED, ApplicationStage.REJECTED],
   IDENTIFIED: [ApplicationStage.RESUME_UPDATED, ApplicationStage.COLD_MESSAGE_SENT],
   RESUME_UPDATED: [ApplicationStage.COLD_MESSAGE_SENT],
   COLD_MESSAGE_SENT: [ApplicationStage.CONNECTION_ACCEPTED, ApplicationStage.APPLIED],
@@ -84,7 +85,7 @@ export async function createApplication(input: CreateApplicationInput) {
   const client = await db.client.findUnique({ where: { id: validated.clientId } })
   if (!client) throw new Error('Client not found')
 
-  const createData = {
+  const createData: any = {
     jobId: (validated.jobId && validated.jobId.trim()) || null,
     clientId: validated.clientId,
     recruiterId: validated.recruiterId,
@@ -94,11 +95,18 @@ export async function createApplication(input: CreateApplicationInput) {
     stageChangedAt: new Date(),
   }
 
+  // Generate approval token if in PENDING_CLIENT_APPROVAL stage
+  if (validated.stage === ApplicationStage.PENDING_CLIENT_APPROVAL) {
+    const { randomBytes } = await import('crypto')
+    createData.approvalToken = randomBytes(32).toString('hex')
+  }
+
   const application = await db.application.create({
     data: createData as Prisma.ApplicationUncheckedCreateInput,
     include: {
       job: {
         include: {
+          companyRecord: { include: { contacts: true } },
           recruiter: {
             select: {
               id: true,
@@ -132,6 +140,62 @@ export async function createApplication(input: CreateApplicationInput) {
     },
   })
 
+  // Trigger Notifications if in PENDING_CLIENT_APPROVAL
+  if (application.stage === ApplicationStage.PENDING_CLIENT_APPROVAL && application.approvalToken) {
+    try {
+      const { messageService } = await import('@/modules/communications/message.service')
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://careeristpro.cloud'
+      const approvalLink = `${baseUrl}/public/approvals/${application.approvalToken}`
+
+      const clientName = `${application.client?.firstName} ${application.client?.lastName}`
+      const jobTitle = application.job?.title || 'Sourced Job'
+
+      // Send Email
+      if (application.client?.email) {
+        await messageService.sendMessage({
+          channel: 'EMAIL',
+          recipientType: 'client',
+          recipientId: application.clientId!,
+          recipientEmail: application.client.email,
+          subject: `Review Required: New Job Opportunity - ${jobTitle}`,
+          content: `
+            <div style="font-family: sans-serif; color: #1F3A5F; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+              <h2 style="color: #1F3A5F; border-bottom: 2px solid #F4B400; padding-bottom: 10px;">New Job Opportunity</h2>
+              <p>Hi ${application.client.firstName},</p>
+              <p>Our Job Search Specialist has sourced a new opportunity that matches your profile:</p>
+              <div style="background: #F8FAFC; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; font-size: 1.1em;">${jobTitle}</p>
+                <p style="margin: 5px 0; color: #64748B;">${application.job?.company || 'Confidential'}</p>
+              </div>
+              <p>Please review the details and let us know if you'd like to proceed:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${approvalLink}" style="background: #1F3A5F; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold;">Review and Approve Job</a>
+              </div>
+              <p style="font-size: 0.9em; color: #64748B;">This magic link is unique to you and expires once the job is actioned.</p>
+              <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+              <p style="font-size: 0.8em; color: #94A3B8;">Best regards,<br/>Recruitment OS Team</p>
+            </div>
+          `,
+          sentBy: application.recruiterId,
+        })
+      }
+
+      // Send WhatsApp (Placeholder for log or actual service)
+      if (application.client?.phone) {
+        await messageService.sendMessage({
+          channel: 'WHATSAPP',
+          recipientType: 'client',
+          recipientId: application.clientId!,
+          recipientPhone: application.client.phone,
+          content: `Hi ${application.client.firstName}, we found a new job: *${jobTitle}* at *${application.job?.company || 'Confidential'}*. Please review and approve here: ${approvalLink}`,
+          sentBy: application.recruiterId,
+        })
+      }
+    } catch (err) {
+      console.error('Failed to trigger approval notifications:', err)
+    }
+  }
+
   return application
 }
 
@@ -141,6 +205,7 @@ export async function getApplicationById(applicationId: string) {
     include: {
       job: {
         include: {
+          companyRecord: { include: { contacts: true } },
           recruiter: {
             select: {
               id: true,
@@ -288,6 +353,7 @@ export async function getApplications(
     include: {
       job: {
         include: {
+          companyRecord: { include: { contacts: true } },
           recruiter: {
             select: {
               id: true,
@@ -348,6 +414,7 @@ export async function getApplicationsByStage(stage: ApplicationStage) {
     include: {
       job: {
         include: {
+          companyRecord: { include: { contacts: true } },
           recruiter: {
             select: {
               id: true,
@@ -421,6 +488,7 @@ export async function updateApplication(input: UpdateApplicationInput) {
     include: {
       job: {
         include: {
+          companyRecord: { include: { contacts: true } },
           recruiter: {
             select: {
               id: true,

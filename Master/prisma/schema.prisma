@@ -16,6 +16,7 @@ enum UserRole {
   ADMIN
   MANAGER
   RECRUITER
+  SALES
 }
 
 enum JobSource {
@@ -30,6 +31,7 @@ enum JobSource {
 }
 
 enum ApplicationStage {
+  PENDING_CLIENT_APPROVAL
   IDENTIFIED
   RESUME_UPDATED
   COLD_MESSAGE_SENT
@@ -57,6 +59,31 @@ enum JobStatus {
   FILLED
 }
 
+enum CompanySize {
+  STARTUP
+  SMALL
+  MEDIUM
+  LARGE
+  ENTERPRISE
+}
+
+enum ContactRole {
+  HR
+  MANAGER
+  DEVELOPER
+  RECRUITER
+  DIRECTOR
+  CTO
+  CEO
+  OTHER
+}
+
+enum JobType {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
 enum NotificationType {
   FOLLOW_UP_REMINDER
   INTERVIEW_ALERT
@@ -80,6 +107,7 @@ enum FileType {
 enum LeadStatus {
   NEW
   CONTACTED
+  RESPONSE_RECEIVED
   QUALIFIED
   LOST
 }
@@ -114,6 +142,14 @@ enum RevenueStatus {
   PENDING
   PARTIAL
   PAID
+}
+
+enum ContactStatus {
+  PENDING
+  INITIAL_CONTACT_SENT
+  FOLLOWING_UP
+  REPLIED
+  NOT_INTERESTED
 }
 
 enum ActivityType {
@@ -166,6 +202,8 @@ model User {
   leadDocuments           LeadDocument[]
   onboardingForms         OnboardingForm[]
   resumeDrafts            ResumeDraft[]
+  companiesCreated        Company[]               @relation("CompanyCreatedBy")
+  companyNotesCreated     CompanyNote[]           @relation("CompanyNoteCreatedBy")
 
   @@map("users")
 }
@@ -182,7 +220,9 @@ model Job {
   experienceRequired String?
   salaryRange        String?
   status             JobStatus @default(ACTIVE)
+  jobType            JobType?  @default(ONSITE)
   recruiterId        String
+  companyId          String?   // Optional link to Company record
   notes              String?   @db.Text
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -196,14 +236,17 @@ model Job {
   similarityScore Float? // Similarity score (0-100) if duplicate
 
   // Relations
-  recruiter    User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
-  applications Application[]
+  recruiter      User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  companyRecord  Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  applications   Application[]
 
   @@index([recruiterId])
   @@index([source])
   @@index([status])
+  @@index([jobType])
   @@index([createdAt])
   @@index([isDuplicate])
+  @@index([companyId])
   @@map("jobs")
 }
 
@@ -236,6 +279,8 @@ model Application {
   notes          String?          @db.Text
   followUpDate   DateTime?
   stageChangedAt DateTime? // Track when stage was last changed for days calculation
+  approvalToken  String?   @unique
+  approvedAt     DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -314,14 +359,16 @@ model Resume {
 }
 
 model CoverLetter {
-  id         String   @id @default(cuid())
-  clientId   String
-  fileUrl    String
-  fileName   String
-  fileSize   Int // in bytes
-  version    Int      @default(1)
-  uploadedBy String
-  uploadedAt DateTime @default(now())
+  id               String   @id @default(cuid())
+  clientId         String
+  fileUrl          String
+  fileName         String   // Storage object key (MinIO)
+  originalFileName String?  // Display name as uploaded by user
+  fileSize         Int      // in bytes
+  version          Int      @default(1)
+  uploadedBy       String
+  uploadedAt       DateTime @default(now())
+  description      String?  @db.Text // Notes + link from preparation step
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -334,10 +381,12 @@ model ResumeDraft {
   id        String   @id @default(cuid())
   userId    String
   clientId  String?
-  content   Json     // Structured resume: contact, profile, experience, education, etc.
-  template  String?  @default("professional") // Template ID for layout
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  content     Json     // Structured resume: contact, profile, experience, education, etc.
+  template    String?  @default("professional") // Template ID for layout
+  atsScore    Int?
+  atsAnalysis Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
@@ -348,16 +397,17 @@ model ResumeDraft {
 }
 
 model ClientDocument {
-  id          String       @id @default(cuid())
-  clientId    String
-  type        DocumentType
-  fileUrl     String
-  fileName    String
-  fileSize    Int // in bytes
-  version     Int          @default(1)
-  uploadedBy  String
-  uploadedAt  DateTime     @default(now())
-  description String?      @db.Text
+  id               String       @id @default(cuid())
+  clientId         String
+  type             DocumentType
+  fileUrl          String
+  fileName         String       // Storage object key (for MinIO lookup)
+  originalFileName String?      // Display name as uploaded by user
+  fileSize         Int          // in bytes
+  version          Int          @default(1)
+  uploadedBy       String
+  uploadedAt       DateTime     @default(now())
+  description      String?      @db.Text
 
   // Relations
   client            Client  @relation("ClientDocuments", fields: [clientId], references: [id], onDelete: Cascade)
@@ -430,6 +480,8 @@ model Lead {
   estimatedValue Decimal?   @db.Decimal(10, 2)
   notes          String?    @db.Text
   convertedAt    DateTime?
+  externalId     String?
+  externalSource String?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -440,9 +492,11 @@ model Lead {
   followUps    FollowUp[]
   revenues     Revenue[]
   documents    LeadDocument[]
+  onboardingSubmissions OnboardingFormSubmission[] @relation("LeadToSubmissions")
 
   @@index([status])
   @@index([assignedUserId])
+  @@index([externalId])
   @@map("leads")
 }
 
@@ -486,13 +540,16 @@ model OnboardingFormSubmission {
   formId      String
   data        Json // JSON object of field key -> value (answers)
   clientId    String? // Set when converted to client
+  leadId      String? // Set when submitted by a lead
   submittedAt DateTime @default(now())
 
   form   OnboardingForm @relation(fields: [formId], references: [id], onDelete: Cascade)
   client Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lead   Lead?          @relation("LeadToSubmissions", fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([formId])
   @@index([clientId])
+  @@index([leadId])
   @@map("onboarding_form_submissions")
 }
 
@@ -546,6 +603,7 @@ model Client {
   applications          Application[]
   onboardingSubmissions OnboardingFormSubmission[]
   resumeDrafts          ResumeDraft[]
+  reportSnapshot        ReportSnapshot?
 
   @@unique([leadId])
   @@index([status])
@@ -560,6 +618,7 @@ model FollowUp {
   id             String    @id @default(cuid())
   leadId         String?
   clientId       String?
+  companyContactId String?
   assignedUserId String
   title          String
   description    String?   @db.Text
@@ -571,9 +630,10 @@ model FollowUp {
   updatedAt      DateTime  @updatedAt
 
   // Relations
-  assignedUser User    @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
-  lead         Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  client       Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedUser User            @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
+  lead         Lead?           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  client       Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contact      CompanyContact? @relation(fields: [companyContactId], references: [id], onDelete: SetNull)
 
   @@index([scheduledDate])
   @@index([assignedUserId])
@@ -585,22 +645,27 @@ model Activity {
   id             String       @id @default(cuid())
   leadId         String?
   clientId       String?
+  companyContactId String?
   assignedUserId String
   type           ActivityType
   title          String
   description    String?      @db.Text
   occurredAt     DateTime     @default(now())
+  externalId     String?
+  externalSource String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   // Relations
-  assignedUser User    @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
-  lead         Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  client       Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedUser User            @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
+  lead         Lead?           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  client       Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contact      CompanyContact? @relation(fields: [companyContactId], references: [id], onDelete: SetNull)
 
   @@index([occurredAt])
   @@index([assignedUserId])
   @@index([type])
+  @@index([externalId])
   @@map("activities")
 }
 
@@ -814,4 +879,79 @@ model SystemConfig {
   @@index([category])
   @@index([key])
   @@map("system_configs")
+}
+
+model ReportSnapshot {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  token       String   @unique @default(dbgenerated("gen_random_uuid()"))
+  data        Json     // Snapshot of financialMetrics, funnelPerformance, and activityDistribution
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("report_snapshots")
+}
+
+model Company {
+  id          String       @id @default(cuid())
+  name        String
+  industry    String?
+  website     String?
+  location    String?
+  size        CompanySize?
+  description String?      @db.Text
+  linkedinUrl String?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  createdBy User             @relation("CompanyCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  contacts  CompanyContact[]
+  notes     CompanyNote[]
+  jobs      Job[]
+
+  @@index([name])
+  @@index([industry])
+  @@index([createdById])
+  @@map("companies")
+}
+
+model CompanyContact {
+  id          String      @id @default(cuid())
+  companyId   String
+  firstName   String
+  lastName    String
+  role        ContactRole   @default(OTHER)
+  status      ContactStatus @default(PENDING)
+  email       String?
+  phone       String?
+  linkedinUrl String?
+  notes       String?       @db.Text
+  outreachStartedAt DateTime?
+  lastInteractionAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  followUps FollowUp[]
+  activities Activity[]
+
+  @@index([companyId])
+  @@map("company_contacts")
+}
+
+model CompanyNote {
+  id          String   @id @default(cuid())
+  companyId   String
+  content     String   @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("CompanyNoteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("company_notes")
 }

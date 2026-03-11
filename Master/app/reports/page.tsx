@@ -3,10 +3,35 @@
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { StatsCard, Button, Spinner, ToastContainer, useToast } from '@/ui'
-import { PeriodSelector, type PeriodView } from '@/ui/PeriodSelector'
-import { RecruiterComparisonTable } from '@/ui/RecruiterComparisonTable'
+import {
+  StatsCard,
+  Button,
+  Spinner,
+  useToast,
+  RecruiterComparisonTable,
+  PeriodSelector,
+  type PeriodView,
+  AppFunnelChart,
+  PlatformSourcePie,
+  StageTimeBarChart,
+  PerformanceComparisonChart,
+} from '@/ui'
 import { UserRole } from '@prisma/client'
+import {
+  BarChart3,
+  PieChart as PieChartIcon,
+  TrendingUp,
+  Users,
+  Briefcase,
+  FileCheck,
+  CheckCircle2,
+  Clock,
+  LayoutDashboard,
+  Download,
+  ExternalLink,
+  Calendar
+} from 'lucide-react'
+import { formatINR } from '@/lib/currency'
 
 interface SystemMetrics {
   platformUsage: Array<{ source: string; count: number }>
@@ -20,6 +45,11 @@ interface SystemMetrics {
       identifiedToApplied: number
       appliedToInterview: number
       interviewToOffer: number
+    }
+    salesMetrics?: {
+      totalRevenue: number
+      totalCollected: number
+      pendingBalance: number
     }
   }
   averageTimePerStage?: Array<{ stage: string; averageDays: number; count: number }>
@@ -74,8 +104,9 @@ function ReportsPageContent() {
   const [selectedRecruiterId, setSelectedRecruiterId] = useState<string | null>(
     searchParams.get('recruiterId')
   )
+  const [isExporting, setIsExporting] = useState<string | null>(null)
 
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   // Initialize user role on mount
   useEffect(() => {
@@ -149,11 +180,11 @@ function ReportsPageContent() {
         }),
         (currentUserRole === UserRole.ADMIN || currentUserRole === UserRole.MANAGER)
           ? fetch(`/api/analytics/recruiter-comparison?startDate=${startDateISO}&endDate=${endDateISO}`, {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-              credentials: 'include',
-            })
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            credentials: 'include',
+          })
           : Promise.resolve(null),
       ])
 
@@ -250,11 +281,50 @@ function ReportsPageContent() {
     }
   }
 
+  const handleGoogleSheetsExport = async (reportType: 'system' | 'recruiter-comparison' | 'funnel' | 'platform') => {
+    setIsExporting(reportType)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const startDate = new Date(dateRange.start)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(dateRange.end)
+      endDate.setHours(23, 59, 59, 999)
+
+      const startDateISO = startDate.toISOString()
+      const endDateISO = endDate.toISOString()
+
+      const response = await fetch(
+        `/api/analytics/export-to-gsheets?startDate=${startDateISO}&endDate=${endDateISO}&reportType=${reportType}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          credentials: 'include',
+        }
+      )
+
+      const data = await response.json()
+
+      if (response.ok && data.url) {
+        window.open(data.url, '_blank')
+        showToast('Report exported to Google Sheets successfully', 'success')
+      } else {
+        showToast(data.error || 'Failed to export to Google Sheets', 'error')
+      }
+    } catch (err) {
+      console.error('Failed to export to Google Sheets:', err)
+      showToast('Failed to export to Google Sheets', 'error')
+    } finally {
+      setIsExporting(null)
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
         <Spinner fullScreen />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </DashboardLayout>
     )
   }
@@ -268,278 +338,234 @@ function ReportsPageContent() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-8 pb-12">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-            <p className="mt-2 text-gray-700">Comprehensive insights into your recruitment pipeline</p>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                <LayoutDashboard size={24} />
+              </div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Analytics Dashboard</h1>
+            </div>
+            <p className="text-gray-500 font-medium">Real-time performance metrics and pipeline insights</p>
           </div>
+
           {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && (
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => handleExport('system')}>
-                Export System Report
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => handleExport('system')}
+                className="flex items-center gap-2 px-6 rounded-xl hover:bg-gray-100 transition-colors"
+                disabled={isExporting !== null}
+              >
+                <Download size={18} /> Export CSV
               </Button>
-              <Button variant="secondary" onClick={() => handleExport('recruiter-comparison')}>
-                Export Comparison
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Period Selector and Date Range */}
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <PeriodSelector
-            view={periodView}
-            onChange={setPeriodView}
-            onQuickSelect={handleQuickSelect}
-          />
-          {periodView === 'custom' && (
-            <div className="mt-4 flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-900 mb-2">Start Date</label>
-                <input
-                  type="date"
-                  value={dateRange.start.toISOString().split('T')[0]}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value)
-                    newDate.setHours(0, 0, 0, 0)
-                    setDateRange({ ...dateRange, start: newDate })
-                  }}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#F4B400] focus:border-[#F4B400]"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-900 mb-2">End Date</label>
-                <input
-                  type="date"
-                  value={dateRange.end.toISOString().split('T')[0]}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value)
-                    newDate.setHours(23, 59, 59, 999)
-                    setDateRange({ ...dateRange, end: newDate })
-                  }}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#F4B400] focus:border-[#F4B400]"
-                />
-              </div>
-              <Button onClick={loadAllData}>
-                Apply Filter
+              <Button
+                variant="primary"
+                onClick={() => handleGoogleSheetsExport('system')}
+                isLoading={isExporting === 'system'}
+                className="flex items-center gap-2 px-6 rounded-xl shadow-lg shadow-amber-200"
+                disabled={isExporting !== null && isExporting !== 'system'}
+              >
+                <ExternalLink size={18} /> Google Sheets
               </Button>
             </div>
           )}
         </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Filters Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-6">
+              <Calendar className="text-amber-500" size={20} />
+              <h3 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Select Reporting Period</h3>
+            </div>
+            <PeriodSelector
+              view={periodView}
+              onChange={setPeriodView}
+              onQuickSelect={handleQuickSelect}
+            />
+          </div>
+
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm flex flex-col justify-center">
+            {periodView === 'custom' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Start</label>
+                    <input
+                      type="date"
+                      value={dateRange.start.toISOString().split('T')[0]}
+                      onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
+                      className="w-full text-sm font-semibold p-2 border border-gray-100 rounded-lg bg-gray-50 focus:ring-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">End</label>
+                    <input
+                      type="date"
+                      value={dateRange.end.toISOString().split('T')[0]}
+                      onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
+                      className="w-full text-sm font-semibold p-2 border border-gray-100 rounded-lg bg-gray-50 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+                <Button onClick={loadAllData} className="w-full rounded-xl py-3 shadow-md shadow-amber-50">
+                  Update Live Data
+                </Button>
+              </div>
+            )}
+            {periodView !== 'custom' && (
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-400">Current View</p>
+                <h4 className="text-2xl font-black text-amber-500 uppercase">{periodView}</h4>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sales Overview (ADMIN/MANAGER ONLY) */}
+        {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && systemMetrics?.systemMetrics?.salesMetrics && (
+          <div className="mb-8">
+            <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mb-4 flex items-center gap-2">
+              <span className="p-1.5 bg-green-100 text-green-600 rounded-md">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </span>
+              Sales & Financial Overview
+            </h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <StatsCard
+                title="Total Revenue"
+                value={formatINR(systemMetrics.systemMetrics.salesMetrics.totalRevenue || 0)}
+                color="blue"
+                icon={<TrendingUp size={20} />}
+              />
+              <StatsCard
+                title="Cash Collected"
+                value={formatINR(systemMetrics.systemMetrics.salesMetrics.totalCollected || 0)}
+                color="green"
+                icon={<CheckCircle2 size={20} />}
+              />
+              <StatsCard
+                title="Pending Balance"
+                value={formatINR(systemMetrics.systemMetrics.salesMetrics.pendingBalance || 0)}
+                color="orange"
+                icon={<Clock size={20} />}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* High-Level Stats Cards */}
+        <div className="mb-6 flex items-center gap-2">
+          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Active Pipeline Stats</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
           <StatsCard
-            title="Total Jobs"
+            title="Jobs Found"
             value={totalJobs}
             color="blue"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            }
+            icon={<Briefcase size={20} />}
           />
           <StatsCard
-            title="Total Applications"
+            title="Applications"
             value={totalApplications}
             color="purple"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            }
+            icon={<FileCheck size={20} />}
           />
           <StatsCard
             title="Active Pipeline"
             value={activeApplications}
             color="green"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
+            icon={<TrendingUp size={20} />}
           />
           <StatsCard
-            title="Offers Made"
+            title="Offers Secured"
             value={offers}
             color="orange"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
+            icon={<CheckCircle2 size={20} />}
           />
         </div>
 
-        {/* Conversion Rates */}
-        {systemMetrics?.systemMetrics?.conversionRates && (
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Conversion Rates</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="text-sm text-gray-600 mb-1">Identified → Applied</div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {systemMetrics.systemMetrics.conversionRates.identifiedToApplied.toFixed(1)}%
+        {/* Visual Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Main Funnel Chart */}
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="text-blue-600" size={20} />
+                <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Application Funnel</h2>
+              </div>
+              <Users className="text-gray-300" size={24} />
+            </div>
+            <AppFunnelChart data={systemMetrics?.funnelPerformance || []} />
+          </div>
+
+          {/* Platform Distribution */}
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2">
+                <PieChartIcon className="text-amber-500" size={20} />
+                <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Source Distribution</h2>
+              </div>
+              <Briefcase className="text-gray-300" size={24} />
+            </div>
+            <PlatformSourcePie data={systemMetrics?.platformUsage || []} />
+          </div>
+
+          {/* Time Efficiency */}
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2">
+                <Clock className="text-emerald-500" size={20} />
+                <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Time Efficiency (Days)</h2>
+              </div>
+            </div>
+            <StageTimeBarChart data={systemMetrics?.averageTimePerStage || []} />
+          </div>
+
+          {/* Recruiter Comparison (Visual) */}
+          {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && recruiterComparison.length > 0 && (
+            <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-2">
+                  <Users className="text-purple-500" size={20} />
+                  <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Recruiter Performance</h2>
                 </div>
               </div>
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="text-sm text-gray-600 mb-1">Applied → Interview</div>
-                <div className="text-2xl font-bold text-green-600">
-                  {systemMetrics.systemMetrics.conversionRates.appliedToInterview.toFixed(1)}%
-                </div>
+              <PerformanceComparisonChart data={recruiterComparison} />
+            </div>
+          )}
+        </div>
+
+        {/* Raw Data Table (ADMIN/MANAGER ONLY) */}
+        {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && (
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight">Agent Performance Metrics</h2>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => handleExport('recruiter-comparison')} className="rounded-lg">
+                  CSV
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => handleGoogleSheetsExport('recruiter-comparison')} className="rounded-lg">
+                  Sheets
+                </Button>
               </div>
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="text-sm text-gray-600 mb-1">Interview → Offer</div>
-                <div className="text-2xl font-bold text-orange-600">
-                  {systemMetrics.systemMetrics.conversionRates.interviewToOffer.toFixed(1)}%
-                </div>
-              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <RecruiterComparisonTable
+                data={recruiterComparison}
+                onRecruiterClick={(recruiterId) => {
+                  setSelectedRecruiterId(recruiterId)
+                  router.push(`/reports?recruiterId=${recruiterId}`)
+                }}
+              />
             </div>
           </div>
         )}
-
-        {/* Recruiter Performance Comparison (Admin/Manager only) */}
-        {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && recruiterComparison.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Recruiter Performance Comparison</h2>
-              <Button variant="secondary" size="sm" onClick={() => handleExport('recruiter-comparison')}>
-                Export CSV
-              </Button>
-            </div>
-            <RecruiterComparisonTable
-              data={recruiterComparison}
-              onRecruiterClick={(recruiterId) => {
-                setSelectedRecruiterId(recruiterId)
-                router.push(`/reports?recruiterId=${recruiterId}`)
-              }}
-            />
-          </div>
-        )}
-
-        {/* Average Time Per Stage */}
-        {systemMetrics?.averageTimePerStage && systemMetrics.averageTimePerStage.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Average Time Per Stage</h2>
-            <div className="space-y-4">
-              {systemMetrics.averageTimePerStage
-                .filter(item => item.count > 0)
-                .map((item) => (
-                  <div key={item.stage}>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-900">
-                        {STAGE_LABELS[item.stage] || item.stage}
-                      </span>
-                      <span className="text-sm text-gray-700">
-                        {item.averageDays} days (avg) • {item.count} applications
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className="bg-[#1F3A5F] h-3 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min((item.averageDays / 30) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Platform Usage */}
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Platform Usage</h2>
-            {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && (
-              <Button variant="secondary" size="sm" onClick={() => handleExport('platform')}>
-                Export CSV
-              </Button>
-            )}
-          </div>
-          <div className="space-y-4">
-            {systemMetrics?.platformUsage.map((item) => {
-              const percentage = totalJobs > 0 ? (item.count / totalJobs) * 100 : 0
-              return (
-                <div key={item.source}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-900">{item.source}</span>
-                    <span className="text-sm text-gray-700">{item.count} jobs ({percentage.toFixed(1)}%)</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-[#1F3A5F] h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Funnel Performance */}
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Application Funnel</h2>
-            {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && (
-              <Button variant="secondary" size="sm" onClick={() => handleExport('funnel')}>
-                Export CSV
-              </Button>
-            )}
-          </div>
-          <div className="space-y-4">
-            {systemMetrics?.funnelPerformance.map((item) => {
-              const percentage = totalApplications > 0 ? (item.count / totalApplications) * 100 : 0
-              const isActive = !['REJECTED', 'CLOSED'].includes(item.stage)
-              return (
-                <div key={item.stage}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
-                      {STAGE_LABELS[item.stage] || item.stage}
-                    </span>
-                    <span className={`text-sm ${isActive ? 'text-gray-700' : 'text-gray-600'}`}>
-                      {item.count} applications ({percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        isActive ? 'bg-[#1F3A5F]' : 'bg-gray-400'
-                      }`}
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Stage Distribution */}
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Stage Distribution</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {systemMetrics?.funnelPerformance.map((item) => (
-              <div
-                key={item.stage}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900">
-                    {STAGE_LABELS[item.stage] || item.stage}
-                  </span>
-                  <span className="text-lg font-bold text-[#1F3A5F]">{item.count}</span>
-                </div>
-                <div className="text-xs text-gray-700">
-                  {totalApplications > 0 ? ((item.count / totalApplications) * 100).toFixed(1) : 0}% of total
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </DashboardLayout>
   )

@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Modal, Input, Select, Button, Alert } from './index'
-import { ServiceType } from '@prisma/client'
+import { Modal, Input, Select, Button, Alert, Textarea } from './index'
 
 interface PreparationStepModalProps {
   isOpen: boolean
@@ -25,6 +24,7 @@ export function PreparationStepModal({
   const [error, setError] = useState('')
   const [formData, setFormData] = useState<any>({})
   const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
+  const [strategyFiles, setStrategyFiles] = useState<File[]>([])
 
   useEffect(() => {
     if (isOpen) {
@@ -42,19 +42,33 @@ export function PreparationStepModal({
         setFormData({ reverseRecruiterId: currentValue || '' })
         break
       case 'Gmail ID Creation':
-        setFormData({ 
+        setFormData({
           gmailId: currentValue?.gmailId || '',
           gmailCreated: currentValue?.gmailCreated || false,
         })
         break
       case 'WhatsApp Group Created':
-        setFormData({ 
+        setFormData({
           whatsappGroupCreated: currentValue?.whatsappGroupCreated || false,
           whatsappGroupId: currentValue?.whatsappGroupId || '',
         })
         break
       case 'LinkedIn Optimized':
         setFormData({ linkedInOptimized: currentValue || false })
+        break
+      case 'Job Search Strategy':
+        setFormData({
+          strategyDescription: currentValue?.description || '',
+          strategyLink: currentValue?.link || '',
+        })
+        setStrategyFiles([])
+        break
+      case 'Resume + Cover Letter':
+        setFormData({
+          resumeDescription: currentValue?.description || '',
+          resumeLink: currentValue?.link || '',
+        })
+        setStrategyFiles([])
         break
       default:
         setFormData({})
@@ -66,7 +80,7 @@ export function PreparationStepModal({
       const token = localStorage.getItem('token')
       if (!token) return
 
-      const response = await fetch('/api/users?role=RECRUITER', {
+      const response = await fetch('/api/users?role=RECRUITER,SALES', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -134,6 +148,127 @@ export function PreparationStepModal({
             linkedInOptimizedAt: formData.linkedInOptimized ? new Date().toISOString() : undefined,
           }
           break
+        case 'Job Search Strategy': {
+          if (!strategyFiles.length) {
+            setError('Please upload at least one strategy file.')
+            return
+          }
+
+          const descriptionParts: string[] = []
+          if (formData.strategyDescription) {
+            descriptionParts.push(formData.strategyDescription)
+          }
+          if (formData.strategyLink) {
+            descriptionParts.push(`Link: ${formData.strategyLink}`)
+          }
+          const description = descriptionParts.join('\n\n') || undefined
+
+          for (const file of strategyFiles) {
+            const uploadForm = new FormData()
+            uploadForm.append('file', file)
+            uploadForm.append('fileType', 'DOCUMENT')
+
+            const uploadResponse = await fetch('/api/files/upload', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              credentials: 'include',
+              body: uploadForm,
+            })
+
+            if (!uploadResponse.ok) {
+              const uploadError = await uploadResponse.json().catch(() => ({}))
+              throw new Error(uploadError.error || 'Failed to upload strategy file')
+            }
+
+            const fileRecord = await uploadResponse.json()
+
+            const documentResponse = await fetch(`/api/clients/${clientId}/documents`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                type: 'JOB_SEARCH_STRATEGY',
+                fileUrl: fileRecord.fileUrl,
+                fileName: fileRecord.fileName,
+                originalFileName: file.name || undefined,
+                fileSize: fileRecord.fileSize,
+                description,
+              }),
+            })
+
+            if (!documentResponse.ok) {
+              const docError = await documentResponse.json().catch(() => ({}))
+              throw new Error(docError.error || 'Failed to save job search strategy document')
+            }
+          }
+
+          onSuccess()
+          onClose()
+          return
+        }
+        case 'Resume + Cover Letter': {
+          if (!strategyFiles.length) {
+            setError('Please upload at least one file (resume or cover letter).')
+            return
+          }
+
+          const descriptionParts: string[] = []
+          if (formData.resumeDescription) {
+            descriptionParts.push(formData.resumeDescription)
+          }
+          if (formData.resumeLink) {
+            descriptionParts.push(`Link: ${formData.resumeLink}`)
+          }
+          const description = descriptionParts.join('\n\n') || undefined
+
+          for (const file of strategyFiles) {
+            const uploadForm = new FormData()
+            uploadForm.append('file', file)
+            uploadForm.append('fileType', 'DOCUMENT')
+
+            const uploadResponse = await fetch('/api/files/upload', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              credentials: 'include',
+              body: uploadForm,
+            })
+
+            if (!uploadResponse.ok) {
+              const uploadError = await uploadResponse.json().catch(() => ({}))
+              throw new Error(uploadError.error || 'Failed to upload file')
+            }
+
+            const fileRecord = await uploadResponse.json()
+
+            const letterResponse = await fetch(`/api/clients/${clientId}/cover-letters`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                fileUrl: fileRecord.fileUrl,
+                fileName: fileRecord.fileName,
+                originalFileName: file.name || undefined,
+                fileSize: fileRecord.fileSize,
+                description,
+              }),
+            })
+
+            if (!letterResponse.ok) {
+              const letterError = await letterResponse.json().catch(() => ({}))
+              throw new Error(letterError.error || 'Failed to save resume/cover letter')
+            }
+          }
+
+          onSuccess()
+          onClose()
+          return
+        }
         default:
           setError('Step not editable')
           return
@@ -254,6 +389,78 @@ export function PreparationStepModal({
             <label htmlFor="linkedInOptimized" className="text-sm text-gray-700">LinkedIn Optimized</label>
           </div>
         )
+      case 'Job Search Strategy':
+        return (
+          <>
+            <Textarea
+              label="Job Search Strategy Notes"
+              value={formData.strategyDescription || ''}
+              onChange={(e) => setFormData({ ...formData, strategyDescription: e.target.value })}
+              placeholder="Describe the job search strategy, key focus areas, target roles, locations, etc."
+              rows={4}
+            />
+            <Input
+              label="Strategy Link (optional)"
+              type="url"
+              value={formData.strategyLink || ''}
+              onChange={(e) => setFormData({ ...formData, strategyLink: e.target.value })}
+              placeholder="e.g., Notion doc, Google Drive link"
+            />
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Strategy Files (PDF, Word, Excel, images, videos, etc.)
+              </label>
+              <input
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || [])
+                  setStrategyFiles(files)
+                }}
+                className="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-gray-300 file:text-sm file:font-medium file:bg-white file:text-gray-700 hover:file:bg-gray-50"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                You can upload multiple files: PDFs, docs, spreadsheets, images, videos, etc.
+              </p>
+            </div>
+          </>
+        )
+      case 'Resume + Cover Letter':
+        return (
+          <>
+            <Textarea
+              label="Notes (optional)"
+              value={formData.resumeDescription || ''}
+              onChange={(e) => setFormData({ ...formData, resumeDescription: e.target.value })}
+              placeholder="e.g., which role this resume targets, cover letter summary"
+              rows={4}
+            />
+            <Input
+              label="Link (optional)"
+              type="url"
+              value={formData.resumeLink || ''}
+              onChange={(e) => setFormData({ ...formData, resumeLink: e.target.value })}
+              placeholder="e.g., Google Doc, Drive link"
+            />
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Resume & Cover Letter Files (PDF, Word, etc.)
+              </label>
+              <input
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || [])
+                  setStrategyFiles(files)
+                }}
+                className="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-gray-300 file:text-sm file:font-medium file:bg-white file:text-gray-700 hover:file:bg-gray-50"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Upload one or more resumes or cover letters. At least one file is required.
+              </p>
+            </div>
+          </>
+        )
       default:
         return <p className="text-gray-500">This step cannot be edited directly.</p>
     }
@@ -268,7 +475,7 @@ export function PreparationStepModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <Alert variant="error">{error}</Alert>}
-        
+
         {renderFormFields()}
 
         <div className="flex justify-end gap-3 pt-4">

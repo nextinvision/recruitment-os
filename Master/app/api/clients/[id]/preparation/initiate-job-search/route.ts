@@ -43,6 +43,26 @@ export async function POST(
       return addCorsHeaders(response, origin)
     }
 
+    // Ensure job search strategy document is linked (Step 6)
+    if (!oldClient.jobSearchStrategyDocId) {
+      const response = NextResponse.json(
+        { error: 'Job search strategy must be documented (Step 6) before initiating job search' },
+        { status: 400 }
+      )
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+
+    // Ensure at least one resume/cover letter is prepared (Step 8)
+    if (!oldClient._count || !oldClient._count.coverLetters || oldClient._count.coverLetters < 1) {
+      const response = NextResponse.json(
+        { error: 'At least one resume + cover letter must be prepared (Step 8) before initiating job search' },
+        { status: 400 }
+      )
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+
     // Update client to initiate job search
     const client = await updateClient({
       id,

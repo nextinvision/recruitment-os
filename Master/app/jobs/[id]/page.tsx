@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Spinner, Badge, Button, JobAssignmentModal, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { Modal, Spinner, Badge, Button, JobAssignmentModal, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 
 interface Job {
@@ -74,7 +74,7 @@ export default function JobDetailPage() {
   const [assignmentJobId, setAssignmentJobId] = useState<string>('')
   const [assignmentJobTitle, setAssignmentJobTitle] = useState<string>('')
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   useEffect(() => {
     if (jobId) {
@@ -201,7 +201,6 @@ export default function JobDetailPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -347,12 +346,11 @@ export default function JobDetailPage() {
                         <span className="font-semibold text-careerist-text-primary">
                           {application.client.firstName} {application.client.lastName}
                         </span>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
                           application.stage === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                          application.stage === 'CLOSED' ? 'bg-gray-100 text-gray-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
+                            application.stage === 'CLOSED' ? 'bg-gray-100 text-gray-800' :
+                              'bg-blue-100 text-blue-800'
+                          }`}>
                           {STAGE_LABELS[application.stage] || application.stage}
                         </span>
                       </div>
@@ -482,9 +480,9 @@ function JobEditForm({
         onSuccess()
       } else {
         const data = await response.json().catch(() => ({ error: 'Failed to update job' }))
-        const errorMessage = typeof data.error === 'string' 
-          ? data.error 
-          : Array.isArray(data.error) 
+        const errorMessage = typeof data.error === 'string'
+          ? data.error
+          : Array.isArray(data.error)
             ? data.error.map((e: { message?: string } | string) => typeof e === 'string' ? e : e.message || 'Error').join(', ')
             : (data.error as { message?: string })?.message || 'Failed to update job'
         setError(errorMessage)

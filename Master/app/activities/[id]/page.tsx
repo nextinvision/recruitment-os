@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 
 interface Activity {
@@ -61,7 +61,7 @@ export default function ActivityDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
   const { dialogState, showConfirm, closeDialog } = useConfirmDialog()
 
   useEffect(() => {
@@ -147,7 +147,6 @@ export default function ActivityDetailPage() {
     return (
       <DashboardLayout>
         <Spinner fullScreen />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </DashboardLayout>
     )
   }
@@ -159,14 +158,12 @@ export default function ActivityDetailPage() {
         <Button onClick={() => router.push('/activities')} variant="ghost">
           ← Back to Activities
         </Button>
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </DashboardLayout>
     )
   }
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -334,9 +331,9 @@ function ActivityEditForm({
         onSuccess()
       } else {
         const data = await response.json()
-        const errorMessage = typeof data.error === 'string' 
-          ? data.error 
-          : Array.isArray(data.error) 
+        const errorMessage = typeof data.error === 'string'
+          ? data.error
+          : Array.isArray(data.error)
             ? data.error.map((e: { message?: string } | string) => typeof e === 'string' ? e : e.message || 'Error').join(', ')
             : (data.error as { message?: string })?.message || 'Failed to update activity'
         setError(errorMessage)

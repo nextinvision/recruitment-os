@@ -6,7 +6,7 @@
 
 export const PAGE_ACCESS_CONFIG_KEY = 'access.page_roles'
 
-export const ROLES = ['ADMIN', 'MANAGER', 'RECRUITER'] as const
+export const ROLES = ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'] as const
 export type PageAccessRole = (typeof ROLES)[number]
 
 /** Paths that can be configured. Order matters for longest-prefix matching (more specific first). */
@@ -17,6 +17,7 @@ export const PAGES: { path: string; label: string }[] = [
   { path: '/applications', label: 'Applications' },
   { path: '/leads', label: 'Leads' },
   { path: '/clients', label: 'Clients' },
+  { path: '/companies', label: 'Companies' },
   { path: '/followups', label: 'Follow-ups' },
   { path: '/activities', label: 'Activities' },
   { path: '/ats-resume-analysis', label: 'AI Resume Analysis' },
@@ -28,16 +29,17 @@ export const PAGES: { path: string; label: string }[] = [
 
 /** Default role access per path (current app behavior). No entry = allow all roles. */
 export const PAGE_ACCESS_DEFAULTS: Record<string, string[]> = {
-  '/dashboard': ['ADMIN', 'MANAGER', 'RECRUITER'],
+  '/dashboard': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
   '/jobs': ['ADMIN', 'MANAGER', 'RECRUITER'],
   '/applications': ['ADMIN', 'MANAGER', 'RECRUITER'],
-  '/leads': ['ADMIN', 'MANAGER', 'RECRUITER'],
-  '/clients': ['ADMIN', 'MANAGER', 'RECRUITER'],
-  '/followups': ['ADMIN', 'MANAGER', 'RECRUITER'],
-  '/activities': ['ADMIN', 'MANAGER', 'RECRUITER'],
+  '/leads': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
+  '/clients': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
+  '/companies': ['ADMIN', 'MANAGER', 'RECRUITER'],
+  '/followups': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
+  '/activities': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
   '/ats-resume-analysis': ['ADMIN', 'MANAGER', 'RECRUITER'],
   '/resume-builder': ['ADMIN', 'MANAGER', 'RECRUITER'],
-  '/revenues': ['ADMIN', 'MANAGER', 'RECRUITER'],
+  '/revenues': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
   '/reports': ['ADMIN', 'MANAGER'],
   '/dashboard/escalations': ['ADMIN', 'MANAGER'],
   '/admin': ['ADMIN', 'MANAGER'],

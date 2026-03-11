@@ -711,6 +711,36 @@ async function main() {
       enabled: true,
       createdBy: admin.id,
     },
+    {
+      name: 'Follow-up message -1',
+      type: MessageTemplateType.FOLLOW_UP,
+      channel: MessageChannel.WHATSAPP,
+      subject: null,
+      content: 'Hi {{name}},\nHope you’re doing well. I wanted to check if you had a chance to review the proposal I shared earlier this week. Please let me know if you’d like me to walk you through any section or discuss next steps.\n\nLooking forward to your feedback!\nWarm regards,\nKarishma',
+      variables: JSON.stringify(['name']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Follow-up message -2',
+      type: MessageTemplateType.FOLLOW_UP,
+      channel: MessageChannel.WHATSAPP,
+      subject: null,
+      content: 'Hi {{name}},\nI wanted to follow up on the proposal I shared. I truly believe our reverse recruiting service can help you land interviews 2x faster! Would you like to set up a quick call to go over it together? Best, Karishma',
+      variables: JSON.stringify(['name']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Follow-up message -3',
+      type: MessageTemplateType.FOLLOW_UP,
+      channel: MessageChannel.WHATSAPP,
+      subject: null,
+      content: 'Hi {{name}},\nI wanted to follow up on the proposal shared earlier. If you’ve already made a decision, I’d really appreciate a quick update — it helps me plan my schedule better. If you’re still evaluating options, I’d be happy to clarify any questions or modify the proposal based on your priorities. \nWarm regards, Karishma',
+      variables: JSON.stringify(['name']),
+      enabled: true,
+      createdBy: admin.id,
+    },
   ]
 
   const createdTemplates = []

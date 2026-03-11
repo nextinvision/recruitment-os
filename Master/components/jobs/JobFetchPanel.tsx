@@ -33,12 +33,10 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
   const searchEngineId = 'c146913a207604fe4' // Default from .env, can be made configurable
 
   const sources = [
-    { value: 'ALL', label: 'All Sources', description: 'Fetch from Google, Adzuna, and Jooble' },
+    { value: 'ALL', label: 'All Sources', description: 'Fetch from Google and Adzuna' },
     { value: 'JOBSPY', label: 'JobSpy Scraper', description: 'Indeed, LinkedIn, Naukri, Glassdoor (scraper API)' },
     { value: 'GOOGLE', label: 'Google Search', description: 'Search across LinkedIn, Indeed, Glassdoor, etc.' },
     { value: 'ADZUNA', label: 'Adzuna', description: 'Global job aggregator' },
-    { value: 'JOOBLE', label: 'Jooble', description: 'Job search engine' },
-    { value: 'INDEED_RSS', label: 'Indeed RSS', description: 'Indeed job feed' },
   ]
 
   const handleFetch = async (source: string) => {
@@ -151,7 +149,7 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
 
   const handleFetchAll = async () => {
     // Fetch from all sources sequentially
-    for (const source of ['GOOGLE', 'ADZUNA', 'JOOBLE']) {
+    for (const source of ['GOOGLE', 'ADZUNA']) {
       await handleFetch(source)
       // Small delay between sources to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 1000))

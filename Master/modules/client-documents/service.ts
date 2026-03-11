@@ -7,6 +7,7 @@ export const createClientDocumentSchema = z.object({
   type: z.nativeEnum(DocumentType),
   fileUrl: z.string().min(1, 'File URL is required'),
   fileName: z.string().min(1, 'File name is required'),
+  originalFileName: z.string().optional(), // User-facing name as uploaded
   fileSize: z.number().int().min(1, 'File size is required'),
   uploadedBy: z.string().min(1, 'Uploaded by is required'),
   description: z.string().optional(),

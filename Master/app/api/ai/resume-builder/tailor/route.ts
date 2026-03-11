@@ -22,36 +22,47 @@ export async function POST(request: NextRequest) {
     requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
-    const { resume_data, job_id } = body
+    const { resume_data, job_id, manual_jd } = body
 
-    if (!resume_data || !job_id) {
+    if (!resume_data || (!job_id && !manual_jd)) {
       const response = NextResponse.json(
-        { error: 'resume_data and job_id are required' },
+        { error: 'resume_data and either job_id or manual_jd are required' },
         { status: 400 }
       )
       return addCorsHeaders(response, request.headers.get('origin'))
     }
 
-    const job = await db.job.findUnique({
-      where: { id: job_id },
-    })
+    let jobForAI: any
 
-    if (!job) {
-      const response = NextResponse.json(
-        { error: 'Job not found' },
-        { status: 404 }
-      )
-      return addCorsHeaders(response, request.headers.get('origin'))
-    }
+    if (manual_jd) {
+      jobForAI = {
+        id: 'manual',
+        title: 'Target Job',
+        company: 'Target Company',
+        location: '',
+        description: manual_jd,
+        requirements: [],
+        skills: [],
+      }
+    } else {
+      const job = await db.job.findUnique({
+        where: { id: job_id },
+      })
 
-    const jobForAI = {
-      id: job.id,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      description: job.description,
-      requirements: job.skills,
-      skills: job.skills,
+      if (!job) {
+        const response = NextResponse.json({ error: 'Job not found' }, { status: 404 })
+        return addCorsHeaders(response, request.headers.get('origin'))
+      }
+
+      jobForAI = {
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        requirements: job.skills,
+        skills: job.skills,
+      }
     }
 
     const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:8080'

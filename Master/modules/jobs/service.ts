@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { UserRole, JobSource, JobStatus } from '@prisma/client'
+import { UserRole, JobSource, JobStatus, JobType } from '@prisma/client'
 import {
   createJobSchema,
   updateJobSchema,
@@ -134,11 +134,18 @@ async function detectDuplicates(jobData: any): Promise<{ jobId: string; similari
 export interface JobFilters {
   source?: JobSource
   status?: JobStatus
+  jobType?: JobType
   recruiterId?: string
   startDate?: Date
   endDate?: Date
   search?: string
   isDuplicate?: boolean
+  title?: string
+  company?: string
+  location?: string
+  skills?: string
+  ctcRange?: string
+  yearsOfExperience?: string
 }
 
 export interface JobSortOptions {
@@ -291,12 +298,37 @@ export async function getJobs(
     if (filters.isDuplicate !== undefined) {
       where.isDuplicate = filters.isDuplicate
     }
+    if (filters.jobType) {
+      where.jobType = filters.jobType
+    }
+    if (filters.title) {
+      where.title = { contains: filters.title, mode: 'insensitive' }
+    }
+    if (filters.company) {
+      where.company = { contains: filters.company, mode: 'insensitive' }
+    }
+    if (filters.location) {
+      where.location = { contains: filters.location, mode: 'insensitive' }
+    }
+    if (filters.ctcRange) {
+      where.salaryRange = { contains: filters.ctcRange, mode: 'insensitive' }
+    }
+    if (filters.yearsOfExperience) {
+      where.experienceRequired = { contains: filters.yearsOfExperience, mode: 'insensitive' }
+    }
+    if (filters.skills) {
+      const skillList = filters.skills.split(',').map(s => s.trim()).filter(s => s !== '')
+      if (skillList.length > 0) {
+        where.skills = { hasSome: skillList }
+      }
+    }
     if (filters.search) {
       where.OR = [
         { title: { contains: filters.search, mode: 'insensitive' } },
         { company: { contains: filters.search, mode: 'insensitive' } },
         { location: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
+        { skills: { hasSome: [filters.search] } },
       ]
     }
   }
@@ -424,44 +456,44 @@ export async function bulkCreateJobs(input: BulkCreateJobsInput) {
   // Normalize all jobs
   const normalizedJobs = validated.jobs.map(job => normalizeJobData(job))
 
-  // Use transaction for bulk create
-  const result = await db.$transaction(async (tx) => {
-    const createdJobs = []
+  const createdJobs = []
 
-    for (const jobData of normalizedJobs) {
-      // Detect duplicates
-      const duplicates = await detectDuplicates(jobData)
-      const isDuplicate = duplicates.length > 0
-      const duplicateOf = isDuplicate ? duplicates[0].jobId : null
-      const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
+  for (const jobData of normalizedJobs) {
+    // Detect duplicates
+    const duplicates = await detectDuplicates(jobData)
+    const isDuplicate = duplicates.length > 0
+    const duplicateOf = isDuplicate ? duplicates[0].jobId : null
+    const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
 
-      try {
-        const job = await tx.job.create({
-          data: {
-            ...jobData,
-            isDuplicate,
-            duplicateOf,
-            similarityScore,
-          },
-        })
+    try {
+      const job = await db.job.create({
+        data: {
+          ...jobData,
+          isDuplicate,
+          duplicateOf,
+          similarityScore,
+        },
+      })
 
-        // Generate and append the vector embedding in postgres within the transaction
-        await injectEmbedding(job.id, job.title, job.company, job.skills, job.description, tx)
+      // Generate and append the vector embedding in postgres (InBackground)
+      // This ensures the backend responds instantly and avoids connection timeouts
+      // for large batches (like 150+ jobs).
+      injectEmbedding(job.id, job.title, job.company, job.skills, job.description).catch((err) => {
+        console.error(`[Background Task] Failed to inject embedding for job ${job.id}:`, err)
+      })
 
-        createdJobs.push(job)
-      } catch (error) {
-        // Skip duplicates or errors, continue with next job
-        console.error('Failed to create job:', error)
-      }
+      createdJobs.push(job)
+    } catch (error) {
+      // Skip errors, continue with next job
+      console.error('Failed to create job in bulk batch:', error)
     }
+  }
 
-    return {
-      count: createdJobs.length,
-      jobs: createdJobs,
-    }
-  })
-
-  return result
+  return {
+    success: true,
+    count: createdJobs.length,
+    jobs: createdJobs,
+  }
 }
 
 // Assign job to candidate (creates application)

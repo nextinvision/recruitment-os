@@ -10,7 +10,7 @@ export const maxDuration = 300
 const fetchJobsSchema = z.object({
   query: z.string().optional(),
   location: z.string().optional(),
-  source: z.enum(['GOOGLE', 'ADZUNA', 'JOOBLE', 'INDEED_RSS', 'JOBSPY', 'SERPAPI', 'ALL']).default('ALL'),
+  source: z.enum(['GOOGLE', 'ADZUNA', 'JOBSPY', 'SERPAPI', 'ALL']).default('ALL'),
   limit: z.number().int().min(1).max(500).optional().default(50),
   /** JobSpy: sites to scrape (e.g. indeed, linkedin, naukri). Accepts array or comma-separated string. */
   sites: z
@@ -29,7 +29,7 @@ export async function OPTIONS(request: NextRequest) {
 
 /**
  * POST /api/jobs/fetch
- * Fetch jobs from external APIs (Google, Adzuna, Jooble, etc.)
+ * Fetch jobs from external APIs (Google, Adzuna, JobSpy, SerpApi, etc.)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
             fetchService.fetchFromGoogle({
               query: validated.query,
               location: validated.location,
-              limit: Math.floor(validated.limit / 3), // Distribute limit across sources
+              limit: Math.floor(validated.limit / 2), // Distribute limit across Google and Adzuna
               source: 'GOOGLE',
             }).catch(err => {
               console.error('Google fetch error:', err)
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
             fetchService.fetchFromAdzuna({
               query: validated.query,
               location: validated.location || 'us',
-              limit: Math.floor(validated.limit / 3),
+              limit: Math.floor(validated.limit / 2),
               source: 'ADZUNA',
             }).catch(err => {
               console.error('Adzuna fetch error:', err)
@@ -86,23 +86,6 @@ export async function POST(request: NextRequest) {
           )
         } catch (err) {
           console.error('Adzuna fetch setup error:', err)
-        }
-
-        // Try Jooble
-        try {
-          fetchPromises.push(
-            fetchService.fetchFromJooble({
-              query: validated.query,
-              location: validated.location,
-              limit: Math.floor(validated.limit / 3),
-              source: 'JOOBLE',
-            }).catch(err => {
-              console.error('Jooble fetch error:', err)
-              return []
-            })
-          )
-        } catch (err) {
-          console.error('Jooble fetch setup error:', err)
         }
 
         // Wait for all fetches to complete
@@ -162,22 +145,6 @@ export async function POST(request: NextRequest) {
                 location: validated.location || 'us',
                 limit: validated.limit,
                 source: 'ADZUNA',
-              })
-              break
-            case 'JOOBLE':
-              jobs = await fetchService.fetchFromJooble({
-                query: validated.query,
-                location: validated.location,
-                limit: validated.limit,
-                source: 'JOOBLE',
-              })
-              break
-            case 'INDEED_RSS':
-              jobs = await fetchService.fetchFromIndeedRSS({
-                query: validated.query,
-                location: validated.location,
-                limit: validated.limit,
-                source: 'INDEED_RSS',
               })
               break
             case 'JOBSPY':

@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { ActivityTimeline, Modal, Button, Badge, Spinner, Input, Textarea, Select, Alert, FormActions, ToastContainer, useToast, ConfirmDialog, useConfirmDialog, PreparationPipelineBoard, PreparationStepModal } from '@/ui'
+import { ActivityTimeline, Modal, Button, Badge, Spinner, Input, Textarea, Select, Alert, FormActions, useToast, ConfirmDialog, useConfirmDialog, PreparationPipelineBoard, PreparationStepModal, FunnelChartWidget, StatsCard } from '@/ui'
+import { ChevronDown, Clock, MapPin } from 'lucide-react'
+import { ResumePreview } from '@/components/resume-builder/ResumePreview'
+import { formatINR } from '@/lib/currency'
 import Link from 'next/link'
 
 interface Client {
@@ -46,12 +49,34 @@ interface Client {
     resumeDrafts?: number
   }
   resumeDrafts?: ResumeDraft[]
+  /** Cover letters / resumes from Preparation step (from API include) */
+  coverLetters?: Array<{
+    id: string
+    fileName: string
+    originalFileName?: string | null
+    fileUrl: string
+    fileSize: number
+    description?: string | null
+    uploadedAt: string
+  }>
+  /** Client documents (from API include): job search strategy, etc. */
+  documents?: Array<{
+    id: string
+    type: string
+    fileName: string
+    originalFileName?: string | null
+    fileUrl: string
+    fileSize: number
+    description?: string | null
+    uploadedAt: string
+  }>
 }
 
 interface ResumeDraft {
   id: string
   content: any
   template: string
+  atsScore?: number
   updatedAt: string
 }
 
@@ -78,12 +103,27 @@ export default function ClientProfilePage() {
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'preparation' | 'resumes' | 'activities'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'preparation' | 'resumes' | 'approvals' | 'activities' | 'reports'>('overview')
   const [preparationStatus, setPreparationStatus] = useState<any>(null)
   const [selectedStep, setSelectedStep] = useState<string | null>(null)
   const [showStepModal, setShowStepModal] = useState(false)
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
+  const [previewingDraft, setPreviewingDraft] = useState<ResumeDraft | null>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const [reportsData, setReportsData] = useState<any>(null)
+  const [loadingReports, setLoadingReports] = useState(false)
+  const [reportSnapshot, setReportSnapshot] = useState<any>(null)
+  const [generatingSnapshot, setGeneratingSnapshot] = useState(false)
+  const [showReportNotificationModal, setShowReportNotificationModal] = useState(false)
+  const [reportTemplates, setReportTemplates] = useState<any[]>([])
+
+  // Send Resume State
+  const [showSendResumeModal, setShowSendResumeModal] = useState(false)
+  const [resumeToSend, setResumeToSend] = useState<ResumeDraft | null>(null)
+  const [sendResumeTemplateId, setSendResumeTemplateId] = useState('')
+  const [sendingResume, setSendingResume] = useState(false)
+  const [emailTemplates, setEmailTemplates] = useState<any[]>([])
 
   useEffect(() => {
     if (!clientId) {
@@ -95,8 +135,29 @@ export default function ClientProfilePage() {
     loadClient()
     loadActivities()
     loadPreparationStatus()
+    loadEmailTemplates()
+    if (activeTab === 'reports') {
+      loadReportsData()
+      loadReportSnapshot()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId])
+  }, [clientId, activeTab])
+
+  const loadEmailTemplates = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const response = await fetch('/api/messages/templates?channel=EMAIL', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setEmailTemplates(data)
+      }
+    } catch (err) {
+      console.error('Failed to load email templates', err)
+    }
+  }
 
   const loadClient = async () => {
     if (!clientId) {
@@ -221,6 +282,47 @@ export default function ClientProfilePage() {
     }
   }
 
+  const handleSendResumeEmail = async () => {
+    if (!clientId || !resumeToSend || !sendResumeTemplateId) return
+    setSendingResume(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+          channel: 'EMAIL',
+          clientId: clientId,
+          templateId: sendResumeTemplateId,
+          // We can attach context to trigger ATS / Resume merging in the backend if needed.
+          // For now, we rely on the backend being able to fetch the latest draft or we send the ID.
+          context: {
+            resumeDraftId: resumeToSend.id,
+            atsScore: resumeToSend.atsScore
+          }
+        })
+      })
+
+      if (response.ok) {
+        showToast('Resume sent successfully', 'success')
+        setShowSendResumeModal(false)
+        setResumeToSend(null)
+        setSendResumeTemplateId('')
+      } else {
+        const data = await response.json()
+        showToast(data.error || 'Failed to send resume', 'error')
+      }
+    } catch (err) {
+      console.error('Error sending resume:', err)
+      showToast('Failed to send resume', 'error')
+    } finally {
+      setSendingResume(false)
+    }
+  }
+
   const handleDelete = async () => {
     showConfirm(
       'Delete Client',
@@ -291,6 +393,220 @@ export default function ClientProfilePage() {
     )
   }
 
+  const handlePreview = (draft: ResumeDraft) => {
+    setPreviewingDraft(draft)
+  }
+
+  const handleExportPDF = (draft: ResumeDraft) => {
+    // We need to render the document to get the ref
+    // Since ResumePreview isn't rendered yet for this draft, 
+    // we use a temporary print window approach similar to the builder
+    // but we can actually use the ref from the modal if we want.
+    // However, the builder's logic is robust.
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      showToast('Pop-up blocked. Please allow pop-ups to export PDF.', 'error')
+      return
+    }
+
+    const title = `Resume - ${draft.content?.contact?.name || 'Resume'}`
+
+    // We'll use a hidden div or just render the content
+    // For now, let's use the robust logic from builder
+    // Note: This requires the content to be formatted correctly.
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${title}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+          <style>
+            @page { size: A4; margin: 0; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+            * { box-sizing: border-box; }
+            @media print {
+              .resume-preview { width: 100% !important; margin: 0 !important; padding: 40pt 45pt !important; box-shadow: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div id="preview-root"></div>
+        </body>
+      </html>
+    `)
+
+    // We can't easily react-render into another window here without complex setup
+    // but the builder's logic copied the innerHTML of a rendered component.
+    // If the modal is open, we can use previewRef.current.innerHTML.
+    // If not, we have to mount it briefly.
+
+    // Simpler approach for now: Always open the preview modal first, or provide a way to export from modal.
+    // But user asked for an export button in the list.
+
+    // Let's implement it by opening a second hidden ResumePreview or similar.
+    // Or just open the modal and tell the user to print.
+
+    // Actually, let's just use the logic from ResumeBuilder but we need the HTML.
+    // Easiest is to setPreviewingDraft, wait for mount, then print.
+    setPreviewingDraft(draft)
+    setTimeout(() => {
+      if (previewRef.current) {
+        const content = previewRef.current.outerHTML
+        printWindow.document.getElementById('preview-root')!.innerHTML = content
+        printWindow.document.close()
+        printWindow.focus()
+        setTimeout(() => {
+          printWindow.print()
+          printWindow.close()
+        }, 500)
+      } else {
+        printWindow.close()
+        showToast('Failed to generate preview for export', 'error')
+      }
+    }, 300)
+  }
+
+  const handleExportWord = (draft: ResumeDraft) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      showToast('Pop-up blocked. Please allow pop-ups to export Word.', 'error')
+      return
+    }
+
+    const title = `Resume - ${draft.content?.contact?.name || 'Resume'}`
+
+    printWindow.document.write(`
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head><meta charset='utf-8'><title>${title}</title>
+      <style>
+        body { font-family: Arial, sans-serif; }
+        .resume-preview { width: 100%; margin: 0; padding: 20px; }
+      </style>
+      </head>
+      <body>
+        <div id="preview-root"></div>
+      </body>
+      </html>
+    `)
+
+    setPreviewingDraft(draft)
+    setTimeout(() => {
+      if (previewRef.current) {
+        const content = previewRef.current.outerHTML
+        printWindow.document.getElementById('preview-root')!.innerHTML = content
+        printWindow.document.close()
+
+        const html = printWindow.document.documentElement.outerHTML
+        const blob = new Blob(['\ufeff', html], { type: 'application/msword' })
+        const url = URL.createObjectURL(blob)
+        const link = window.document.createElement('a')
+        link.href = url
+        link.download = `${title}.doc`
+        window.document.body.appendChild(link)
+        link.click()
+        window.document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        printWindow.close()
+      } else {
+        printWindow.close()
+        showToast('Failed to generate preview for export', 'error')
+      }
+    }, 300)
+  }
+
+  const loadReportsData = async () => {
+    if (!clientId) return
+    setLoadingReports(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/clients/${clientId}/analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setReportsData(data)
+      } else {
+        showToast('Failed to load reports data', 'error')
+      }
+    } catch (err) {
+      console.error('Error loading reports:', err)
+      showToast('Error loading reports data', 'error')
+    } finally {
+      setLoadingReports(false)
+    }
+  }
+
+  const loadReportSnapshot = async () => {
+    if (!clientId) return
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/clients/${clientId}/report-snapshot`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setReportSnapshot(data)
+      }
+    } catch (err) {
+      console.error('Error loading snapshot:', err)
+    }
+  }
+
+  const handleUpdateSnapshot = async (templateId?: string, sendEmail: boolean = false) => {
+    if (!clientId) return
+    try {
+      setGeneratingSnapshot(true)
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/clients/${clientId}/report-snapshot`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ templateId, sendEmail })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setReportSnapshot(data)
+        showToast(sendEmail ? 'Report updated and email sent' : 'Shared report updated successfully', 'success')
+        setShowReportNotificationModal(false)
+      } else {
+        const data = await response.json().catch(() => ({}))
+        showToast(data.error || 'Failed to update shared report', 'error')
+      }
+    } catch (err) {
+      console.error('Error updating snapshot:', err)
+      showToast('Error updating shared report', 'error')
+    } finally {
+      setGeneratingSnapshot(false)
+    }
+  }
+
+  const loadReportTemplates = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/messages/templates?channel=EMAIL', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setReportTemplates(data)
+      }
+    } catch (err) {
+      console.error('Error loading templates:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (showReportNotificationModal) {
+      loadReportTemplates()
+    }
+  }, [showReportNotificationModal])
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -302,7 +618,6 @@ export default function ClientProfilePage() {
   if (!loading && (!client || error)) {
     return (
       <DashboardLayout>
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
         <div className="text-center py-12">
           <p className="text-careerist-text-secondary">{error || 'Client not found'}</p>
           <Link href="/clients" className="text-careerist-primary-yellow hover:underline mt-4 inline-block">
@@ -323,7 +638,6 @@ export default function ClientProfilePage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -415,6 +729,15 @@ export default function ClientProfilePage() {
                 Resumes
               </button>
               <button
+                onClick={() => setActiveTab('approvals')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'approvals'
+                  ? 'border-[#F4B400] text-[#1F3A5F]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                Approvals
+              </button>
+              <button
                 onClick={() => setActiveTab('activities')}
                 className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'activities'
                   ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
@@ -422,6 +745,15 @@ export default function ClientProfilePage() {
                   }`}
               >
                 Activities
+              </button>
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'reports'
+                  ? 'border-careerist-primary-yellow text-careerist-primary-yellow'
+                  : 'border-transparent text-careerist-text-secondary hover:text-careerist-text-primary hover:border-gray-300'
+                  }`}
+              >
+                Reports
               </button>
             </nav>
           </div>
@@ -512,7 +844,43 @@ export default function ClientProfilePage() {
                     onStepClick={(stepId) => {
                       const stepIndex = parseInt(stepId.replace('step-', ''))
                       const step = preparationStatus.steps[stepIndex]
-                      if (step && ['Service Type', 'Reverse Recruiter', 'Gmail ID Creation', 'WhatsApp Group Created', 'LinkedIn Optimized'].includes(step.name)) {
+                      const modalSteps = [
+                        'Service Type',
+                        'Reverse Recruiter',
+                        'Gmail ID Creation',
+                        'WhatsApp Group Created',
+                        'LinkedIn Optimized',
+                        'Job Search Strategy',
+                        'Resume + Cover Letter',
+                      ]
+
+                      if (!step) {
+                        showToast('This step cannot be edited directly', 'info')
+                        return
+                      }
+
+                      if (step.name === 'Job Search Initiated') {
+                        if (step.completed) {
+                          showToast('Job search has already been initiated for this client.', 'info')
+                          return
+                        }
+
+                        showConfirm(
+                          'Initiate Job Search',
+                          'This will mark the preparation pipeline as ready and record that job search has started for this client. Are you sure you want to continue?',
+                          async () => {
+                            await handleInitiateJobSearch()
+                          },
+                          {
+                            variant: 'info',
+                            confirmText: 'Yes, initiate',
+                            cancelText: 'Cancel',
+                          }
+                        )
+                        return
+                      }
+
+                      if (modalSteps.includes(step.name)) {
                         setSelectedStep(step.name)
                         setShowStepModal(true)
                       } else {
@@ -523,6 +891,77 @@ export default function ClientProfilePage() {
                   />
                 ) : (
                   <Spinner />
+                )}
+                {/* Job Search Strategy documents: where to find what was added in Step 6 */}
+                {client?.documents && client.documents.filter((d: { type: string }) => d.type === 'JOB_SEARCH_STRATEGY').length > 0 && (
+                  <div className="mt-6 bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+                    <h3 className="text-lg font-semibold text-careerist-text-primary mb-2">Job Search Strategy</h3>
+                    <p className="text-sm text-careerist-text-secondary mb-4">
+                      Documents and links added in Step 6 of the Preparation pipeline.
+                    </p>
+                    <ul className="space-y-2">
+                      {client.documents
+                        .filter((d: { type: string }) => d.type === 'JOB_SEARCH_STRATEGY')
+                        .map((doc: { id: string; fileName: string; originalFileName?: string | null; fileUrl: string; fileSize: number; description?: string | null }) => (
+                          <li
+                            key={doc.id}
+                            className="flex items-center justify-between gap-4 py-2 px-3 bg-careerist-bg-secondary rounded border border-careerist-border"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-medium text-careerist-text-primary truncate block" title={doc.originalFileName || doc.fileName}>
+                                {doc.originalFileName || doc.fileName}
+                              </span>
+                              {doc.description && (
+                                <p className="text-xs text-careerist-text-secondary mt-0.5 line-clamp-2">{doc.description}</p>
+                              )}
+                            </div>
+                            <a
+                              href={`/api/clients/${clientId}/documents/${doc.id}/download`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 text-sm font-medium text-careerist-primary-yellow hover:underline"
+                            >
+                              Open / Download
+                            </a>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Resume + Cover Letter: where to find what was added in Step 8 */}
+                {client?.coverLetters && client.coverLetters.length > 0 && (
+                  <div className="mt-6 bg-careerist-card rounded-lg shadow border border-careerist-border p-6">
+                    <h3 className="text-lg font-semibold text-careerist-text-primary mb-2">Resume + Cover Letter</h3>
+                    <p className="text-sm text-careerist-text-secondary mb-4">
+                      Files and links added in Step 8 of the Preparation pipeline.
+                    </p>
+                    <ul className="space-y-2">
+                      {client.coverLetters.map((letter: { id: string; fileName: string; originalFileName?: string | null; fileUrl: string; fileSize: number; description?: string | null }) => (
+                        <li
+                          key={letter.id}
+                          className="flex items-center justify-between gap-4 py-2 px-3 bg-careerist-bg-secondary rounded border border-careerist-border"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-careerist-text-primary truncate block" title={letter.originalFileName || letter.fileName}>
+                              {letter.originalFileName || letter.fileName}
+                            </span>
+                            {letter.description && (
+                              <p className="text-xs text-careerist-text-secondary mt-0.5 line-clamp-2">{letter.description}</p>
+                            )}
+                          </div>
+                          <a
+                            href={`/api/clients/${clientId}/cover-letters/${letter.id}/download`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-sm font-medium text-careerist-primary-yellow hover:underline"
+                          >
+                            Open / Download
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             )}
@@ -555,15 +994,67 @@ export default function ClientProfilePage() {
                               Last updated: {new Date(draft.updatedAt).toLocaleDateString()}
                             </div>
                           </div>
-                          <Badge variant="neutral" className="text-[10px] uppercase">
-                            {draft.template}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="neutral" className="text-[10px] uppercase">
+                              {draft.template}
+                            </Badge>
+                            {draft.atsScore !== undefined && draft.atsScore !== null && (
+                              <Badge variant={draft.atsScore >= 80 ? 'success' : draft.atsScore >= 60 ? 'warning' : 'error'} className="text-[10px]">
+                                ATS: {draft.atsScore}/100
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-wrap items-center gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="flex-1 text-xs py-1"
+                            className="bg-careerist-yellow-light text-careerist-primary-navy border-careerist-yellow hover:bg-careerist-primary-yellow text-xs py-1 px-3"
+                            onClick={() => handlePreview(draft)}
+                          >
+                            Preview
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="text-xs py-1 px-3"
+                            onClick={() => {
+                              setResumeToSend(draft)
+                              setShowSendResumeModal(true)
+                            }}
+                          >
+                            Send
+                          </Button>
+                          <div className="relative group">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="text-xs py-1 px-3 flex items-center gap-1"
+                            >
+                              Download
+                              <ChevronDown className="h-3 w-3" />
+                            </Button>
+                            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-careerist-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                              <div className="p-1">
+                                <button
+                                  onClick={() => handleExportPDF(draft)}
+                                  className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-gray-50 rounded-md transition-colors"
+                                >
+                                  Download PDF
+                                </button>
+                                <button
+                                  onClick={() => handleExportWord(draft)}
+                                  className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-gray-50 rounded-md transition-colors"
+                                >
+                                  Download Word
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="text-xs py-1 px-3"
                             onClick={() => router.push(`/resume-builder?id=${draft.id}&clientId=${clientId}`)}
                           >
                             Edit
@@ -571,7 +1062,7 @@ export default function ClientProfilePage() {
                           <Button
                             size="sm"
                             variant="danger"
-                            className="text-xs py-1 px-2"
+                            className="text-xs py-1 px-3"
                             onClick={() => handleDeleteDraft(draft.id)}
                           >
                             Delete
@@ -594,15 +1085,202 @@ export default function ClientProfilePage() {
               </div>
             )}
 
+            {/* Approvals Tab */}
+            {activeTab === 'approvals' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Pending Job Approvals</h3>
+                  <Badge variant="warning">{client?.id ? 'Awaiting Client Action' : '...'}</Badge>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <PendingApprovalsList clientId={clientId!} />
+                </div>
+              </div>
+            )}
+
+            {/* Activities Tab */}
             {activeTab === 'activities' && (
               <div>
                 <ActivityTimeline activities={activities} entityName={`${client.firstName} ${client.lastName}`} />
               </div>
             )}
+
+            {activeTab === 'reports' && (
+              <div className="space-y-8">
+                {loadingReports ? (
+                  <div className="flex justify-center py-12">
+                    <Spinner />
+                  </div>
+                ) : reportsData ? (
+                  <>
+                    {/* Financial Overview */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <StatsCard
+                        title="Total Billed"
+                        value={formatINR(reportsData.financials.totalBilled)}
+                        color="blue"
+                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                      />
+                      <StatsCard
+                        title="Total Paid"
+                        value={formatINR(reportsData.financials.totalPaid)}
+                        color="green"
+                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                      />
+                      <StatsCard
+                        title="Pending Balance"
+                        value={formatINR(reportsData.financials.totalPending)}
+                        color="orange"
+                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Application Funnel */}
+                      <FunnelChartWidget data={reportsData.funnelPerformance} />
+
+                      {/* Activity Distribution */}
+                      <div className="bg-careerist-card rounded-xl p-6 border border-careerist-border shadow-md">
+                        <h3 className="text-lg font-semibold text-careerist-text-primary mb-4">Activity Distribution</h3>
+                        {reportsData.activityDistribution.length > 0 ? (
+                          <div className="space-y-4">
+                            {reportsData.activityDistribution.map((activity: any) => (
+                              <div key={activity.type}>
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-sm font-medium text-careerist-text-primary">{activity.type}</span>
+                                  <span className="text-sm font-semibold text-careerist-text-primary">{activity.count}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className="bg-careerist-primary-navy h-2 rounded-full"
+                                    style={{ width: `${Math.min((activity.count / Math.max(...reportsData.activityDistribution.map((a: any) => a.count))) * 100, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-careerist-text-secondary">No activity data recorded.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Reports Tab Footer: Share Functionality */}
+                    <div className="mt-8 pt-8 border-t border-careerist-border">
+                      <div className="bg-gray-50 rounded-xl p-6 border border-careerist-border text-careerist-text-primary">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div>
+                            <h3 className="text-lg font-semibold">Share this Report</h3>
+                            <p className="text-sm text-careerist-text-secondary mt-1">
+                              {reportSnapshot
+                                ? `Last updated: ${new Date(reportSnapshot.updatedAt).toLocaleString()}`
+                                : "Generate a fixed link to share this report with others."}
+                            </p>
+                          </div>
+                          <div className="flex gap-3">
+                            {reportSnapshot && (
+                              <Button
+                                variant="secondary"
+                                onClick={() => {
+                                  const url = `${window.location.origin}/public/reports/${reportSnapshot.token}`;
+                                  navigator.clipboard.writeText(url);
+                                  showToast('Link copied to clipboard', 'success');
+                                }}
+                              >
+                                Copy Link
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => setShowReportNotificationModal(true)}
+                              isLoading={generatingSnapshot}
+                            >
+                              {reportSnapshot ? 'Update Progress' : 'Generate Share Link'}
+                            </Button>
+                          </div>
+                        </div>
+                        {reportSnapshot && (
+                          <div className="mt-4 p-3 bg-white border border-careerist-border rounded-lg flex items-center justify-between overflow-hidden">
+                            <span className="text-sm text-careerist-text-primary truncate mr-2">
+                              {`${window.location.origin}/public/reports/${reportSnapshot.token}`}
+                            </span>
+                            <Link
+                              href={`/public/reports/${reportSnapshot.token}`}
+                              target="_blank"
+                              className="text-xs font-medium text-careerist-primary-yellow hover:underline"
+                            >
+                              View Live
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-careerist-text-secondary">Failed to load report data.</p>
+                    <Button variant="secondary" onClick={loadReportsData} className="mt-4">
+                      Try Again
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Send Resume Modal */}
+        {showSendResumeModal && resumeToSend && (
+          <Modal
+            isOpen={showSendResumeModal}
+            onClose={() => setShowSendResumeModal(false)}
+            title="Send Resume to Client"
+          >
+            <div className="space-y-4">
+              <div className="p-4 bg-careerist-bg-gray rounded-lg border border-careerist-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-careerist-text-primary">Resume: {resumeToSend.template}</span>
+                  {resumeToSend.atsScore && (
+                    <Badge variant={resumeToSend.atsScore >= 80 ? 'success' : resumeToSend.atsScore >= 60 ? 'warning' : 'error'}>
+                      ATS: {resumeToSend.atsScore}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-careerist-text-secondary">Updated: {new Date(resumeToSend.updatedAt).toLocaleDateString()}</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-careerist-text-primary">Select Email Template</label>
+                <select
+                  className="w-full p-2 border border-careerist-border rounded-lg bg-white text-sm focus:border-careerist-primary-yellow focus:outline-none"
+                  value={sendResumeTemplateId}
+                  onChange={(e) => setSendResumeTemplateId(e.target.value)}
+                >
+                  <option value="">Select a template...</option>
+                  {emailTemplates.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-careerist-text-secondary italic">Selected template will be used to send the resume report to the client.</p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setShowSendResumeModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendResumeEmail}
+                  isLoading={sendingResume}
+                  disabled={!sendResumeTemplateId}
+                >
+                  Send Email
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
         {/* Edit Modal */}
+
         {showEditModal && client && (
           <Modal
             isOpen={showEditModal}
@@ -619,6 +1297,49 @@ export default function ClientProfilePage() {
               }}
               onCancel={() => setShowEditModal(false)}
             />
+          </Modal>
+        )}
+
+        {/* Resume Preview Modal */}
+        {previewingDraft && (
+          <Modal
+            isOpen={!!previewingDraft}
+            onClose={() => setPreviewingDraft(null)}
+            title={`Preview: ${previewingDraft.content?.contact?.name || 'Resume'}`}
+            size="lg"
+          >
+            <div className="bg-gray-50 p-6 rounded-lg overflow-y-auto max-h-[70vh]">
+              <div className="bg-white shadow-lg mx-auto">
+                <ResumePreview ref={previewRef} document={previewingDraft.content} />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setPreviewingDraft(null)}>
+                Close
+              </Button>
+              <div className="relative group">
+                <Button className="flex items-center gap-1 pr-1.5">
+                  Download
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                <div className="absolute right-0 bottom-full mb-1 w-40 bg-white border border-careerist-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="p-1">
+                    <button
+                      onClick={() => handleExportPDF(previewingDraft)}
+                      className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-gray-50 rounded-md transition-colors"
+                    >
+                      Download PDF
+                    </button>
+                    <button
+                      onClick={() => handleExportWord(previewingDraft)}
+                      className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-gray-50 rounded-md transition-colors"
+                    >
+                      Download Word
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </Modal>
         )}
 
@@ -646,8 +1367,61 @@ export default function ClientProfilePage() {
             }}
           />
         )}
+
+        {/* Report Notification Modal */}
+        {showReportNotificationModal && (
+          <Modal
+            isOpen={showReportNotificationModal}
+            onClose={() => setShowReportNotificationModal(false)}
+            title={reportSnapshot ? "Update Progress & Notify" : "Generate Share Link"}
+            size="md"
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-careerist-text-secondary">
+                Select an email template to notify the client about this report update.
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-careerist-text-primary">Email Template</label>
+                <select
+                  className="w-full p-2 border border-careerist-border rounded-lg bg-white text-sm"
+                  id="template-select"
+                >
+                  <option value="">Select a template...</option>
+                  {reportTemplates.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-3 pt-4">
+                <Button
+                  onClick={() => {
+                    const templateSelect = document.getElementById('template-select') as HTMLSelectElement;
+                    const templateId = templateSelect?.value;
+                    if (!templateId && !reportSnapshot) {
+                      showToast('Please select a template for initial link generation', 'error');
+                      return;
+                    }
+                    handleUpdateSnapshot(templateId || undefined, !!templateId);
+                  }}
+                  isLoading={generatingSnapshot}
+                >
+                  Update & Send Email
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleUpdateSnapshot(undefined, false)}
+                  isLoading={generatingSnapshot}
+                >
+                  Update Without Email
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
       </div>
-    </DashboardLayout>
+    </DashboardLayout >
   )
 }
 
@@ -939,5 +1713,64 @@ function ClientEditForm({
         isLoading={loading}
       />
     </form>
+  )
+}
+
+function PendingApprovalsList({ clientId }: { clientId: string }) {
+  const [approvals, setApprovals] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadApprovals()
+  }, [clientId])
+
+  const loadApprovals = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/applications?clientId=${clientId}&stage=PENDING_CLIENT_APPROVAL`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setApprovals(data.applications || [])
+      }
+    } catch (err) {
+      console.error('Failed to load pending approvals', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="p-8 text-center"><Spinner /></div>
+  if (approvals.length === 0) {
+    return (
+      <div className="p-12 text-center text-gray-500">
+        <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+        <p>No jobs currently pending client approval.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-gray-100">
+      {approvals.map((app) => (
+        <div key={app.id} className="p-6 hover:bg-gray-50 transition-colors">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-md font-bold text-gray-900">{app.job?.title}</h4>
+              <p className="text-sm text-gray-600 font-medium">{app.job?.company}</p>
+              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {app.job?.location}</span>
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Sourced {new Date(app.createdAt).toLocaleDateString()}</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge variant="info" className="mb-2 block w-fit ml-auto border-blue-100 text-blue-700 bg-blue-50">Token Generated</Badge>
+              <p className="text-[10px] text-gray-400 font-mono select-all">/public/approvals/{app.approvalToken}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }

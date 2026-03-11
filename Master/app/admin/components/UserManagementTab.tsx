@@ -76,7 +76,7 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
         return
       }
 
-      const url = filterRole !== 'all' 
+      const url = filterRole !== 'all'
         ? `/api/users?role=${filterRole}`
         : '/api/users'
 
@@ -273,11 +273,11 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
       key: 'role',
       header: 'Role',
       render: (user: User) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-          user?.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' :
+        <span className={`px-2 py-1 text-xs font-medium rounded-full ${user?.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' :
           user?.role === 'MANAGER' ? 'bg-blue-100 text-blue-800' :
-          'bg-green-100 text-green-800'
-        }`}>
+            user?.role === 'SALES' ? 'bg-orange-100 text-orange-800' :
+              'bg-green-100 text-green-800'
+          }`}>
           {user?.role}
         </span>
       ),
@@ -287,9 +287,8 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
       header: 'Status',
       render: (user: User) => (
         <div className="flex flex-col gap-1">
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-            user?.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-          }`}>
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${user?.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`}>
             {user?.isActive ? 'Active' : 'Inactive'}
           </span>
           {user?.locked && (
@@ -337,34 +336,34 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
       render: (user: User) => (
         <div className="flex items-center gap-2">
           {user && (
-          <>
-          <button
-            onClick={() => handleEditUser(user)}
-            className="text-[#1F3A5F] hover:text-[#F4B400] text-sm font-medium transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => handleResetPassword(user.id)}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
-          >
-            Reset Password
-          </button>
-          {user.locked && (
-            <button
-              onClick={() => handleUnlockAccount(user.id)}
-              className="text-green-600 hover:text-green-800 text-sm font-medium transition-colors"
-            >
-              Unlock
-            </button>
-          )}
-          <button
-            onClick={() => handleDeleteUser(user.id)}
-            className="text-[#EF4444] hover:text-[#DC2626] text-sm font-medium transition-colors"
-          >
-            Delete
-          </button>
-          </>
+            <>
+              <button
+                onClick={() => handleEditUser(user)}
+                className="text-[#1F3A5F] hover:text-[#F4B400] text-sm font-medium transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => handleResetPassword(user.id)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+              >
+                Reset Password
+              </button>
+              {user.locked && (
+                <button
+                  onClick={() => handleUnlockAccount(user.id)}
+                  className="text-green-600 hover:text-green-800 text-sm font-medium transition-colors"
+                >
+                  Unlock
+                </button>
+              )}
+              <button
+                onClick={() => handleDeleteUser(user.id)}
+                className="text-[#EF4444] hover:text-[#DC2626] text-sm font-medium transition-colors"
+              >
+                Delete
+              </button>
+            </>
           )}
         </div>
       ),
@@ -399,6 +398,7 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
             <option value="ADMIN">Admin</option>
             <option value="MANAGER">Manager</option>
             <option value="RECRUITER">Recruiter</option>
+            <option value="SALES">Sales</option>
           </select>
         </div>
       </div>
@@ -526,7 +526,7 @@ function UserForm({
         payload.password = formData.password
       }
 
-      if (formData.role === 'RECRUITER') {
+      if (formData.role === 'RECRUITER' || formData.role === 'SALES') {
         payload.managerId = formData.managerId && formData.managerId.trim() !== '' ? formData.managerId : null
       }
 
@@ -661,6 +661,7 @@ function UserForm({
           >
             <option value="RECRUITER">Recruiter</option>
             <option value="MANAGER">Manager</option>
+            <option value="SALES">Sales</option>
             <option value="ADMIN">Admin</option>
           </select>
         </div>
@@ -679,7 +680,7 @@ function UserForm({
         </div>
       </div>
 
-      {formData.role === 'RECRUITER' && managers.length > 0 && (
+      {(formData.role === 'RECRUITER' || formData.role === 'SALES') && managers.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
             Manager (Optional)

@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     // Get recent jobs, clients, applications
     const [recentJobs, recentClients, recentApplications] = await Promise.all([
       db.job.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { recruiterId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.client.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { assignedUserId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.application.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { recruiterId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },

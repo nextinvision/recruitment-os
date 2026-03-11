@@ -27,6 +27,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter | null = null
   private fromEmail: string
   private fromName: string
+  private initPromise: Promise<void> | null = null
   private smtpConfig: {
     host: string
     port: number
@@ -40,8 +41,8 @@ export class EmailService {
   constructor() {
     this.fromEmail = process.env.EMAIL_FROM || 'noreply@recruitment-os.com'
     this.fromName = process.env.EMAIL_FROM_NAME || 'Recruitment OS'
-    
-    // SMTP Configuration
+
+    // SMTP Configuration defaults
     this.smtpConfig = {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587', 10),
@@ -54,14 +55,53 @@ export class EmailService {
       }),
     }
 
-    // Initialize transporter
-    this.initializeTransporter()
+    // Initialize transporter (async)
+    this.initPromise = this.refreshConfig()
+  }
+
+  /**
+   * Refresh configuration from database
+   */
+  async refreshConfig(): Promise<void> {
+    try {
+      // Import here to avoid circular dependencies
+      const { systemConfigService } = await import('@/modules/system-config/service')
+
+      const host = await systemConfigService.getValue('email.smtp_host')
+      const port = await systemConfigService.getNumberValue('email.smtp_port')
+      const user = await systemConfigService.getValue('email.smtp_user')
+      const pass = await systemConfigService.getValue('email.smtp_password')
+      const fromEmail = await systemConfigService.getValue('email.from_address')
+      const fromName = await systemConfigService.getValue('email.from_name')
+      const secureConfig = await systemConfigService.getBooleanValue('email.smtp_secure')
+
+      if (host) this.smtpConfig.host = host
+      if (port) this.smtpConfig.port = port
+      if (user && pass) {
+        this.smtpConfig.auth = { user, pass }
+      }
+      if (fromEmail) this.fromEmail = fromEmail
+      if (fromName) this.fromName = fromName
+
+      // If secure is explicitly set in config, use it. 
+      // Otherwise, default to port 465 detection.
+      if (secureConfig !== null) {
+        this.smtpConfig.secure = secureConfig
+      } else if (port) {
+        this.smtpConfig.secure = port === 465
+      }
+
+      await this.initializeTransporter()
+    } catch (error) {
+      console.warn('[Email Service] Failed to refresh configuration from database, using defaults:', error)
+      await this.initializeTransporter()
+    }
   }
 
   /**
    * Initialize Nodemailer transporter
    */
-  private initializeTransporter(): void {
+  private async initializeTransporter(): Promise<void> {
     try {
       this.transporter = nodemailer.createTransport({
         host: this.smtpConfig.host,
@@ -74,16 +114,11 @@ export class EmailService {
         },
       })
 
-      // Verify connection (async, but don't block)
-      this.transporter.verify().then(() => {
-        console.log('[Email Service] SMTP connection verified successfully')
-      }).catch((error) => {
-        console.warn('[Email Service] SMTP verification failed:', error.message)
-        console.warn('[Email Service] Email sending may fail. Check your SMTP configuration.')
-      })
-    } catch (error) {
-      console.error('[Email Service] Failed to initialize transporter:', error)
-      this.transporter = null
+      // Verify connection
+      await this.transporter.verify()
+      console.log(`[Email Service] SMTP connection verified successfully to ${this.smtpConfig.host}:${this.smtpConfig.port}`)
+    } catch (error: any) {
+      console.warn(`[Email Service] SMTP verification failed for ${this.smtpConfig.host}:${this.smtpConfig.port}:`, error.message)
     }
   }
 
@@ -91,6 +126,11 @@ export class EmailService {
    * Send email via SMTP
    */
   async sendEmail(message: EmailMessage): Promise<EmailResponse> {
+    // Wait for initialization if it's still running
+    if (this.initPromise) {
+      await this.initPromise
+    }
+
     if (!this.transporter) {
       throw new Error(
         'Email transporter not initialized. Check SMTP configuration in environment variables.'
@@ -106,7 +146,7 @@ export class EmailService {
 
     try {
       const recipients = Array.isArray(message.to) ? message.to : [message.to]
-      
+
       // Prepare mail options
       const mailOptions: nodemailer.SendMailOptions = {
         from: message.from || `${this.fromName} <${this.fromEmail}>`,
@@ -132,7 +172,7 @@ export class EmailService {
       }
     } catch (error) {
       console.error('[Email Service] Error sending email:', error)
-      
+
       // Provide helpful error messages
       if (error instanceof Error) {
         if (error.message.includes('Invalid login')) {
@@ -146,7 +186,7 @@ export class EmailService {
         }
         throw new Error(`Failed to send email: ${error.message}`)
       }
-      
+
       throw new Error('Failed to send email: Unknown error')
     }
   }
