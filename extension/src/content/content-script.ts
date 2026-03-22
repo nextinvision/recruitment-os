@@ -5,41 +5,46 @@ import { UniversalJobDetector } from './universal-detector'
 import { ScrapedJob } from '../shared/types'
 import { validateJob } from '../shared/validation'
 
+// Manual Selection Mode State
+let isMappingMode = false
+let currentMappingField: 'title' | 'company' | 'location' | 'description' | null = null
+let mappingData: Partial<ScrapedJob> = {}
+
 // Inject capture button into the page
 function injectCaptureButton() {
-  // Remove existing button if any
-  const existing = document.getElementById('recruitment-os-capture-btn')
+  // Remove existing container if any
+  const existing = document.getElementById('recruitment-os-container')
   if (existing) {
     existing.remove()
   }
 
   // Wait for body to be available
   if (!document.body) {
-    console.log('[Recruitment OS] Waiting for body element...')
     setTimeout(injectCaptureButton, 100)
     return
   }
 
   const pageInfo = JobDetector.getPageInfo()
   const isKnownPlatform = pageInfo.platform && pageInfo.isJobPage
-  const isLikelyJobPage = UniversalJobDetector.isLikelyJobPage()
-  
-  console.log('[Recruitment OS] Injecting capture button', {
-    platform: pageInfo.platform,
-    isJobPage: pageInfo.isJobPage,
-    isKnownPlatform,
-    isLikelyJobPage,
-    url: window.location.href
-  })
 
-  const button = document.createElement('button')
-  button.id = 'recruitment-os-capture-btn'
-  button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-  button.style.cssText = `
+  const container = document.createElement('div')
+  container.id = 'recruitment-os-container'
+  container.style.cssText = `
     position: fixed;
     top: 20px;
     right: 20px;
     z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto;
+  `
+
+  // Main Action Button (Automatic)
+  const autoBtn = document.createElement('button')
+  autoBtn.id = 'recruitment-os-capture-btn'
+  autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
+  autoBtn.style.cssText = `
     padding: 12px 24px;
     background: ${isKnownPlatform ? '#0073b1' : '#28a745'};
     color: white;
@@ -50,33 +55,54 @@ function injectCaptureButton() {
     font-weight: 600;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: all 0.2s;
   `
 
-  button.addEventListener('click', async () => {
-    button.disabled = true
-    button.textContent = 'Capturing...'
+  // Manual Mapping Button
+  const manualBtn = document.createElement('button')
+  manualBtn.textContent = 'Manual Selection'
+  manualBtn.style.cssText = `
+    padding: 8px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-family: sans-serif;
+  `
+
+  autoBtn.addEventListener('click', async () => {
+    autoBtn.disabled = true
+    autoBtn.textContent = 'Scanning...'
 
     try {
       let jobs: ScrapedJob[] = []
 
       if (isKnownPlatform && pageInfo.platform) {
-        // Use platform-specific scraper for known platforms
         const scraper = new JobScraper(pageInfo.platform)
         jobs = scraper.scrapeCurrentPage()
       } else {
-        // Use universal scraper for unknown websites
         const universalExtractor = new UniversalExtractor()
-        const extractedJobs = universalExtractor.extractAllJobs()
+        let extractedJobs = universalExtractor.extractAllJobs()
 
-        // If no jobs found, try detail page extraction
-        if (extractedJobs.length === 0) {
-          const detailJob = universalExtractor.extractJobFromDetailPage()
-          if (detailJob) {
-            extractedJobs.push(detailJob)
+        // Deep Scrape Fallback
+        if (extractedJobs.length > 0 && extractedJobs.length < 5) {
+          autoBtn.textContent = 'Deep Scrape...'
+          const clicked = await universalExtractor.findAndClickNextPage()
+          if (clicked) {
+            const moreJobs = universalExtractor.extractAllJobs()
+            extractedJobs = [...extractedJobs, ...moreJobs]
           }
         }
 
-        // Convert to ScrapedJob format with validation
+        if (extractedJobs.length === 0) {
+          const detailJob = universalExtractor.extractJobFromDetailPage()
+          if (detailJob) extractedJobs.push(detailJob)
+        }
+
         jobs = extractedJobs.map((job, index) => {
           const validation = validateJob(job as any)
           return {
@@ -93,128 +119,141 @@ function injectCaptureButton() {
       }
 
       if (jobs.length === 0) {
-        alert('No jobs found on this page. Try:\n1. Navigate to a job listing page\n2. Use manual selection mode (coming soon)\n3. Check if the page structure is supported')
-        button.disabled = false
-        button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
+        alert('No jobs found. Try "Manual Selection" if the automatic scan missed them.')
+        autoBtn.disabled = false
+        autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
         return
       }
 
-      // Check if extension context is still valid
-      if (!chrome.runtime?.id) {
-        alert('Extension context invalidated. Please reload the page and try again.')
-        button.disabled = false
-        button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-        return
-      }
-
-      // Send jobs to service worker via message
-      try {
-        chrome.runtime.sendMessage({
-          type: 'JOBS_CAPTURED',
-          jobs,
-          platform: pageInfo.platform || 'other',
-        }, (response) => {
-          // Check for extension context errors first
-          if (chrome.runtime.lastError) {
-            const errorMessage = chrome.runtime.lastError.message || ''
-            console.error('Extension error:', chrome.runtime.lastError)
-            
-            // Handle specific "Extension context invalidated" error
-            if (errorMessage.includes('Extension context invalidated') || 
-                errorMessage.includes('message port closed') ||
-                !chrome.runtime.id) {
-              alert('Extension was reloaded. Please refresh this page and try again.')
-              button.disabled = false
-              button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-              return
-            }
-            
-            // Other errors
-            alert('Failed to send jobs to extension. Please try again.')
-            button.disabled = false
-            button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-            return
-          }
-
-          if (response?.success) {
-            button.textContent = `✓ Captured ${jobs.length} job(s)`
-            setTimeout(() => {
-              button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-              button.disabled = false
-            }, 2000)
-          } else {
-            alert('Failed to capture jobs. Please try again.')
-            button.disabled = false
-            button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-          }
-        })
-      } catch (error) {
-        // Catch any runtime errors (e.g., context invalidated during execution)
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        if (errorMessage.includes('Extension context invalidated') || !chrome.runtime?.id) {
-          alert('Extension was reloaded. Please refresh this page and try again.')
-        } else {
-          alert(`Error sending jobs: ${errorMessage}`)
-        }
-        button.disabled = false
-        button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
-      }
+      sendJobsToExtension(jobs)
+      autoBtn.textContent = `✓ Captured ${jobs.length}`
+      setTimeout(() => {
+        autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
+        autoBtn.disabled = false
+      }, 2000)
     } catch (error) {
-      console.error('Error capturing jobs:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
-      // Check if it's a context invalidation error
-      if (errorMessage.includes('Extension context invalidated') || 
-          !chrome.runtime?.id) {
-        alert('Extension was reloaded. Please refresh this page and try again.')
-      } else {
-        alert(`Error capturing jobs: ${errorMessage}\n\nCheck the console for details.`)
-      }
-      
-      button.disabled = false
-      button.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Jobs'
+      console.error('Scrape error:', error)
+      autoBtn.disabled = false
+      autoBtn.textContent = 'Retry Scrape'
     }
   })
 
-  try {
-    document.body.appendChild(button)
-    console.log('[Recruitment OS] Capture button injected successfully')
-  } catch (error) {
-    console.error('[Recruitment OS] Failed to inject button:', error)
-    // Retry after a short delay
-    setTimeout(() => {
-      try {
-        if (document.body) {
-          document.body.appendChild(button)
-          console.log('[Recruitment OS] Capture button injected on retry')
-        }
-      } catch (retryError) {
-        console.error('[Recruitment OS] Failed to inject button on retry:', retryError)
-      }
-    }, 500)
+  manualBtn.addEventListener('click', startManualMapping)
+
+  container.appendChild(autoBtn)
+  container.appendChild(manualBtn)
+  document.body.appendChild(container)
+}
+
+function startManualMapping() {
+  if (isMappingMode) return
+  isMappingMode = true
+  currentMappingField = 'title'
+  showMappingToast('MANUAL MODE: Click on the JOB TITLE')
+
+  document.addEventListener('click', handleManualClick, true)
+  document.body.style.cursor = 'crosshair'
+}
+
+function handleManualClick(e: MouseEvent) {
+  if (!isMappingMode) return
+
+  e.preventDefault()
+  e.stopPropagation()
+
+  const target = e.target as HTMLElement
+  const text = target.textContent?.trim() || ''
+
+  if (currentMappingField) {
+    mappingData[currentMappingField] = text as any
+
+    const fields: ('title' | 'company' | 'location' | 'description')[] = ['title', 'company', 'location', 'description']
+    const currentIndex = fields.indexOf(currentMappingField)
+
+    if (currentIndex < fields.length - 1) {
+      currentMappingField = fields[currentIndex + 1]
+      showMappingToast(`Captured! Now click the ${currentMappingField.toUpperCase()}`)
+    } else {
+      finishMapping()
+    }
   }
 }
 
-// Initialize when DOM is ready
-console.log('[Recruitment OS] Content script loaded, readyState:', document.readyState)
+async function finishMapping() {
+  isMappingMode = false
+  currentMappingField = null
+  document.removeEventListener('click', handleManualClick, true)
+  document.body.style.cursor = 'default'
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('[Recruitment OS] DOMContentLoaded fired')
-    injectCaptureButton()
+  const job: ScrapedJob = {
+    id: `manual-${Date.now()}`,
+    title: mappingData.title || '',
+    company: mappingData.company || '',
+    location: mappingData.location || '',
+    description: mappingData.description || '',
+    source: 'other',
+    isValid: !!mappingData.title,
+    errors: mappingData.title ? [] : ['Title is required'],
+  }
+
+  if (confirm(`Save this job to staging?\n\nTitle: ${job.title}\nCompany: ${job.company}`)) {
+    sendJobsToExtension([job])
+  }
+
+  mappingData = {}
+}
+
+function showMappingToast(message: string) {
+  const toast = document.createElement('div')
+  toast.textContent = message
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0073b1;
+    color: white;
+    padding: 14px 28px;
+    border-radius: 50px;
+    z-index: 10001;
+    font-family: sans-serif;
+    font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    animation: fadeIn 0.3s;
+  `
+  document.body.appendChild(toast)
+  setTimeout(() => toast.remove(), 3000)
+}
+
+function sendJobsToExtension(jobs: ScrapedJob[]) {
+  if (!chrome.runtime?.id) {
+    alert('Extension context lost. Please refresh the page.')
+    return
+  }
+
+  chrome.runtime.sendMessage({
+    type: 'JOBS_CAPTURED',
+    jobs,
+    platform: 'other',
+  }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Message error:', chrome.runtime.lastError)
+    }
   })
+}
+
+// Init
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectCaptureButton)
 } else {
-  // DOM already loaded, inject immediately
   injectCaptureButton()
 }
 
-// Re-inject on navigation (for SPAs)
+// SPA support
 let lastUrl = location.href
 new MutationObserver(() => {
-  const url = location.href
-  if (url !== lastUrl) {
-    lastUrl = url
+  if (location.href !== lastUrl) {
+    lastUrl = location.href
     setTimeout(injectCaptureButton, 1000)
   }
 }).observe(document, { subtree: true, childList: true })
-

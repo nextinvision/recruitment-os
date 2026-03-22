@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (corsResponse) return corsResponse
 
     // Get token from cookie or Authorization header
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
 
     const authContext = requireAuth(await getAuthContext(authHeader))

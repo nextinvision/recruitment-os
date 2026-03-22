@@ -20,6 +20,7 @@ export async function createFollowUp(input: CreateFollowUpInput) {
       scheduledDate: new Date(validated.scheduledDate),
       leadId: validated.leadId || null,
       clientId: validated.clientId || null,
+      companyContactId: validated.companyContactId || null,
     },
     include: {
       assignedUser: {
@@ -224,7 +225,7 @@ export async function updateFollowUp(input: UpdateFollowUpInput) {
     updateData.completedAt = null
   }
 
-  const followUp = await db.followUp.update({
+  const followUp = await (db.followUp.update as any)({
     where: { id },
     data: updateData,
     include: {
@@ -251,8 +252,25 @@ export async function updateFollowUp(input: UpdateFollowUpInput) {
           lastName: true,
         },
       },
+      contact: true,
     },
   })
+
+  // Hook: If follow-up is linked to a company contact and is completed
+  if (updateData.completed === true && followUp.companyContactId) {
+    try {
+      const { ContactStatus } = await import('@prisma/client')
+      await (db.companyContact.update as any)({
+        where: { id: followUp.companyContactId },
+        data: {
+          status: (ContactStatus as any).FOLLOWING_UP,
+          lastInteractionAt: new Date(),
+        }
+      })
+    } catch (err) {
+      console.error('Failed to update contact status from follow-up:', err)
+    }
+  }
 
   return followUp
 }

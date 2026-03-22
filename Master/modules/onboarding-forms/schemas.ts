@@ -20,6 +20,7 @@ export const updateOnboardingFormSchema = createOnboardingFormSchema.partial()
 
 export const submitOnboardingFormSchema = z.object({
   data: z.record(z.string(), z.union([z.string(), z.number(), z.array(z.string())])),
+  leadId: z.string().nullable().optional(),
 })
 
 export type FormField = z.infer<typeof formFieldSchema>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth, requireRole } from '@/lib/rbac'
-import { createUser, getUsersByRole } from '@/modules/users/service'
+import { createUser, getUsersByRoles } from '@/modules/users/service'
 import { UserRole } from '@prisma/client'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { db } from '@/lib/db'
@@ -14,19 +14,37 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
-    
-    // Only ADMIN can view all users
-    requireRole(authContext, [UserRole.ADMIN])
 
     const searchParams = request.nextUrl.searchParams
-    const role = searchParams.get('role') as UserRole | null
+    const roleParam = searchParams.get('role')
+
+    const validRoles = Object.values(UserRole) as UserRole[]
+    const requestedRoles: UserRole[] = roleParam
+      ? roleParam.split(',').map((r) => r.trim()).filter((r): r is UserRole => validRoles.includes(r as UserRole))
+      : []
+
+    // ADMIN and MANAGER can list any users. RECRUITER/SALES may only list when filtering by RECRUITER or SALES (e.g. reverse recruiter dropdown).
+    if (authContext.role === UserRole.ADMIN || authContext.role === UserRole.MANAGER) {
+      // allowed
+    } else if (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES) {
+      const allowedRolesForSelf: UserRole[] = [UserRole.RECRUITER, UserRole.SALES]
+      if (requestedRoles.length === 0 || requestedRoles.some((r) => !allowedRolesForSelf.includes(r))) {
+        const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        const origin = request.headers.get('origin')
+        return addCorsHeaders(response, origin)
+      }
+    } else {
+      const response = NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
 
     let users
-    if (role) {
-      const roleUsers = await getUsersByRole(role)
+    if (requestedRoles.length > 0) {
+      const roleUsers = await getUsersByRoles(requestedRoles)
       users = roleUsers.map((u) => {
         const userWithExtras = u as typeof u & { isActive?: boolean; lastLogin?: Date | null; manager?: { id: string; firstName: string; lastName: string; email: string } | null; _count?: { jobs: number; candidates: number; applications: number } }
         return {
@@ -51,7 +69,7 @@ export async function GET(request: NextRequest) {
       const allUsers = await db.user.findMany({
         orderBy: { createdAt: 'desc' },
       })
-      
+
       // Fetch manager and counts separately
       users = await Promise.all(allUsers.map(async (user) => {
         const userWithExtras = user as typeof user & { managerId?: string | null; isActive?: boolean; lastLogin?: Date | null }
@@ -73,7 +91,7 @@ export async function GET(request: NextRequest) {
             },
           }),
         ])
-        
+
         return {
           id: user.id,
           email: user.email,
@@ -105,10 +123,10 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
-    
+
     // Only ADMIN can create users
     requireRole(authContext, [UserRole.ADMIN])
 

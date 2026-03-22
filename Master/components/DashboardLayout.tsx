@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/ui/Sidebar'
 import { Navbar } from '@/ui/Navbar'
+import { ToastContainer, useToast } from '@/ui'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -71,7 +72,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         setIsSidebarOpen(saved === 'true')
       }
     }
-    
+
     const checkMobile = () => {
       const mobile = window.innerWidth < 1024
       if (mobile) {
@@ -87,7 +88,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         }
       }
     }
-    
+
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
@@ -100,6 +101,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       localStorage.setItem('sidebarOpen', String(newState))
     }
   }
+
+  const { toasts, removeToast } = useToast()
 
   if (loading) {
     return (
@@ -114,6 +117,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <Navbar user={user} onSidebarToggle={toggleSidebar} isSidebarOpen={isSidebarOpen} />
       <Sidebar user={user} isOpen={isSidebarOpen} onToggle={toggleSidebar} />
       <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>

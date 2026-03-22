@@ -57,6 +57,7 @@ class ZipRecruiter(Scraper):
     def scrape(self, scraper_input: ScraperInput) -> JobResponse:
         """
         Scrapes ZipRecruiter for jobs with scraper_input criteria.
+        May return empty results if the API rate-limits or restricts by region.
         :param scraper_input: Information about job search criteria.
         :return: JobResponse containing a list of jobs.
         """

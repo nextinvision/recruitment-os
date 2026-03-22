@@ -12,45 +12,73 @@ interface StatsCardProps {
 }
 
 export function StatsCard({ title, value, icon, trend, color = 'blue' }: StatsCardProps) {
-  const colorClasses = {
-    blue: 'bg-[#1F3A5F] text-white',
-    green: 'bg-[#22C55E] text-white',
-    purple: 'bg-[#1F3A5F] text-white',
-    orange: 'bg-[#F4B400] text-[#1F3A5F]',
-    red: 'bg-[#EF4444] text-white',
+  const colorStyles = {
+    blue: {
+      bg: 'bg-blue-50',
+      iconBg: 'bg-[#1F3A5F]',
+      iconText: 'text-white',
+      border: 'border-blue-100',
+      valueText: 'text-[#1F3A5F]'
+    },
+    green: {
+      bg: 'bg-emerald-50',
+      iconBg: 'bg-[#10B981]',
+      iconText: 'text-white',
+      border: 'border-emerald-100',
+      valueText: 'text-emerald-900'
+    },
+    purple: {
+      bg: 'bg-purple-50',
+      iconBg: 'bg-[#8B5CF6]',
+      iconText: 'text-white',
+      border: 'border-purple-100',
+      valueText: 'text-purple-900'
+    },
+    orange: {
+      bg: 'bg-amber-50',
+      iconBg: 'bg-[#F4B400]',
+      iconText: 'text-[#1F3A5F]',
+      border: 'border-amber-100',
+      valueText: 'text-amber-900'
+    },
+    red: {
+      bg: 'bg-red-50',
+      iconBg: 'bg-[#EF4444]',
+      iconText: 'text-white',
+      border: 'border-red-100',
+      valueText: 'text-red-900'
+    },
   }
 
+  const style = colorStyles[color]
+
   return (
-    <div className="bg-white overflow-hidden shadow-md rounded-xl border border-[#E5E7EB] hover:shadow-lg transition-shadow">
-      <div className="p-5">
-        <div className="flex items-center">
-          {icon && (
-            <div className={`shrink-0 p-3 rounded-lg ${colorClasses[color]}`}>
-              {icon}
-            </div>
-          )}
-          <div className={`ml-5 w-0 flex-1 ${icon ? '' : 'flex items-center'}`}>
-            <dl>
-              <dt className="text-sm font-medium text-[#64748B] truncate">
-                {title}
-              </dt>
-              <dd className="flex items-baseline">
-                <div className="text-2xl font-bold text-[#0F172A]">
-                  {value}
-                </div>
-                {trend && (
-                  <div className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    trend.isPositive ? 'text-[#22C55E]' : 'text-[#EF4444]'
-                  }`}>
-                    <span>{trend.isPositive ? '↑' : '↓'}</span>
-                    <span>{Math.abs(trend.value)}%</span>
-                  </div>
-                )}
-              </dd>
-            </dl>
+    <div className={`relative overflow-hidden ${style.bg} rounded-2xl border ${style.border} p-6 shadow-sm hover:shadow-md transition-all duration-300 group`}>
+      <div className="flex items-start justify-between">
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
+          <div className="flex items-baseline gap-2">
+            <h3 className={`text-3xl font-extrabold ${style.valueText}`}>
+              {value}
+            </h3>
+            {trend && (
+              <span className={`flex items-center text-xs font-bold px-1.5 py-0.5 rounded-full ${trend.isPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                }`}>
+                {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}%
+              </span>
+            )}
           </div>
         </div>
+
+        {icon && (
+          <div className={`p-3 rounded-xl ${style.iconBg} ${style.iconText} shadow-lg transform group-hover:scale-110 transition-transform duration-300`}>
+            {icon}
+          </div>
+        )}
       </div>
+
+      {/* Subtle background decoration */}
+      <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
     </div>
   )
 }

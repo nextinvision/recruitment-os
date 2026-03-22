@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, FollowUpFilters, FollowUpCalendar, Pagination, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, FollowUpFilters, FollowUpCalendar, Pagination, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 import type { FollowUpFilters as FollowUpFiltersType } from '@/ui'
 
@@ -43,28 +43,28 @@ export default function FollowUpsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedFollowUp, setSelectedFollowUp] = useState<FollowUp | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
-  
+
   // Filters
   const [filters, setFilters] = useState<FollowUpFiltersType>({})
-  
+
   // Pagination
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  
+
   // Sorting
   const [sortBy, setSortBy] = useState<'scheduledDate' | 'title' | 'createdAt' | 'completed'>('scheduledDate')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  
+
   // Additional data
   const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
   const [leads, setLeads] = useState<Array<{ id: string; firstName: string; lastName: string; currentCompany?: string }>>([])
   const [clients, setClients] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
-  
+
   // Toast and Confirm Dialog
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   useEffect(() => {
     loadFollowUps()
@@ -98,7 +98,7 @@ export default function FollowUpsPage() {
       params.append('pageSize', pageSize.toString())
       params.append('sortBy', sortBy)
       params.append('sortOrder', sortOrder)
-      
+
       if (filters.search) params.append('search', filters.search)
       if (filters.leadId) params.append('leadId', filters.leadId)
       if (filters.clientId) params.append('clientId', filters.clientId)
@@ -272,7 +272,6 @@ export default function FollowUpsPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -290,21 +289,19 @@ export default function FollowUpsPage() {
             <div className="flex items-center gap-2 border border-gray-300 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  viewMode === 'list'
-                    ? 'bg-[#1F3A5F] text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'list'
+                  ? 'bg-[#1F3A5F] text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 List
               </button>
               <button
                 onClick={() => setViewMode('calendar')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  viewMode === 'calendar'
-                    ? 'bg-[#1F3A5F] text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'calendar'
+                  ? 'bg-[#1F3A5F] text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 Calendar
               </button>

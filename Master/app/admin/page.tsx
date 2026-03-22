@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { useToast, ConfirmDialogProvider } from '@/ui'
 import { UserManagementTab } from './components/UserManagementTab'
 import { SystemSettingsTab } from './components/SystemSettingsTab'
 import { SystemHealthTab } from './components/SystemHealthTab'
@@ -46,8 +46,7 @@ function AdminPageContent() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<AdminTab>('users')
   const [userRole, setUserRole] = useState<string | null>(null)
-  const { toasts, showToast, removeToast } = useToast()
-  const { dialogState, showConfirm, closeDialog, handleConfirm } = useConfirmDialog()
+  const { showToast } = useToast()
 
   const allowedTabs = useMemo(() => getAllowedTabs(userRole), [userRole])
   const visibleTabs = useMemo(
@@ -135,17 +134,7 @@ function AdminPageContent() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <ConfirmDialog
-        isOpen={dialogState.isOpen}
-        onClose={closeDialog}
-        onConfirm={handleConfirm}
-        title={dialogState.title}
-        message={dialogState.message}
-        variant={dialogState.variant || 'danger'}
-        confirmText={dialogState.confirmText}
-        cancelText={dialogState.cancelText}
-      />
+      <ConfirmDialogProvider>
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <div className="mb-4">
@@ -161,11 +150,10 @@ function AdminPageContent() {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-[#1F3A5F] text-[#1F3A5F]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
+                    ? 'border-[#1F3A5F] text-[#1F3A5F]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -178,6 +166,7 @@ function AdminPageContent() {
           {renderTabContent()}
         </div>
       </div>
+      </ConfirmDialogProvider>
     </DashboardLayout>
   )
 }

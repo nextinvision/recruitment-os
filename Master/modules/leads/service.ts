@@ -71,7 +71,7 @@ export async function getLeads(userId: string, userRole: UserRole, status?: Lead
     where.status = status
   }
 
-  return db.lead.findMany({
+  const leads = await db.lead.findMany({
     where,
     include: {
       assignedUser: {
@@ -84,8 +84,62 @@ export async function getLeads(userId: string, userRole: UserRole, status?: Lead
       },
       client: { select: { id: true } },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   })
+
+  if (!Array.isArray(leads) || leads.length === 0) return leads
+
+  // For NEW-stage prioritization: compute each lead's nearest upcoming MEETING.
+  const now = new Date()
+  const leadIds = leads.map((l) => l.id)
+  const upcomingMeetings = await db.activity.findMany({
+    where: {
+      leadId: { in: leadIds },
+      type: 'MEETING',
+      occurredAt: { gte: now },
+    },
+    select: {
+      leadId: true,
+      occurredAt: true,
+    },
+    orderBy: [{ occurredAt: 'asc' }],
+  })
+
+  const nextMeetingByLead = new Map<string, Date>()
+  for (const m of upcomingMeetings) {
+    if (!m.leadId) continue
+    if (!nextMeetingByLead.has(m.leadId)) {
+      nextMeetingByLead.set(m.leadId, m.occurredAt)
+    }
+  }
+
+  const enriched = leads.map((lead: any) => ({
+    ...lead,
+    nextMeetingAt: nextMeetingByLead.get(lead.id) || null,
+  }))
+
+  // Root-level ordering rule:
+  // 1) NEW leads with upcoming calls first (nearest first),
+  // 2) then all other leads by existing order (createdAt desc, id desc).
+  enriched.sort((a: any, b: any) => {
+    const aIsNew = a.status === 'NEW'
+    const bIsNew = b.status === 'NEW'
+    const aNext = a.nextMeetingAt ? new Date(a.nextMeetingAt).getTime() : null
+    const bNext = b.nextMeetingAt ? new Date(b.nextMeetingAt).getTime() : null
+
+    if (aIsNew && bIsNew) {
+      if (aNext != null && bNext != null) return aNext - bNext
+      if (aNext != null) return -1
+      if (bNext != null) return 1
+    }
+
+    const aCreated = new Date(a.createdAt).getTime()
+    const bCreated = new Date(b.createdAt).getTime()
+    if (aCreated !== bCreated) return bCreated - aCreated
+    return String(b.id).localeCompare(String(a.id))
+  })
+
+  return enriched
 }
 
 export async function getLeadsByStatus(status: LeadStatus) {
@@ -101,7 +155,7 @@ export async function getLeadsByStatus(status: LeadStatus) {
         },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   })
 }
 

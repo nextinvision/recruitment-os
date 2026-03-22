@@ -1,10 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { DataTable } from '@/ui/DataTable'
 import { Modal } from '@/ui/Modal'
 import { TemplateBuilder } from '@/ui/TemplateBuilder'
-import { useConfirmDialog } from '@/ui'
+import { useSharedConfirmDialog } from '@/ui'
+import {
+  AUTOMATION_TEMPLATE_FLOWS,
+  MANUAL_SELECTION_FLOWS,
+} from '@/modules/communications/template-placeholders'
 
 interface MessageTemplate {
   id: string
@@ -63,19 +67,30 @@ export function CommunicationsTab({ showToast }: CommunicationsTabProps) {
   const [showModal, setShowModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null)
   const [activeTab, setActiveTab] = useState<'templates' | 'messages'>('templates')
-  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
+  const { showConfirm } = useSharedConfirmDialog()
   const [messageFilters, setMessageFilters] = useState({
     channel: '',
     status: '',
     recipientType: '',
   })
+  const [templateFilters, setTemplateFilters] = useState({
+    type: '',
+    channel: '',
+  })
+  const [showTemplateReference, setShowTemplateReference] = useState(false)
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       const token = localStorage.getItem('token')
       if (!token) return
 
-      const response = await fetch('/api/messages/templates', {
+      const params = new URLSearchParams()
+      if (templateFilters.type) params.append('type', templateFilters.type)
+      if (templateFilters.channel) params.append('channel', templateFilters.channel)
+      const qs = params.toString()
+      const url = qs ? `/api/messages/templates?${qs}` : '/api/messages/templates'
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -92,7 +107,7 @@ export function CommunicationsTab({ showToast }: CommunicationsTabProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [templateFilters.type, templateFilters.channel])
 
   const loadMessages = async () => {
     setMessagesLoading(true)
@@ -127,7 +142,7 @@ export function CommunicationsTab({ showToast }: CommunicationsTabProps) {
 
   useEffect(() => {
     loadTemplates()
-  }, [])
+  }, [loadTemplates])
 
   useEffect(() => {
     if (activeTab === 'messages') {
@@ -255,7 +270,14 @@ export function CommunicationsTab({ showToast }: CommunicationsTabProps) {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Communications</h2>
-            <p className="text-sm text-gray-600 mt-1">Manage message templates and view message logs</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Manage message templates and view message logs. Automation picks the <strong>first enabled</strong> template
+              matching type + channel (e.g. FOLLOW_UP + WHATSAPP).
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Production: run <code className="bg-gray-100 px-1 rounded">npm run db:ensure-templates</code> once to
+              create missing default templates without re-seeding.
+            </p>
           </div>
           <button
             onClick={handleCreate}
@@ -293,12 +315,104 @@ export function CommunicationsTab({ showToast }: CommunicationsTabProps) {
 
         {/* Content */}
         {activeTab === 'templates' && (
-          <DataTable
-            data={templates}
-            columns={columns}
-            searchable
-            searchPlaceholder="Search templates..."
-          />
+          <div className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by type</label>
+                  <select
+                    value={templateFilters.type}
+                    onChange={(e) => setTemplateFilters({ ...templateFilters, type: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">All types</option>
+                    <option value="FOLLOW_UP">FOLLOW_UP</option>
+                    <option value="INTERVIEW_REMINDER">INTERVIEW_REMINDER</option>
+                    <option value="MEETING_REMINDER">MEETING_REMINDER</option>
+                    <option value="OFFER_LETTER">OFFER_LETTER</option>
+                    <option value="WELCOME">WELCOME</option>
+                    <option value="REJECTION">REJECTION</option>
+                    <option value="CUSTOM">CUSTOM</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by channel</label>
+                  <select
+                    value={templateFilters.channel}
+                    onChange={(e) => setTemplateFilters({ ...templateFilters, channel: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">All channels</option>
+                    <option value="EMAIL">EMAIL</option>
+                    <option value="WHATSAPP">WHATSAPP</option>
+                    <option value="SMS">SMS</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-indigo-100 rounded-lg bg-indigo-50/50 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowTemplateReference(!showTemplateReference)}
+                className="w-full text-left px-4 py-3 flex justify-between items-center text-sm font-semibold text-indigo-900 hover:bg-indigo-50"
+              >
+                <span>{'Where templates are used + {{placeholders}} reference'}</span>
+                <span className="text-indigo-600">{showTemplateReference ? '▼' : '▶'}</span>
+              </button>
+              {showTemplateReference && (
+                <div className="px-4 pb-4 space-y-4 text-sm text-gray-700 border-t border-indigo-100 bg-white">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Automation (first enabled template per type + channel)</h4>
+                    <ul className="space-y-3">
+                      {AUTOMATION_TEMPLATE_FLOWS.map((flow) => (
+                        <li key={flow.id} className="border-l-2 border-indigo-300 pl-3">
+                          <div className="font-medium">{flow.title}</div>
+                          <div className="text-xs text-gray-500">
+                            Type: {flow.templateType} · {flow.channel}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">Where: {flow.triggeredFrom.join(' · ')}</div>
+                          <ul className="mt-1 text-xs list-disc list-inside text-gray-600">
+                            {flow.variables.map((v) => (
+                              <li key={v.name}>
+                                <code className="bg-gray-100 px-0.5 rounded">{`{{${v.name}}}`}</code> — {v.description}
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Manual selection (user picks template in UI)</h4>
+                    <ul className="space-y-3">
+                      {MANUAL_SELECTION_FLOWS.map((flow) => (
+                        <li key={flow.id} className="border-l-2 border-emerald-300 pl-3">
+                          <div className="font-medium">{flow.title}</div>
+                          <div className="text-xs text-gray-600 mt-1">Where: {flow.triggeredFrom.join(' · ')}</div>
+                          {flow.notes && <p className="text-xs text-amber-800 mt-1">{flow.notes}</p>}
+                          <ul className="mt-1 text-xs list-disc list-inside text-gray-600">
+                            {flow.variables.map((v) => (
+                              <li key={v.name}>
+                                <code className="bg-gray-100 px-0.5 rounded">{`{{${v.name}}}`}</code> — {v.description}
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DataTable
+              data={templates}
+              columns={columns}
+              searchable
+              searchPlaceholder="Search templates..."
+            />
+          </div>
         )}
 
         {activeTab === 'messages' && (

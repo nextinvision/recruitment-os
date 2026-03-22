@@ -73,8 +73,9 @@ class Glassdoor(Scraper):
             scraper_input.location, scraper_input.is_remote
         )
         if location_type is None:
-            log.error("Glassdoor: location not parsed")
-            return JobResponse(jobs=[])
+            # Fallback so we still attempt a search (e.g. rate limit or unknown location)
+            location_id, location_type = 11047, "STATE"
+            log.warning("Glassdoor: location lookup failed, using default (STATE 11047)")
         job_list: list[JobPost] = []
         cursor = None
 

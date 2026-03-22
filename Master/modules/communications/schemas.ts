@@ -41,6 +41,10 @@ export const sendMessageSchema = z.object({
   content: z.string().min(1),
   variables: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  /** Appended after rendered body (EMAIL). Link-type {{placeholders}} are blanked in the body only. */
+  appendedEmailHtml: z.string().optional(),
+  /** Appended after rendered body (WHATSAPP), plain text. Same body placeholder blanking as email. */
+  appendedChannelText: z.string().optional(),
 })
 
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>

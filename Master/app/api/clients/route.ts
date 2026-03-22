@@ -87,11 +87,12 @@ export async function POST(request: NextRequest) {
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
-    // Set assignedUserId from auth context if not provided
-    if (!body.assignedUserId) {
+    // Default primary assignee only when the client did not send one (e.g. lead convert, legacy callers).
+    // Explicit assignedUserId from the UI always wins so list "Assigned To" matches the chosen recruiter/manager.
+    const rawAssign = body.assignedUserId
+    if (rawAssign == null || String(rawAssign).trim() === '') {
       body.assignedUserId = authContext.userId
     }
-    
     // Set default onboardedDate if not provided
     if (!body.onboardedDate) {
       body.onboardedDate = new Date().toISOString()

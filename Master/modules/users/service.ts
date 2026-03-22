@@ -51,35 +51,46 @@ export async function getUserById(userId: string) {
   })
 }
 
+const userListSelect = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  role: true,
+  isActive: true,
+  lastLogin: true,
+  createdAt: true,
+  managerId: true,
+  manager: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+  _count: {
+    select: {
+      jobs: true,
+      candidates: true,
+      applications: true,
+    },
+  },
+} as const
+
 export async function getUsersByRole(role: UserRole) {
   return db.user.findMany({
     where: { role },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true,
-      lastLogin: true,
-      createdAt: true,
-      managerId: true,
-      manager: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
-      _count: {
-        select: {
-          jobs: true,
-          candidates: true,
-          applications: true,
-        },
-      },
-    },
+    select: userListSelect,
+  })
+}
+
+/** Fetch users whose role is in the given list (e.g. RECRUITER and SALES for reverse recruiter dropdown). */
+export async function getUsersByRoles(roles: UserRole[]) {
+  if (roles.length === 0) return []
+  return db.user.findMany({
+    where: { role: { in: roles } },
+    select: userListSelect,
   })
 }
 

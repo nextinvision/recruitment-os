@@ -20,6 +20,7 @@ export async function createActivity(input: CreateActivityInput) {
       occurredAt: validated.occurredAt ? new Date(validated.occurredAt) : new Date(),
       leadId: validated.leadId || null,
       clientId: validated.clientId || null,
+      companyContactId: validated.companyContactId || null,
     },
     include: {
       assignedUser: {
@@ -77,14 +78,14 @@ export async function getActivities(
   pagination?: ActivityPaginationOptions
 ): Promise<ActivitiesResult> {
   const where: Prisma.ActivityWhereInput = {}
-  
+
   // Role-based filtering
   if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
     where.assignedUserId = userId
   } else if (filters?.assignedUserId) {
     where.assignedUserId = filters.assignedUserId
   }
-  
+
   // Search filter
   if (filters?.search) {
     where.OR = [
@@ -97,21 +98,21 @@ export async function getActivities(
       { client: { lastName: { contains: filters.search, mode: 'insensitive' } } },
     ]
   }
-  
+
   // Entity filters
   if (filters?.leadId) {
     where.leadId = filters.leadId
   }
-  
+
   if (filters?.clientId) {
     where.clientId = filters.clientId
   }
-  
+
   // Type filter
   if (filters?.type) {
     where.type = filters.type
   }
-  
+
   // Date range filters
   if (filters?.startDate || filters?.endDate) {
     where.occurredAt = {}
@@ -125,7 +126,7 @@ export async function getActivities(
 
   // Sort options
   const { sortBy = 'occurredAt', sortOrder = 'desc' } = sortOptions || {}
-  
+
   // Pagination options
   const { page = 1, pageSize = 25 } = pagination || {}
   const skip = (page - 1) * pageSize
@@ -178,7 +179,7 @@ export async function updateActivity(input: UpdateActivityInput) {
   const { id, ...data } = updateActivitySchema.parse(input)
 
   const updateData: any = { ...data }
-  
+
   if (updateData.occurredAt) {
     updateData.occurredAt = new Date(updateData.occurredAt)
   }

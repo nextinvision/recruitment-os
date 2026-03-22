@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { UserRole } from '@prisma/client'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { getClientById, updateClient, deleteClient } from '@/modules/clients/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
@@ -62,7 +63,11 @@ export async function PATCH(
       return addCorsHeaders(response, origin)
     }
     
-    const body = await request.json()
+    const body = await request.json() as Record<string, unknown>
+    // Only admins/managers may reassign the primary account owner; others keep existing assignee.
+    if (authContext.role !== UserRole.ADMIN && authContext.role !== UserRole.MANAGER) {
+      delete body.assignedUserId
+    }
     const client = await updateClient({ id, ...body })
 
     // Log the mutation (Activity + AuditLog)

@@ -2,29 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner, Button, JobFilters, Pagination, JobAssignmentModal, DuplicateResolutionModal } from '@/ui'
+import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner, Button, JobFilters, Pagination, JobAssignmentModal, DuplicateResolutionModal, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { JobFetchPanel } from '@/components/jobs/JobFetchPanel'
+import { GoogleFetchPanel } from '@/components/jobs/GoogleFetchPanel'
+import { JobForm, type Job as JobType } from '@/components/jobs/JobForm'
 import Link from 'next/link'
 import type { JobFilters as JobFiltersType } from '@/ui'
 
-interface Job {
-  id: string
-  title: string
-  company: string
-  location: string
-  source: string
-  status: string
-  createdAt: string
-  description?: string
-  isDuplicate?: boolean
-  applications?: Array<{ id: string }>
-  recruiter?: {
-    id: string
-    firstName: string
-    lastName: string
-  }
-}
+type Job = JobType
 
 interface JobsResponse {
   jobs: Job[]
@@ -34,7 +20,7 @@ interface JobsResponse {
   totalPages: number
 }
 
-type TabType = 'all' | 'fetch' | 'linkedin' | 'indeed' | 'naukri' | 'other'
+type TabType = 'all' | 'fetch' | 'google' | 'linkedin' | 'indeed' | 'naukri' | 'other'
 
 export default function JobsPage() {
   const router = useRouter()
@@ -55,6 +41,10 @@ export default function JobsPage() {
   const [duplicateGroups, setDuplicateGroups] = useState<any[]>([])
   const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
   const [userRole, setUserRole] = useState<string>('')
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const { showToast } = useToast()
+  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -66,11 +56,12 @@ export default function JobsPage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab !== 'fetch') {
+    if (activeTab !== 'fetch' && activeTab !== 'google') {
       loadJobs()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sortBy, sortOrder, filters, activeTab])
+    // userRole: ensures recruiterId param / RBAC align after hydrating from localStorage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, sortBy, sortOrder, filters, activeTab, userRole])
 
   const loadRecruiters = async () => {
     try {
@@ -98,6 +89,11 @@ export default function JobsPage() {
     }
   }
 
+  const handleFiltersChange = (next: JobFiltersType) => {
+    setFilters(next)
+    setPage(1)
+  }
+
   const loadJobs = async () => {
     try {
       setLoading(true)
@@ -109,7 +105,7 @@ export default function JobsPage() {
 
       // Build query string
       const params = new URLSearchParams()
-      
+
       // Apply source filter based on active tab
       if (activeTab === 'linkedin') {
         params.append('source', 'LINKEDIN')
@@ -120,15 +116,27 @@ export default function JobsPage() {
       } else if (activeTab === 'other') {
         params.append('source', 'OTHER')
       }
-      // 'all' tab shows all sources, no filter needed
-      
+      // 'all'/'fetch'/'google' tabs show all sources, no filter needed
+
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
-      if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
+      if (
+        filters.recruiterId &&
+        (userRole === 'ADMIN' || userRole === 'MANAGER')
+      ) {
+        params.append('recruiterId', filters.recruiterId)
+      }
       if (filters.startDate) params.append('startDate', filters.startDate)
       if (filters.endDate) params.append('endDate', filters.endDate)
       if (filters.search) params.append('search', filters.search)
       if (filters.isDuplicate !== undefined) params.append('isDuplicate', String(filters.isDuplicate))
+      if (filters.jobType) params.append('jobType', filters.jobType)
+      if (filters.title) params.append('title', filters.title)
+      if (filters.company) params.append('company', filters.company)
+      if (filters.location) params.append('location', filters.location)
+      if (filters.skills) params.append('skills', filters.skills)
+      if (filters.ctcRange) params.append('ctcRange', filters.ctcRange)
+      if (filters.yearsOfExperience) params.append('yearsOfExperience', filters.yearsOfExperience)
       params.append('sortBy', sortBy)
       params.append('sortOrder', sortOrder)
       params.append('page', String(page))
@@ -179,13 +187,26 @@ export default function JobsPage() {
       else if (activeTab === 'indeed') params.append('source', 'INDEED')
       else if (activeTab === 'naukri') params.append('source', 'NAUKRI')
       else if (activeTab === 'other') params.append('source', 'OTHER')
-      
+
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
-      if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
+      if (
+        filters.recruiterId &&
+        (userRole === 'ADMIN' || userRole === 'MANAGER')
+      ) {
+        params.append('recruiterId', filters.recruiterId)
+      }
       if (filters.startDate) params.append('startDate', filters.startDate)
       if (filters.endDate) params.append('endDate', filters.endDate)
       if (filters.search) params.append('search', filters.search)
+      if (filters.isDuplicate !== undefined) params.append('isDuplicate', String(filters.isDuplicate))
+      if (filters.title) params.append('title', filters.title)
+      if (filters.company) params.append('company', filters.company)
+      if (filters.location) params.append('location', filters.location)
+      if (filters.jobType) params.append('jobType', filters.jobType)
+      if (filters.skills) params.append('skills', filters.skills)
+      if (filters.ctcRange) params.append('ctcRange', filters.ctcRange)
+      if (filters.yearsOfExperience) params.append('yearsOfExperience', filters.yearsOfExperience)
 
       const response = await fetch(`/api/jobs/export?${params.toString()}`, {
         headers: {
@@ -268,22 +289,99 @@ export default function JobsPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedJobIds.size === 0) return
+    const token = localStorage.getItem('token')
+    if (!token) {
+      showToast('Please log in', 'error')
+      return
+    }
+    setBulkDeleting(true)
+    try {
+      const res = await fetch('/api/jobs/bulk-delete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ jobIds: Array.from(selectedJobIds) }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        const deleted = data.deleted ?? 0
+        setSelectedJobIds(new Set())
+        loadJobs()
+        showToast(deleted > 0 ? `${deleted} job(s) deleted` : 'No jobs deleted', deleted > 0 ? 'success' : 'info')
+        if (data.errors?.length > 0) {
+          showToast(`${data.errors.length} job(s) could not be deleted`, 'error')
+        }
+      } else {
+        showToast(data.error || 'Bulk delete failed', 'error')
+      }
+    } catch {
+      showToast('Request failed', 'error')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const tabs = [
     { id: 'all' as TabType, label: 'All Jobs', count: jobsData?.total },
     { id: 'fetch' as TabType, label: 'Fetch Jobs', count: null },
+    { id: 'google' as TabType, label: 'Google Search', count: null },
     { id: 'linkedin' as TabType, label: 'LinkedIn', count: null },
     { id: 'indeed' as TabType, label: 'Indeed', count: null },
     { id: 'naukri' as TabType, label: 'Naukri', count: null },
     { id: 'other' as TabType, label: 'Other Sources', count: null },
   ]
 
+  const pageJobIds = jobsData?.jobs?.map((j) => j.id) ?? []
+  const allPageSelected = pageJobIds.length > 0 && pageJobIds.every((id) => selectedJobIds.has(id))
+
   const columns = [
+    {
+      key: '_select' as const,
+      header: '',
+      headerRender: () => (
+        <input
+          type="checkbox"
+          checked={allPageSelected}
+          onChange={() => {
+            if (allPageSelected) {
+              setSelectedJobIds((prev) => {
+                const next = new Set(prev)
+                pageJobIds.forEach((id) => next.delete(id))
+                return next
+              })
+            } else {
+              setSelectedJobIds((prev) => new Set([...prev, ...pageJobIds]))
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded border-gray-300 text-[#1F3A5F] focus:ring-[#F4B400]"
+        />
+      ),
+      render: (job: Job) => (
+        <input
+          type="checkbox"
+          checked={selectedJobIds.has(job.id)}
+          onChange={() => {
+            setSelectedJobIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(job.id)) next.delete(job.id)
+              else next.add(job.id)
+              return next
+            })
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded border-gray-300 text-[#1F3A5F] focus:ring-[#F4B400]"
+        />
+      ),
+    },
     {
       key: 'title',
       header: 'Title',
       render: (job: Job) => (
-        <Link 
-          href={`/jobs/${job.id}`} 
+        <Link
+          href={`/jobs/${job.id}`}
           className="block hover:opacity-80 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
@@ -310,11 +408,10 @@ export default function JobsPage() {
       key: 'status',
       header: 'Status',
       render: (job: Job) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
-          job.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border-green-200' :
+        <span className={`px-2 py-1 text-xs font-medium rounded-full border ${job.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border-green-200' :
           job.status === 'CLOSED' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-          'bg-yellow-100 text-yellow-800 border-yellow-200'
-        }`}>
+            'bg-yellow-100 text-yellow-800 border-yellow-200'
+          }`}>
           {job.status}
         </span>
       ),
@@ -369,6 +466,16 @@ export default function JobsPage() {
 
   return (
     <DashboardLayout>
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        variant={dialogState.variant ?? 'danger'}
+        confirmText={dialogState.confirmText ?? 'Delete'}
+        cancelText={dialogState.cancelText ?? 'Cancel'}
+      />
       {loading && !jobsData && activeTab !== 'fetch' ? (
         <Spinner fullScreen />
       ) : (
@@ -379,6 +486,22 @@ export default function JobsPage() {
               description="Manage and track all job postings from multiple sources"
             />
             <div className="flex items-center gap-3">
+              {selectedJobIds.size > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    showConfirm(
+                      'Delete selected jobs',
+                      `Delete ${selectedJobIds.size} selected job(s)? This cannot be undone.`,
+                      () => handleBulkDelete(),
+                      { variant: 'danger', confirmText: 'Delete' }
+                    )
+                  }
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? 'Deleting…' : `Delete selected (${selectedJobIds.size})`}
+                </Button>
+              )}
               {(userRole === 'ADMIN' || userRole === 'MANAGER') && activeTab !== 'fetch' && (
                 <>
                   <Button variant="secondary" onClick={loadDuplicates}>
@@ -406,23 +529,22 @@ export default function JobsPage() {
                   onClick={() => {
                     setActiveTab(tab.id)
                     setPage(1) // Reset to first page when switching tabs
+                    setSelectedJobIds(new Set()) // Clear selection when switching tabs
                   }}
                   className={`
                     whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
-                    ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ${activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }
                   `}
                 >
                   {tab.label}
                   {tab.count !== null && tab.count !== undefined && (
-                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
-                      activeTab === tab.id
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-gray-100 text-gray-600'
+                      }`}>
                       {tab.count}
                     </span>
                   )}
@@ -434,12 +556,15 @@ export default function JobsPage() {
           {/* Tab Content */}
           {activeTab === 'fetch' ? (
             <JobFetchPanel onFetchComplete={handleFetchComplete} />
+          ) : activeTab === 'google' ? (
+            <GoogleFetchPanel onFetchComplete={handleFetchComplete} />
           ) : (
             <>
               <JobFilters
                 filters={filters}
-                onChange={setFilters}
+                onChange={handleFiltersChange}
                 recruiters={recruiters}
+                showRecruiterFilter={userRole === 'ADMIN' || userRole === 'MANAGER'}
               />
 
               {loading ? (
@@ -480,7 +605,7 @@ export default function JobsPage() {
                     onClick={() => setActiveTab('fetch')}
                     className="mt-4"
                   >
-                    Fetch Jobs from External Sources
+                    Get more jobs
                   </Button>
                 </div>
               )}
@@ -538,205 +663,5 @@ export default function JobsPage() {
         </div>
       )}
     </DashboardLayout>
-  )
-}
-
-function JobForm({ job, onSuccess, onCancel }: { job: Job | null; onSuccess: () => void; onCancel: () => void }) {
-  const [formData, setFormData] = useState({
-    title: job?.title || '',
-    company: job?.company || '',
-    location: job?.location || '',
-    description: job?.description || '',
-    source: job?.source || 'LINKEDIN',
-    status: job?.status || 'ACTIVE',
-    sourceUrl: '',
-    experienceRequired: '',
-    salaryRange: '',
-    skills: '',
-    notes: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (job) {
-      setFormData({
-        title: job.title || '',
-        company: job.company || '',
-        location: job.location || '',
-        description: job.description || '',
-        source: job.source || 'LINKEDIN',
-        status: job.status || 'ACTIVE',
-        sourceUrl: (job as any).sourceUrl || '',
-        experienceRequired: (job as any).experienceRequired || '',
-        salaryRange: (job as any).salaryRange || '',
-        skills: ((job as any).skills || []).join(', '),
-        notes: (job as any).notes || '',
-      })
-    }
-  }, [job])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const token = localStorage.getItem('token')
-      const userData = localStorage.getItem('user')
-      const user = userData ? JSON.parse(userData) : null
-
-      const url = job ? `/api/jobs/${job.id}` : '/api/jobs'
-      const method = job ? 'PATCH' : 'POST'
-
-      const payload: any = {
-        ...formData,
-        skills: formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0),
-        ...(method === 'POST' && { recruiterId: user?.id }),
-      }
-
-      // Remove empty optional fields
-      if (!payload.sourceUrl) delete payload.sourceUrl
-      if (!payload.experienceRequired) delete payload.experienceRequired
-      if (!payload.salaryRange) delete payload.salaryRange
-      if (!payload.notes) delete payload.notes
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        onSuccess()
-      } else {
-        const data = await response.json().catch(() => ({ error: 'Failed to save job' }))
-        if (Array.isArray(data.error)) {
-          setError(data.error.join(', '))
-        } else if (typeof data.error === 'string') {
-          setError(data.error)
-        } else if (data.message) {
-          setError(data.message)
-        } else {
-          setError('Failed to save job. Please check your input and try again.')
-        }
-      }
-    } catch {
-      setError('Network error. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && <Alert variant="error">{error}</Alert>}
-
-      <Input
-        label="Title"
-        type="text"
-        required
-        value={formData.title}
-        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-      />
-
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="Company"
-          type="text"
-          required
-          value={formData.company}
-          onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-        />
-        <Input
-          label="Location"
-          type="text"
-          required
-          value={formData.location}
-          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-        />
-      </div>
-
-      <Textarea
-        label="Description"
-        required
-        rows={4}
-        value={formData.description}
-        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-      />
-
-      <div className="grid grid-cols-2 gap-4">
-        <Select
-          label="Source"
-          value={formData.source}
-          onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-          options={[
-            { value: 'LINKEDIN', label: 'LinkedIn' },
-            { value: 'INDEED', label: 'Indeed' },
-            { value: 'NAUKRI', label: 'Naukri' },
-            { value: 'OTHER', label: 'Other' },
-          ]}
-        />
-        <Select
-          label="Status"
-          value={formData.status}
-          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-          options={[
-            { value: 'ACTIVE', label: 'Active' },
-            { value: 'CLOSED', label: 'Closed' },
-            { value: 'FILLED', label: 'Filled' },
-          ]}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="Source URL"
-          type="url"
-          value={formData.sourceUrl}
-          onChange={(e) => setFormData({ ...formData, sourceUrl: e.target.value })}
-        />
-        <Input
-          label="Experience Required"
-          type="text"
-          placeholder="e.g., 3-5 years"
-          value={formData.experienceRequired}
-          onChange={(e) => setFormData({ ...formData, experienceRequired: e.target.value })}
-        />
-      </div>
-
-      <Input
-        label="Salary Range"
-        type="text"
-        placeholder="e.g., ₹15,00,000 - ₹25,00,000"
-        value={formData.salaryRange}
-        onChange={(e) => setFormData({ ...formData, salaryRange: e.target.value })}
-      />
-
-      <Input
-        label="Skills (comma-separated)"
-        type="text"
-        placeholder="React, Node.js, TypeScript"
-        value={formData.skills}
-        onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-      />
-
-      <Textarea
-        label="Notes"
-        rows={3}
-        value={formData.notes}
-        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-      />
-
-      <FormActions
-        onCancel={onCancel}
-        submitLabel={job ? 'Update' : 'Create'}
-        isLoading={loading}
-      />
-    </form>
   )
 }

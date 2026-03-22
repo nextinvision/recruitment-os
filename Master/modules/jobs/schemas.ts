@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { JobSource, JobStatus } from '@prisma/client'
+import { JobSource, JobStatus, JobType } from '@prisma/client'
 
 export const createJobSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -12,7 +12,9 @@ export const createJobSchema = z.object({
   experienceRequired: z.string().optional(),
   salaryRange: z.string().optional(),
   status: z.nativeEnum(JobStatus).optional().default('ACTIVE'),
+  jobType: z.nativeEnum(JobType).optional().default('ONSITE'),
   recruiterId: z.string().min(1, 'Recruiter ID is required'),
+  companyId: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -27,11 +29,19 @@ export const bulkCreateJobsSchema = z.object({
 export const jobFiltersSchema = z.object({
   source: z.nativeEnum(JobSource).optional(),
   status: z.nativeEnum(JobStatus).optional(),
+  jobType: z.nativeEnum(JobType).optional(),
   recruiterId: z.string().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   search: z.string().optional(),
   isDuplicate: z.boolean().optional(),
+  // New granular filters
+  title: z.string().optional(),
+  company: z.string().optional(),
+  location: z.string().optional(),
+  skills: z.string().optional(), // Comma-separated or single skill
+  ctcRange: z.string().optional(),
+  yearsOfExperience: z.string().optional(),
 })
 
 export const jobSortSchema = z.object({
@@ -60,12 +70,17 @@ export const resolveDuplicateSchema = z.object({
   action: z.enum(['merge', 'delete']),
 })
 
-export type CreateJobInput = z.infer<typeof createJobSchema>
-export type UpdateJobInput = z.infer<typeof updateJobSchema>
-export type BulkCreateJobsInput = z.infer<typeof bulkCreateJobsSchema>
-export type JobFiltersInput = z.infer<typeof jobFiltersSchema>
-export type JobSortInput = z.infer<typeof jobSortSchema>
-export type JobPaginationInput = z.infer<typeof jobPaginationSchema>
+export const bulkDeleteJobsSchema = z.object({
+  jobIds: z.array(z.string().min(1, 'Job ID is required')).min(1, 'At least one job ID is required'),
+})
+
+export type CreateJobInput = z.input<typeof createJobSchema>
+export type UpdateJobInput = z.input<typeof updateJobSchema>
+export type BulkCreateJobsInput = z.input<typeof bulkCreateJobsSchema>
+export type JobFiltersInput = z.input<typeof jobFiltersSchema>
+export type JobSortInput = z.input<typeof jobSortSchema>
+export type JobPaginationInput = z.input<typeof jobPaginationSchema>
 export type AssignJobInput = z.infer<typeof assignJobSchema>
 export type BulkAssignJobInput = z.infer<typeof bulkAssignJobSchema>
+export type BulkDeleteJobsInput = z.infer<typeof bulkDeleteJobsSchema>
 export type ResolveDuplicateInput = z.infer<typeof resolveDuplicateSchema>

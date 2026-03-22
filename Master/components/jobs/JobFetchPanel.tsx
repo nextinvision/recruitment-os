@@ -1,8 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button, Input, Select, Alert, Spinner, useToast } from '@/ui'
 import { GoogleSearchEmbed } from './GoogleSearchEmbed'
+import {
+  JOBSPY_PLATFORMS,
+  JOBSPY_DEFAULT_PLATFORMS,
+  type JobSpyPlatformValue,
+} from '@/modules/jobs/jobspy-platforms'
 
 interface FetchStatus {
   source: string
@@ -27,18 +32,16 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
   const [activeSource, setActiveSource] = useState<string>('ALL')
   const [showEmbeddedSearch, setShowEmbeddedSearch] = useState(false)
   const [jobSpyCountry, setJobSpyCountry] = useState('india')
-  const [jobSpySites, setJobSpySites] = useState<string[]>(['indeed', 'linkedin', 'naukri'])
+  const [jobSpySites, setJobSpySites] = useState<JobSpyPlatformValue[]>([...JOBSPY_DEFAULT_PLATFORMS])
   
   // Get search engine ID from environment (will be passed from parent or use default)
   const searchEngineId = 'c146913a207604fe4' // Default from .env, can be made configurable
 
   const sources = [
-    { value: 'ALL', label: 'All Sources', description: 'Fetch from Google, Adzuna, and Jooble' },
-    { value: 'JOBSPY', label: 'JobSpy Scraper', description: 'Indeed, LinkedIn, Naukri, Glassdoor (scraper API)' },
-    { value: 'GOOGLE', label: 'Google Search', description: 'Search across LinkedIn, Indeed, Glassdoor, etc.' },
-    { value: 'ADZUNA', label: 'Adzuna', description: 'Global job aggregator' },
-    { value: 'JOOBLE', label: 'Jooble', description: 'Job search engine' },
-    { value: 'INDEED_RSS', label: 'Indeed RSS', description: 'Indeed job feed' },
+    { value: 'ALL', label: 'All Sources', description: 'Fetch from multiple job boards' },
+    { value: 'JOBSPY', label: 'JobSpy', description: 'Indeed, LinkedIn, Naukri, Glassdoor, and more' },
+    { value: 'GOOGLE', label: 'Goole search', description: 'Search across' },
+    { value: 'ADZUNA', label: 'Job aggregator', description: 'Global job listings' },
   ]
 
   const handleFetch = async (source: string) => {
@@ -73,7 +76,7 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
 
       if (source === 'JOBSPY') {
         requestBody.country = jobSpyCountry.trim() || 'india'
-        requestBody.sites = jobSpySites.length > 0 ? jobSpySites : ['indeed', 'linkedin', 'naukri']
+        requestBody.sites = jobSpySites.length > 0 ? jobSpySites : JOBSPY_DEFAULT_PLATFORMS
       }
 
       // Remove empty location to avoid sending empty string
@@ -95,11 +98,9 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to fetch jobs' }))
         const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`
         
-        // Show helpful error messages
-        if (errorMessage.includes('not enabled')) {
-          throw new Error('Custom Search API is not enabled. Please enable it in Google Cloud Console.')
-        } else if (errorMessage.includes('API key')) {
-          throw new Error('API key configuration issue. Please check your Google API credentials.')
+        // Show user-friendly error messages (no technical/API details)
+        if (errorMessage.includes('not enabled') || errorMessage.includes('API key') || errorMessage.includes('credentials')) {
+          throw new Error('Search service is not available. Please try again later or contact support.')
         } else if (errorMessage.includes('Validation error')) {
           throw new Error(`Invalid request: ${errorMessage}`)
         } else {
@@ -120,8 +121,9 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         },
       }))
 
+      const sourceLabel = sources.find((s) => s.value === source)?.label ?? 'source'
       showToast(
-        `Successfully fetched ${data.fetched} jobs from ${source === 'ALL' ? 'all sources' : source}. ${data.stored} new jobs stored.`,
+        `Successfully fetched ${data.fetched} jobs from ${source === 'ALL' ? 'all sources' : sourceLabel}. ${data.stored} new jobs stored.`,
         'success'
       )
 
@@ -129,8 +131,15 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         onFetchComplete()
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch jobs'
-      
+      let errorMessage = error instanceof Error ? error.message : 'Failed to fetch jobs'
+      if (
+        source === 'JOBSPY' &&
+        (errorMessage.includes('429') || errorMessage.includes('Max retries') || errorMessage.includes('google.com'))
+      ) {
+        errorMessage =
+          'One of the selected sources is temporarily unavailable. Try changing your platform selection and try again.'
+      }
+
       setFetchStatuses(prev => ({
         ...prev,
         [source]: {
@@ -143,7 +152,8 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         },
       }))
 
-      showToast(`Error fetching from ${source}: ${errorMessage}`, 'error')
+      const sourceLabel = sources.find((s) => s.value === source)?.label ?? 'source'
+      showToast(`Error fetching from ${sourceLabel}: ${errorMessage}`, 'error')
     } finally {
       setIsFetching(false)
     }
@@ -151,7 +161,7 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
 
   const handleFetchAll = async () => {
     // Fetch from all sources sequentially
-    for (const source of ['GOOGLE', 'ADZUNA', 'JOOBLE']) {
+    for (const source of ['GOOGLE', 'ADZUNA']) {
       await handleFetch(source)
       // Small delay between sources to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 1000))
@@ -238,10 +248,10 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         </div>
       </div>
 
-      {/* JobSpy options (when JobSpy source is selected) */}
+      {/* Options when JobSpy source is selected */}
       {activeSource === 'JOBSPY' && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <h3 className="text-sm font-medium text-amber-800 mb-2">JobSpy options</h3>
+          <h3 className="text-sm font-medium text-amber-800 mb-2">Options</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-amber-700 mb-1">Country</label>
@@ -254,18 +264,41 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-amber-700 mb-1">Sites (comma-separated)</label>
-              <Input
-                type="text"
-                placeholder="indeed, linkedin, naukri"
-                value={jobSpySites.join(', ')}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setJobSpySites(v ? v.split(',').map(s => s.trim()).filter(Boolean) : [])
-                }}
-                className="w-full"
-              />
-              <p className="text-xs text-amber-600 mt-1">Options: indeed, linkedin, naukri, glassdoor, zip_recruiter, google. Fetch is capped at 25 jobs per run to avoid timeout.</p>
+              <label className="block text-xs font-medium text-amber-700 mb-1">Platforms</label>
+              <p className="text-xs text-amber-600 mb-2">Select one or more job boards to fetch from.</p>
+              <div className="flex flex-wrap gap-3">
+                {JOBSPY_PLATFORMS.map((platform) => {
+                  const isChecked = jobSpySites.includes(platform.value as JobSpyPlatformValue)
+                  return (
+                    <label
+                      key={platform.value}
+                      className="inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setJobSpySites(jobSpySites.filter((s) => s !== platform.value))
+                          } else {
+                            setJobSpySites([...jobSpySites, platform.value as JobSpyPlatformValue])
+                          }
+                        }}
+                        className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-sm text-amber-900">
+                        {platform.label}
+                        {platform.warning && (
+                          <span className="ml-1 text-amber-600 font-normal" title={platform.warning}>
+                            (may fail)
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-amber-600 mt-1">Fetch is capped at 25 jobs per run to avoid timeout.</p>
             </div>
           </div>
         </div>
@@ -383,23 +416,23 @@ export function JobFetchPanel({ onFetchComplete }: JobFetchPanelProps) {
         </div>
       )}
 
-      {/* Toggle between API fetch and Embedded Search */}
+      {/* Toggle between fetch and embedded search */}
       <div className="mt-6 pt-6 border-t border-gray-200">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-gray-700">Search Options</h3>
+          <h3 className="text-sm font-medium text-gray-700">Search options</h3>
           <button
             onClick={() => setShowEmbeddedSearch(!showEmbeddedSearch)}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
-            {showEmbeddedSearch ? '← Back to API Fetch' : 'Try Live Google Search →'}
+            {showEmbeddedSearch ? '← Back to fetch' : 'Try live search →'}
           </button>
         </div>
         
         {showEmbeddedSearch ? (
           <div className="bg-gray-50 rounded-lg p-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Live Google Search</h4>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Live search</h4>
             <p className="text-sm text-gray-600 mb-4">
-              Search jobs directly using Google's search interface. Results appear instantly as you type.
+              Search jobs below. Results appear as you type.
             </p>
             <GoogleSearchEmbed searchEngineId={searchEngineId} />
           </div>

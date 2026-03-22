@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { UserRole, JobSource, JobStatus } from '@prisma/client'
+import { Prisma, UserRole, JobSource, JobStatus, JobType } from '@prisma/client'
 import {
   createJobSchema,
   updateJobSchema,
@@ -8,11 +8,12 @@ import {
   UpdateJobInput,
   BulkCreateJobsInput,
 } from './schemas'
+import type { BulkDeleteJobsInput } from './schemas'
 
 // Normalize job data
 function normalizeJobData(data: any): any {
   const normalized: any = {}
-  
+
   if (data.title) normalized.title = data.title.trim()
   if (data.company) normalized.company = data.company.trim()
   if (data.location) normalized.location = data.location.trim()
@@ -24,14 +25,18 @@ function normalizeJobData(data: any): any {
   if (data.skills && Array.isArray(data.skills)) {
     normalized.skills = data.skills.map((s: string) => s.trim()).filter((s: string) => s.length > 0)
   }
-  
+
   // Copy other fields
   Object.keys(data).forEach(key => {
     if (!normalized.hasOwnProperty(key)) {
-      normalized[key] = data[key]
+      if (key === 'source' && typeof data[key] === 'string') {
+        normalized[key] = data[key].toUpperCase()
+      } else {
+        normalized[key] = data[key]
+      }
     }
   })
-  
+
   return normalized
 }
 
@@ -98,7 +103,7 @@ function calculateSimilarity(job1: any, job2: any): number {
 // Detect duplicates for a job
 async function detectDuplicates(jobData: any): Promise<{ jobId: string; similarityScore: number }[]> {
   const duplicates: { jobId: string; similarityScore: number }[] = []
-  
+
   // Get all active jobs (excluding the current job if updating)
   const existingJobs = await db.job.findMany({
     where: {
@@ -130,11 +135,18 @@ async function detectDuplicates(jobData: any): Promise<{ jobId: string; similari
 export interface JobFilters {
   source?: JobSource
   status?: JobStatus
+  jobType?: JobType
   recruiterId?: string
   startDate?: Date
   endDate?: Date
   search?: string
   isDuplicate?: boolean
+  title?: string
+  company?: string
+  location?: string
+  skills?: string
+  ctcRange?: string
+  yearsOfExperience?: string
 }
 
 export interface JobSortOptions {
@@ -147,12 +159,130 @@ export interface JobPaginationOptions {
   pageSize?: number
 }
 
+function startOfUtcDay(d: Date): Date {
+  const x = new Date(d.getTime())
+  x.setUTCHours(0, 0, 0, 0)
+  return x
+}
+
+function endOfUtcDay(d: Date): Date {
+  const x = new Date(d.getTime())
+  x.setUTCHours(23, 59, 59, 999)
+  return x
+}
+
+/**
+ * Canonical WHERE clause for job queries (list + export).
+ * - Recruiters are always scoped to their own jobs; recruiterId filter only applies for ADMIN/MANAGER.
+ * - Posted date range is inclusive (whole calendar days in UTC).
+ */
+export function buildJobWhereClause(
+  userId: string,
+  userRole: UserRole,
+  filters?: JobFilters
+): Prisma.JobWhereInput {
+  const where: Prisma.JobWhereInput = {}
+
+  if (userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) {
+    if (filters?.recruiterId) {
+      where.recruiterId = filters.recruiterId
+    }
+  } else {
+    where.recruiterId = userId
+  }
+
+  if (!filters) {
+    return where
+  }
+
+  if (filters.source) {
+    where.source = filters.source
+  }
+  if (filters.status) {
+    where.status = filters.status
+  }
+  if (filters.startDate || filters.endDate) {
+    where.createdAt = {}
+    if (filters.startDate) {
+      where.createdAt.gte = startOfUtcDay(filters.startDate)
+    }
+    if (filters.endDate) {
+      where.createdAt.lte = endOfUtcDay(filters.endDate)
+    }
+  }
+  if (filters.isDuplicate !== undefined) {
+    where.isDuplicate = filters.isDuplicate
+  }
+  if (filters.jobType) {
+    where.jobType = filters.jobType
+  }
+  if (filters.title) {
+    where.title = { contains: filters.title, mode: 'insensitive' }
+  }
+  if (filters.company) {
+    where.company = { contains: filters.company, mode: 'insensitive' }
+  }
+  if (filters.location) {
+    where.location = { contains: filters.location, mode: 'insensitive' }
+  }
+  if (filters.ctcRange) {
+    where.salaryRange = { contains: filters.ctcRange, mode: 'insensitive' }
+  }
+  if (filters.yearsOfExperience) {
+    where.experienceRequired = { contains: filters.yearsOfExperience, mode: 'insensitive' }
+  }
+  if (filters.skills) {
+    const skillList = filters.skills.split(',').map((s) => s.trim()).filter((s) => s !== '')
+    if (skillList.length > 0) {
+      where.skills = { hasSome: skillList }
+    }
+  }
+  if (filters.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: 'insensitive' } },
+      { company: { contains: filters.search, mode: 'insensitive' } },
+      { location: { contains: filters.search, mode: 'insensitive' } },
+      { description: { contains: filters.search, mode: 'insensitive' } },
+      { skills: { hasSome: [filters.search] } },
+    ]
+  }
+
+  return where
+}
+
 export interface JobsResult {
   jobs: any[]
   total: number
   page: number
   pageSize: number
   totalPages: number
+}
+
+// Generate an embedding by calling the Python backend and injecting it directly via raw SQL
+async function injectEmbedding(jobId: string, title: string, company: string, skills: string[], description: string, dbClient: any = db) {
+  try {
+    // Construct rich text representation of the job
+    const textToEmbed = `${title} at ${company}. Skills: ${(skills || []).join(', ')}. ${description}`.substring(0, 8000)
+    const pythonUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:8080'
+    const res = await fetch(`${pythonUrl}/api/generate-embedding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: textToEmbed })
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      if (data.embedding) {
+        const vectorStr = `[${data.embedding.join(',')}]`
+        // Inject via executeRawUnsafe because Prisma doesn't fully support inserting Unsupported column typed safely yet
+        await dbClient.$executeRawUnsafe(`UPDATE "jobs" SET embedding = $1::vector WHERE id = $2`, vectorStr, jobId)
+      }
+    } else {
+      console.error('Failed to get embeddings HTTP status:', res.status)
+    }
+  } catch (err) {
+    console.error('Failed to generate/save embedding for job:', err)
+  }
 }
 
 export async function createJob(input: CreateJobInput) {
@@ -188,6 +318,9 @@ export async function createJob(input: CreateJobInput) {
       },
     },
   })
+
+  // Generate and append the vector embedding in postgres
+  await injectEmbedding(job.id, job.title, job.company, job.skills, job.description)
 
   return job
 }
@@ -227,45 +360,7 @@ export async function getJobs(
   sortOptions?: JobSortOptions,
   pagination?: JobPaginationOptions
 ): Promise<JobsResult> {
-  const where: any = {}
-  
-  // Role-based filtering
-  if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
-    where.recruiterId = userId
-  }
-
-  // Apply filters
-  if (filters) {
-    if (filters.source) {
-      where.source = filters.source
-    }
-    if (filters.status) {
-      where.status = filters.status
-    }
-    if (filters.recruiterId) {
-      where.recruiterId = filters.recruiterId
-    }
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) {
-        where.createdAt.gte = filters.startDate
-      }
-      if (filters.endDate) {
-        where.createdAt.lte = filters.endDate
-      }
-    }
-    if (filters.isDuplicate !== undefined) {
-      where.isDuplicate = filters.isDuplicate
-    }
-    if (filters.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { company: { contains: filters.search, mode: 'insensitive' } },
-        { location: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
-      ]
-    }
-  }
+  const where = buildJobWhereClause(userId, userRole, filters)
 
   // Get total count
   const total = await db.job.count({ where })
@@ -274,7 +369,7 @@ export async function getJobs(
   const sortBy = sortOptions?.sortBy || 'createdAt'
   const sortOrder = sortOptions?.sortOrder || 'desc'
   const orderBy: any = {}
-  
+
   switch (sortBy) {
     case 'title':
       orderBy.title = sortOrder
@@ -341,14 +436,14 @@ export async function updateJob(input: UpdateJobInput) {
   if (existingJob) {
     const checkFields = ['title', 'company', 'location', 'sourceUrl']
     const shouldCheckDuplicates = checkFields.some(field => normalized[field] !== undefined)
-    
+
     if (shouldCheckDuplicates) {
       const jobData = { ...existingJob, ...normalized }
       const duplicates = await detectDuplicates(jobData)
       const isDuplicate = duplicates.length > 0
       const duplicateOf = isDuplicate ? duplicates[0].jobId : null
       const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
-      
+
       normalized.isDuplicate = isDuplicate
       normalized.duplicateOf = duplicateOf
       normalized.similarityScore = similarityScore
@@ -384,46 +479,95 @@ export async function deleteJob(jobId: string) {
   })
 }
 
+export interface BulkDeleteJobsResult {
+  deleted: string[]
+  deletedDetails: { jobId: string; title: string; company: string }[]
+  errors: { jobId: string; message: string }[]
+}
+
+export async function bulkDeleteJobs(
+  input: BulkDeleteJobsInput,
+  userId: string,
+  userRole: UserRole
+): Promise<BulkDeleteJobsResult> {
+  const { jobIds } = input
+  const deleted: string[] = []
+  const deletedDetails: { jobId: string; title: string; company: string }[] = []
+  const errors: { jobId: string; message: string }[] = []
+
+  for (const jobId of jobIds) {
+    const job = await getJobById(jobId)
+    if (!job) {
+      errors.push({ jobId, message: 'Job not found' })
+      continue
+    }
+    const canDelete =
+      userRole === 'ADMIN' ||
+      userRole === 'MANAGER' ||
+      job.recruiterId === userId
+    if (!canDelete) {
+      errors.push({ jobId, message: 'Forbidden' })
+      continue
+    }
+    try {
+      deletedDetails.push({ jobId, title: job.title, company: job.company })
+      await deleteJob(jobId)
+      deleted.push(jobId)
+    } catch (err) {
+      errors.push({
+        jobId,
+        message: err instanceof Error ? err.message : 'Failed to delete job',
+      })
+    }
+  }
+
+  return { deleted, deletedDetails, errors }
+}
+
 export async function bulkCreateJobs(input: BulkCreateJobsInput) {
   const validated = bulkCreateJobsSchema.parse(input)
-  
+
   // Normalize all jobs
   const normalizedJobs = validated.jobs.map(job => normalizeJobData(job))
-  
-  // Use transaction for bulk create
-  const result = await db.$transaction(async (tx) => {
-    const createdJobs = []
-    
-    for (const jobData of normalizedJobs) {
-      // Detect duplicates
-      const duplicates = await detectDuplicates(jobData)
-      const isDuplicate = duplicates.length > 0
-      const duplicateOf = isDuplicate ? duplicates[0].jobId : null
-      const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
-      
-      try {
-        const job = await tx.job.create({
-          data: {
-            ...jobData,
-            isDuplicate,
-            duplicateOf,
-            similarityScore,
-          },
-        })
-        createdJobs.push(job)
-      } catch (error) {
-        // Skip duplicates or errors, continue with next job
-        console.error('Failed to create job:', error)
-      }
-    }
-    
-    return {
-      count: createdJobs.length,
-      jobs: createdJobs,
-    }
-  })
 
-  return result
+  const createdJobs = []
+
+  for (const jobData of normalizedJobs) {
+    // Detect duplicates
+    const duplicates = await detectDuplicates(jobData)
+    const isDuplicate = duplicates.length > 0
+    const duplicateOf = isDuplicate ? duplicates[0].jobId : null
+    const similarityScore = isDuplicate ? duplicates[0].similarityScore : null
+
+    try {
+      const job = await db.job.create({
+        data: {
+          ...jobData,
+          isDuplicate,
+          duplicateOf,
+          similarityScore,
+        },
+      })
+
+      // Generate and append the vector embedding in postgres (InBackground)
+      // This ensures the backend responds instantly and avoids connection timeouts
+      // for large batches (like 150+ jobs).
+      injectEmbedding(job.id, job.title, job.company, job.skills, job.description).catch((err) => {
+        console.error(`[Background Task] Failed to inject embedding for job ${job.id}:`, err)
+      })
+
+      createdJobs.push(job)
+    } catch (error) {
+      // Skip errors, continue with next job
+      console.error('Failed to create job in bulk batch:', error)
+    }
+  }
+
+  return {
+    success: true,
+    count: createdJobs.length,
+    jobs: createdJobs,
+  }
 }
 
 // Assign job to candidate (creates application)
@@ -438,17 +582,18 @@ export async function assignJobToCandidate(
     throw new Error('Job not found')
   }
 
-  // Validate candidate exists
-  const candidate = await db.candidate.findUnique({ where: { id: candidateId } })
-  if (!candidate) {
-    throw new Error('Candidate not found')
+  // Note: Application.clientId references Client, not Candidate. Use assignJobToClient instead.
+  // Validate client exists (clientId must reference clients table)
+  const client = await db.client.findUnique({ where: { id: candidateId } })
+  if (!client) {
+    throw new Error('Client not found. Job assignment requires a valid Client ID (from Clients, not Candidates).')
   }
 
   // Check if application already exists
   const existingApplication = await db.application.findFirst({
     where: {
       jobId,
-      clientId: candidateId, // Note: This function should be deprecated in favor of assignJobToClient
+      clientId: candidateId,
     },
   })
 
@@ -456,11 +601,11 @@ export async function assignJobToCandidate(
     throw new Error('Application already exists for this job and client')
   }
 
-  // Create application
+  // Create application (clientId references clients table)
   const application = await db.application.create({
     data: {
       jobId,
-      clientId: candidateId, // Note: This function should be deprecated in favor of assignJobToClient
+      clientId: candidateId,
       recruiterId,
       stage: 'IDENTIFIED',
     },
@@ -492,27 +637,30 @@ export async function bulkAssignJobToCandidates(
     throw new Error('Job not found')
   }
 
-  // Validate all candidates exist
-  const candidates = await db.candidate.findMany({
+  // Note: Application.clientId references Client, not Candidate. Use bulkAssignJobToClients instead.
+  // Validate all clients exist (clientIds must reference clients table)
+  const clients = await db.client.findMany({
     where: {
       id: { in: candidateIds },
     },
   })
 
-  if (candidates.length !== candidateIds.length) {
-    throw new Error('One or more candidates not found')
+  if (clients.length !== candidateIds.length) {
+    const foundIds = new Set(clients.map((c) => c.id))
+    const missing = candidateIds.filter((id) => !foundIds.has(id))
+    throw new Error(`One or more clients not found. Job assignment requires valid Client IDs (from Clients, not Candidates). Missing: ${missing.join(', ')}`)
   }
 
   // Create applications in transaction
   const result = await db.$transaction(async (tx) => {
     const createdApplications = []
-    
-    for (const candidateId of candidateIds) {
+
+    for (const clientId of candidateIds) {
       // Check if application already exists
       const existing = await tx.application.findFirst({
         where: {
           jobId,
-          clientId: candidateId, // Note: This function should be deprecated in favor of bulkAssignJobToClients
+          clientId,
         },
       })
 
@@ -520,7 +668,7 @@ export async function bulkAssignJobToCandidates(
         const application = await tx.application.create({
           data: {
             jobId,
-            clientId: candidateId, // Note: This function should be deprecated in favor of bulkAssignJobToClients
+            clientId,
             recruiterId,
             stage: 'IDENTIFIED',
           },
@@ -528,7 +676,7 @@ export async function bulkAssignJobToCandidates(
         createdApplications.push(application)
       }
     }
-    
+
     return {
       count: createdApplications.length,
       applications: createdApplications,
@@ -569,7 +717,7 @@ export async function getDuplicateJobs(userId: string, userRole: UserRole) {
 
   // Group duplicates
   const duplicateGroups: Map<string, any[]> = new Map()
-  
+
   for (const job of duplicates) {
     const key = job.duplicateOf || job.id
     if (!duplicateGroups.has(key)) {
@@ -646,28 +794,7 @@ export async function exportJobsToCSV(
   userRole: UserRole,
   filters?: JobFilters
 ): Promise<string> {
-  const where: any = {}
-  
-  if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
-    where.recruiterId = userId
-  }
-
-  if (filters) {
-    if (filters.source) where.source = filters.source
-    if (filters.status) where.status = filters.status
-    if (filters.recruiterId) where.recruiterId = filters.recruiterId
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) where.createdAt.gte = filters.startDate
-      if (filters.endDate) where.createdAt.lte = filters.endDate
-    }
-    if (filters.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { company: { contains: filters.search, mode: 'insensitive' } },
-      ]
-    }
-  }
+  const where = buildJobWhereClause(userId, userRole, filters)
 
   const jobs = await db.job.findMany({
     where,

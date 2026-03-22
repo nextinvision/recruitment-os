@@ -8,15 +8,55 @@ import { MessageChannel, MessageStatus } from '@prisma/client'
 import { whatsappService } from './whatsapp.service'
 import { emailService } from './email.service'
 import { SendMessageInput } from './schemas'
+import { renderMessageTemplate } from './render-message-template'
+import { blankTemplateLinkVariablesForBody } from './email-appended-content'
+
+export type SendMessagePayload = SendMessageInput & { sentBy: string }
 
 export class MessageService {
   /**
    * Send message with retry logic
    */
-  async sendMessage(input: SendMessageInput & { sentBy: string }): Promise<string> {
-    const { templateId, channel, recipientType, recipientId, recipientPhone, recipientEmail, subject, content, variables, metadata, sentBy } = input
+  async sendMessage(input: SendMessagePayload): Promise<string> {
+    const {
+      templateId,
+      channel,
+      recipientType,
+      recipientId,
+      recipientPhone,
+      recipientEmail,
+      subject,
+      content,
+      variables,
+      metadata,
+      sentBy,
+      appendedEmailHtml,
+      appendedChannelText,
+    } = input
 
-    // Create message record
+    const vars = variables || {}
+    const shouldBlankLinkPlaceholdersInBody =
+      (channel === MessageChannel.EMAIL && appendedEmailHtml && appendedEmailHtml.trim() !== '') ||
+      (channel === MessageChannel.WHATSAPP &&
+        appendedChannelText &&
+        appendedChannelText.trim() !== '')
+
+    const varsForBody = shouldBlankLinkPlaceholdersInBody ? blankTemplateLinkVariablesForBody(vars) : vars
+
+    let renderedContent = renderMessageTemplate(content, varsForBody)
+    const renderedSubject = subject ? renderMessageTemplate(subject, vars) : ''
+
+    if (channel === MessageChannel.EMAIL && appendedEmailHtml && appendedEmailHtml.trim() !== '') {
+      renderedContent = `${renderedContent}${appendedEmailHtml}`
+    } else if (
+      channel === MessageChannel.WHATSAPP &&
+      appendedChannelText &&
+      appendedChannelText.trim() !== ''
+    ) {
+      renderedContent = `${renderedContent}\n\n${appendedChannelText.trim()}`
+    }
+
+    // Create message record (store fully rendered subject + body so retries and history are correct)
     const message = await db.message.create({
       data: {
         templateId: templateId || null,
@@ -25,8 +65,8 @@ export class MessageService {
         recipientId,
         recipientPhone: recipientPhone || null,
         recipientEmail: recipientEmail || null,
-        subject: subject || null,
-        content: this.renderTemplate(content, variables || {}),
+        subject: renderedSubject || null,
+        content: renderedContent,
         status: MessageStatus.PENDING,
         sentBy,
         metadata: metadata ? JSON.stringify(metadata) : null,
@@ -38,7 +78,7 @@ export class MessageService {
       await this.attemptSend(message.id, channel, {
         phone: recipientPhone,
         email: recipientEmail,
-        subject,
+        subject: renderedSubject,
         content: message.content,
       })
 
@@ -200,21 +240,6 @@ export class MessageService {
     })
 
     return message
-  }
-
-  /**
-   * Render template with variables
-   */
-  private renderTemplate(template: string, variables: Record<string, unknown>): string {
-    let rendered = template
-
-    // Replace {{variable}} with actual values
-    Object.entries(variables).forEach(([key, value]) => {
-      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g')
-      rendered = rendered.replace(regex, String(value))
-    })
-
-    return rendered
   }
 
   /**

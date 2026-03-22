@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { Modal, Input, Textarea, Alert, FormActions, Button, Badge, Spinner, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 
 interface FollowUp {
@@ -45,7 +45,7 @@ export default function FollowUpDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   useEffect(() => {
     if (followUpId) {
@@ -115,7 +115,7 @@ export default function FollowUpDetailPage() {
 
   const handleDelete = async () => {
     if (!followUp) return
-    
+
     showConfirm(
       'Delete Follow-Up',
       'Are you sure you want to delete this follow-up? This action cannot be undone.',
@@ -193,7 +193,6 @@ export default function FollowUpDetailPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}

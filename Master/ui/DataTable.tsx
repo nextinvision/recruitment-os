@@ -6,6 +6,8 @@ export interface Column<T> {
   key: keyof T | string
   header: string
   render?: (item: T) => React.ReactNode
+  /** Optional custom header content (e.g. checkbox for select-all). When set, column is not sortable. */
+  headerRender?: () => React.ReactNode
 }
 
 export interface DataTableProps<T> {
@@ -82,15 +84,19 @@ export function DataTable<T extends { id: string }>({
                 <th
                   key={String(column.key)}
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider cursor-pointer hover:bg-[#152A4A] transition-colors"
-                  onClick={() => handleSort(column.key as keyof T)}
+                  className={`px-6 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider ${column.headerRender ? '' : 'cursor-pointer hover:bg-[#152A4A] transition-colors'}`}
+                  onClick={() => !column.headerRender && column.key !== '_select' && handleSort(column.key as keyof T)}
                 >
-                  <div className="flex items-center space-x-1">
-                    <span>{column.header}</span>
-                    {sortKey === column.key && (
-                      <span className="text-[#F4B400]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </div>
+                  {column.headerRender ? (
+                    column.headerRender()
+                  ) : (
+                    <div className="flex items-center space-x-1">
+                      <span>{column.header}</span>
+                      {sortKey === column.key && (
+                        <span className="text-[#F4B400]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </div>
+                  )}
                 </th>
               ))}
             </tr>

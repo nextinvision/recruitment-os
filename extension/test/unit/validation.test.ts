@@ -2,6 +2,7 @@
  * Unit tests for validation
  */
 
+import { describe, test, expect } from 'vitest'
 import { validateJob, validateJobs } from '../../src/shared/validation'
 import { JobInput } from '../../src/shared/types'
 

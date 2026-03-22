@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import time
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
@@ -86,7 +87,9 @@ class BaytScraper(Scraper):
         Grabs the job results for the given query and page number.
         """
         try:
-            url = f"{self.base_url}/en/international/jobs/{query}-jobs/?page={page}"
+            # URL-encode query so multi-word terms work (e.g. "software engineer")
+            path_query = quote(query.strip().lower().replace(" ", "-"), safe="-")
+            url = f"{self.base_url}/en/international/jobs/{path_query}-jobs/?page={page}"
             response = self.session.get(url)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")

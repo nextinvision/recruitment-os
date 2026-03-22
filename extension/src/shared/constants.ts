@@ -46,8 +46,8 @@ export async function getBackendUrl(): Promise<string> {
   // Fallback to build-time default
   // For production: Update this value or use build-production script
   // The build script will replace this line automatically
-  const buildTimeUrl = 'http://localhost:3000'
-  
+  const buildTimeUrl = 'https://careeristpro.cloud'
+
   return buildTimeUrl
 }
 
@@ -58,7 +58,7 @@ export async function getBackendUrl(): Promise<string> {
 export function getBackendUrlSync(): string {
   // For sync access, return default
   // For production: Update this value or use build-production script
-  return 'http://localhost:3000'
+  return 'https://careeristpro.cloud'
 }
 
 /**

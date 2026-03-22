@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const createActivitySchema = z.object({
   leadId: z.string().optional(),
   clientId: z.string().optional(),
+  companyContactId: z.string().optional(),
   assignedUserId: z.string().min(1, 'Assigned user ID is required'),
   type: z.enum(['CALL', 'EMAIL', 'MEETING', 'NOTE', 'TASK', 'FOLLOW_UP']),
   title: z.string().min(1, 'Title is required'),
@@ -18,6 +19,7 @@ export const updateActivitySchema = createActivitySchema.partial().extend({
 export const activityFilterSchema = z.object({
   leadId: z.string().optional(),
   clientId: z.string().optional(),
+  companyContactId: z.string().optional(),
   assignedUserId: z.string().optional(),
   type: z.enum(['CALL', 'EMAIL', 'MEETING', 'NOTE', 'TASK', 'FOLLOW_UP']).optional(),
   startDate: z.string().datetime().optional(),

@@ -6,6 +6,7 @@ export interface JobInput {
   location: string
   description: string
   source: JobSource
+  sourceUrl?: string
 }
 
 export interface ScrapedJob extends JobInput {

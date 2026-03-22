@@ -6,6 +6,7 @@ import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHead
 import { DashboardLayout } from '@/components/DashboardLayout'
 import Link from 'next/link'
 import type { ClientFilters as ClientFiltersType } from '@/ui'
+import { mapExcelRowsToImportRows } from '@/modules/clients/excel-import'
 
 type FormFieldType = 'text' | 'email' | 'phone' | 'number' | 'textarea' | 'select' | 'section'
 interface OnboardingFormField {
@@ -102,6 +103,12 @@ export default function ClientsPage() {
   const [showFormBuilderModal, setShowFormBuilderModal] = useState(false)
   const [editingForm, setEditingForm] = useState<OnboardingForm | null>(null)
   const [createClientLoadingId, setCreateClientLoadingId] = useState<string | null>(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'result'>('upload')
+  const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([])
+  const [importResult, setImportResult] = useState<{ created: number; errors: { row: number; email?: string; message: string }[] } | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importAssignedUserId, setImportAssignedUserId] = useState('')
   const { showToast } = useToast()
 
   const loadOnboardingForms = useCallback(async () => {
@@ -157,7 +164,7 @@ export default function ClientsPage() {
       const token = localStorage.getItem('token')
       if (!token) return
 
-      const response = await fetch('/api/users?role=RECRUITER', {
+      const response = await fetch('/api/users?role=RECRUITER,MANAGER', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -167,11 +174,17 @@ export default function ClientsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setRecruiters(data.map((u: any) => ({
-          id: u.id,
-          firstName: u.firstName,
-          lastName: u.lastName,
-        })))
+        setRecruiters(
+          data
+            .map((u: { id: string; firstName: string; lastName: string }) => ({
+              id: u.id,
+              firstName: u.firstName,
+              lastName: u.lastName,
+            }))
+            .sort((a: { firstName: string; lastName: string }, b: { firstName: string; lastName: string }) =>
+              `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+            )
+        )
       }
     } catch (err) {
       console.error('Failed to load recruiters:', err)
@@ -368,6 +381,9 @@ export default function ClientsPage() {
                 Export CSV
               </Button>
             )}
+            <Button variant="secondary" onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportRows([]); setImportResult(null); const u = localStorage.getItem('user'); if (u) try { const user = JSON.parse(u); setImportAssignedUserId(user.id || ''); } catch { } }}>
+              Import Excel
+            </Button>
             <Button onClick={handleCreateClient}>
               Add Client
             </Button>
@@ -541,6 +557,7 @@ export default function ClientsPage() {
             size="lg"
           >
             <ClientForm
+              key={selectedClient?.id ?? 'new'}
               client={selectedClient}
               onSuccess={() => {
                 setShowCreateModal(false)
@@ -554,8 +571,244 @@ export default function ClientsPage() {
             />
           </Modal>
         )}
+
+        {showImportModal && (
+          <Modal
+            isOpen={showImportModal}
+            onClose={() => { setShowImportModal(false); setImportStep('upload'); setImportRows([]); setImportResult(null) }}
+            title="Import clients from Excel"
+            size="xl"
+          >
+            <ClientImportModal
+              step={importStep}
+              rows={importRows}
+              result={importResult}
+              loading={importLoading}
+              assignedUserId={importAssignedUserId}
+              recruiters={recruiters}
+              onFileSelect={async (file: File) => {
+                setImportLoading(true)
+                try {
+                  const XLSX = (await import('xlsx')).default
+                  const data = await file.arrayBuffer()
+                  const wb = XLSX.read(data, { type: 'array' })
+                  const sheet = wb.Sheets[wb.SheetNames[0]]
+                  if (!sheet) { showToast('No sheet in file', 'error'); return }
+                  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+                  const mapped = mapExcelRowsToImportRows(rows)
+                  setImportRows(mapped as Array<Record<string, unknown>>)
+                  setImportStep('preview')
+                  setImportResult(null)
+                  showToast(`Parsed ${mapped.length} row(s)`, 'success')
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : 'Failed to parse Excel', 'error')
+                } finally {
+                  setImportLoading(false)
+                }
+              }}
+              onAssignedUserIdChange={setImportAssignedUserId}
+              onImport={async () => {
+                if (importRows.length === 0) return
+                const token = localStorage.getItem('token')
+                if (!token) { showToast('Please log in', 'error'); return }
+                const assignedId = importAssignedUserId.trim()
+                if (!assignedId) { showToast('Please select Assigned To', 'error'); return }
+                setImportLoading(true)
+                try {
+                  const res = await fetch('/api/clients/import', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ clients: importRows, assignedUserId: assignedId }),
+                  })
+                  const data = await res.json().catch(() => ({}))
+                  if (res.ok) {
+                    setImportResult({ created: data.created ?? 0, errors: data.errors ?? [] })
+                    setImportStep('result')
+                    if (data.created > 0) { loadClients(); showToast(`${data.created} client(s) created`, 'success') }
+                  } else {
+                    showToast(data.error || 'Import failed', 'error')
+                  }
+                } catch {
+                  showToast('Import request failed', 'error')
+                } finally {
+                  setImportLoading(false)
+                }
+              }}
+              onBackToUpload={() => { setImportStep('upload'); setImportRows([]); setImportResult(null) }}
+              onClose={() => { setShowImportModal(false); setImportStep('upload'); setImportRows([]); setImportResult(null); loadClients() }}
+            />
+          </Modal>
+        )}
       </div>
     </DashboardLayout>
+  )
+}
+
+function ClientImportModal({
+  step,
+  rows,
+  result,
+  loading,
+  assignedUserId,
+  recruiters,
+  onFileSelect,
+  onAssignedUserIdChange,
+  onImport,
+  onBackToUpload,
+  onClose,
+}: {
+  step: 'upload' | 'preview' | 'result'
+  rows: Array<Record<string, unknown>>
+  result: { created: number; errors: { row: number; email?: string; message: string }[] } | null
+  loading: boolean
+  assignedUserId: string
+  recruiters: Array<{ id: string; firstName: string; lastName: string }>
+  onFileSelect: (file: File) => Promise<void>
+  onAssignedUserIdChange: (id: string) => void
+  onImport: () => Promise<void>
+  onBackToUpload: () => void
+  onClose: () => void
+}) {
+  const getDisplayName = (row: Record<string, unknown>) => {
+    const first = (row.firstName as string) || (row.name as string) || ''
+    const last = (row.lastName as string) || ''
+    if (first && last) return `${first} ${last}`.trim()
+    if (row.name) return String(row.name)
+    return (row.email as string) || '—'
+  }
+  const isValidRow = (row: Record<string, unknown>) => {
+    const email = (row.email as string)?.trim()
+    const name = (row.name as string)?.trim()
+    const first = (row.firstName as string)?.trim()
+    const last = (row.lastName as string)?.trim()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false
+    return !!(name || (first && last) || first || last)
+  }
+
+  if (step === 'upload') {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Upload an Excel file (.xlsx or .xls). First row must be headers. Only <strong>Name</strong> and <strong>Email</strong> are required; other columns (Phone, Address, Industry, Notes, etc.) are optional and will be detected automatically.
+        </p>
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-gray-700">Select file</span>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-careerist-primary-navy file:text-white file:font-medium"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) onFileSelect(f)
+            }}
+            disabled={loading}
+          />
+        </label>
+        {loading && <Spinner />}
+      </div>
+    )
+  }
+
+  if (step === 'preview') {
+    const previewRows = rows.slice(0, 50)
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600">
+          {rows.length} row(s) detected. Assign clients to a user and click Import to create them.
+        </p>
+        <Select
+          label="Assigned To"
+          value={assignedUserId}
+          onChange={(e) => onAssignedUserIdChange(e.target.value)}
+          options={[
+            { value: '', label: 'Select user' },
+            ...(assignedUserId && !recruiters.some((r) => r.id === assignedUserId)
+              ? [{ value: assignedUserId, label: 'Me (current user)' }]
+              : []),
+            ...recruiters.map((r) => ({ value: r.id, label: `${r.firstName} ${r.lastName}` })),
+          ]}
+        />
+        <div className="overflow-x-auto max-h-64 border border-gray-200 rounded-lg">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Email</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Phone</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {previewRows.map((row, i) => (
+                <tr key={i} className="border-t border-gray-100">
+                  <td className="px-3 py-2">{getDisplayName(row)}</td>
+                  <td className="px-3 py-2">{String(row.email ?? '—')}</td>
+                  <td className="px-3 py-2">{String(row.phone ?? '—')}</td>
+                  <td className="px-3 py-2">
+                    {isValidRow(row) ? (
+                      <Badge variant="success">Valid</Badge>
+                    ) : (
+                      <Badge variant="neutral">Missing name/email</Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 50 && <p className="text-xs text-gray-500">Showing first 50 of {rows.length} rows.</p>}
+        <div className="flex gap-3 justify-end">
+          <Button type="button" variant="secondary" onClick={onBackToUpload} disabled={loading}>
+            Change file
+          </Button>
+          <Button type="button" onClick={onImport} disabled={loading || !assignedUserId.trim()}>
+            {loading ? <Spinner /> : null}
+            {loading ? ' Importing…' : ' Import'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {result && (
+        <>
+          <p className="text-sm text-gray-600">
+            <strong>{result.created}</strong> client(s) created.
+            {result.errors.length > 0 && (
+              <span className="text-amber-700"> {result.errors.length} row(s) had errors.</span>
+            )}
+          </p>
+          {result.errors.length > 0 && (
+            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Row</th>
+                    <th className="px-3 py-2 text-left font-medium">Email</th>
+                    <th className="px-3 py-2 text-left font-medium">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.errors.map((e, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="px-3 py-2">{e.row}</td>
+                      <td className="px-3 py-2">{e.email ?? '—'}</td>
+                      <td className="px-3 py-2 text-red-600">{e.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+      <div className="flex justify-end">
+        <Button type="button" onClick={onClose}>Close</Button>
+      </div>
+    </div>
   )
 }
 
@@ -589,37 +842,70 @@ function ClientForm({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
+  const [assignableUsers, setAssignableUsers] = useState<
+    Array<{ id: string; firstName: string; lastName: string; role?: string }>
+  >([])
+  const [assignedUserId, setAssignedUserId] = useState('')
 
   useEffect(() => {
-    loadRecruiters()
-  }, [])
-
-  const loadRecruiters = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return
-
-      const response = await fetch('/api/users?role=RECRUITER', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRecruiters(data.map((u: any) => ({
-          id: u.id,
-          firstName: u.firstName,
-          lastName: u.lastName,
-        })))
+    const raw = localStorage.getItem('user')
+    let me = ''
+    if (raw) {
+      try {
+        me = JSON.parse(raw).id || ''
+      } catch {
+        /* noop */
       }
-    } catch (err) {
-      console.error('Failed to load recruiters:', err)
     }
-  }
+    setAssignedUserId(client?.assignedUser?.id || me)
+  }, [client?.id, client?.assignedUser?.id])
+
+  useEffect(() => {
+    const loadAssignable = async () => {
+      const token = localStorage.getItem('token')
+      const raw = localStorage.getItem('user')
+      if (!token || !raw) return
+      let me: { id: string; firstName: string; lastName: string; role?: string }
+      try {
+        me = JSON.parse(raw)
+      } catch {
+        return
+      }
+      try {
+        if (me.role === 'ADMIN' || me.role === 'MANAGER') {
+          const response = await fetch('/api/users?role=RECRUITER,MANAGER', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          })
+          if (response.ok) {
+            const data = await response.json()
+            setAssignableUsers(
+              data
+                .map((u: { id: string; firstName: string; lastName: string; role?: string }) => ({
+                  id: u.id,
+                  firstName: u.firstName,
+                  lastName: u.lastName,
+                  role: u.role,
+                }))
+                .sort((a: { firstName: string; lastName: string }, b: { firstName: string; lastName: string }) =>
+                  `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+                )
+            )
+          }
+        } else {
+          setAssignableUsers([
+            { id: me.id, firstName: me.firstName, lastName: me.lastName, role: me.role },
+          ])
+        }
+      } catch (err) {
+        console.error('Failed to load assignable users:', err)
+      }
+    }
+    void loadAssignable()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -630,6 +916,7 @@ function ClientForm({
       const token = localStorage.getItem('token')
       const userData = localStorage.getItem('user')
       const user = userData ? JSON.parse(userData) : null
+      const canSetPrimaryAssignee = user?.role === 'ADMIN' || user?.role === 'MANAGER'
 
       const url = client ? `/api/clients/${client.id}` : '/api/clients'
       const method = client ? 'PATCH' : 'POST'
@@ -654,11 +941,13 @@ function ClientForm({
       }
 
       if (method === 'POST') {
-        payload.assignedUserId = user?.id
-        // Set onboardedDate on creation
+        payload.assignedUserId = assignedUserId.trim() || user?.id
         payload.onboardedDate = new Date().toISOString()
       } else if (client) {
         payload.status = formData.status
+        if (canSetPrimaryAssignee && assignedUserId.trim()) {
+          payload.assignedUserId = assignedUserId.trim()
+        }
       }
 
       const response = await fetch(url, {
@@ -765,6 +1054,39 @@ function ClientForm({
         rows={2}
       />
 
+      <Select
+        label="Assigned to (primary)"
+        helperText="This is the account owner shown in the client list as “Assigned To”. It is separate from reverse recruiter below."
+        value={assignedUserId}
+        onChange={(e) => setAssignedUserId(e.target.value)}
+        options={(() => {
+          const opts: { value: string; label: string }[] = assignableUsers.map((u) => ({
+            value: u.id,
+            label: `${u.firstName} ${u.lastName}${u.role === 'MANAGER' ? ' (Manager)' : ''}`,
+          }))
+          const raw = localStorage.getItem('user')
+          if (raw) {
+            try {
+              const u = JSON.parse(raw) as { id?: string; firstName?: string; lastName?: string }
+              if (u?.id && !opts.some((o) => o.value === u.id)) {
+                opts.push({ value: u.id, label: `${u.firstName ?? ''} ${u.lastName ?? ''} (you)`.trim() })
+              }
+            } catch {
+              /* noop */
+            }
+          }
+          const au = client?.assignedUser
+          if (au && !opts.some((o) => o.value === au.id)) {
+            opts.push({
+              value: au.id,
+              label: `${au.firstName} ${au.lastName} (current assignee)`,
+            })
+          }
+          opts.sort((a, b) => a.label.localeCompare(b.label))
+          return [{ value: '', label: 'Select assignee' }, ...opts]
+        })()}
+      />
+
       <div className="grid grid-cols-2 gap-4">
         <Select
           label="Service Type"
@@ -781,11 +1103,12 @@ function ClientForm({
         />
         <Select
           label="Reverse Recruiter"
+          helperText="Optional reverse-hire partner only—not the same as primary assignee above."
           value={formData.reverseRecruiterId}
           onChange={(e) => setFormData({ ...formData, reverseRecruiterId: e.target.value })}
           options={[
             { value: '', label: 'Select Reverse Recruiter' },
-            ...recruiters.map(r => ({ value: r.id, label: `${r.firstName} ${r.lastName}` })),
+            ...assignableUsers.map((r) => ({ value: r.id, label: `${r.firstName} ${r.lastName}` })),
           ]}
         />
       </div>

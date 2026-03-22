@@ -168,6 +168,12 @@ export async function DELETE(
       return addCorsHeaders(response, origin)
     }
 
+    // Clear manager FKs so delete is not blocked by recruiters who list this user as manager
+    await db.user.updateMany({
+      where: { managerId: id },
+      data: { managerId: null },
+    })
+
     await db.user.delete({
       where: { id },
     })

@@ -14,13 +14,13 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    
+
     // Filters
     const filters: any = {}
     if (searchParams.get('source')) filters.source = searchParams.get('source')
@@ -30,6 +30,13 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('endDate')) filters.endDate = new Date(searchParams.get('endDate')!)
     if (searchParams.get('search')) filters.search = searchParams.get('search')
     if (searchParams.get('isDuplicate')) filters.isDuplicate = searchParams.get('isDuplicate') === 'true'
+    if (searchParams.get('jobType')) filters.jobType = searchParams.get('jobType')
+    if (searchParams.get('title')) filters.title = searchParams.get('title')
+    if (searchParams.get('company')) filters.company = searchParams.get('company')
+    if (searchParams.get('location')) filters.location = searchParams.get('location')
+    if (searchParams.get('skills')) filters.skills = searchParams.get('skills')
+    if (searchParams.get('ctcRange')) filters.ctcRange = searchParams.get('ctcRange')
+    if (searchParams.get('yearsOfExperience')) filters.yearsOfExperience = searchParams.get('yearsOfExperience')
 
     // Sort options
     const sortOptions: any = {}
@@ -65,12 +72,16 @@ export async function POST(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
     const body = await request.json()
-    const job = await createJob(body)
+    const job = await createJob({
+      ...body,
+      recruiterId: authContext.userId,
+      source: typeof body.source === 'string' ? body.source.toUpperCase() : body.source
+    })
 
     // Log the mutation
     await logMutation({

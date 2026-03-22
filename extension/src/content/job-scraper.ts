@@ -14,7 +14,7 @@ export class JobScraper {
 
   private createScrapedJob(job: Partial<ScrapedJob>, index: number): ScrapedJob {
     const validation = validateJob(job as any)
-    
+
     return {
       id: `job-${Date.now()}-${index}`,
       title: job.title || '',
@@ -22,6 +22,7 @@ export class JobScraper {
       location: job.location || '',
       description: job.description || '',
       source: this.source,
+      sourceUrl: job.sourceUrl,
       isValid: validation.isValid,
       errors: validation.errors,
     }
@@ -29,10 +30,10 @@ export class JobScraper {
 
   scrapeVisibleJobs(): ScrapedJob[] {
     const pageInfo = JobDetector.getPageInfo()
-    
+
     // If on detail page, extract single job
     if (pageInfo.isJobPage) {
-      const isDetailPage = 
+      const isDetailPage =
         (this.source === 'linkedin' && window.location.pathname.includes('/jobs/view/')) ||
         (this.source === 'indeed' && window.location.pathname.startsWith('/viewjob')) ||
         (this.source === 'naukri' && window.location.pathname.includes('/job-details/'))

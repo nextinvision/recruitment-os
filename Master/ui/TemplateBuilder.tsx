@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useToast } from './Toast'
+import { COMMON_PLACEHOLDERS } from '@/modules/communications/template-placeholders'
 
 interface MessageTemplate {
   id?: string
@@ -23,6 +24,7 @@ interface TemplateBuilderProps {
 const TEMPLATE_TYPES = [
   { value: 'FOLLOW_UP', label: 'Follow-up' },
   { value: 'INTERVIEW_REMINDER', label: 'Interview Reminder' },
+  { value: 'MEETING_REMINDER', label: 'Meeting Reminder (TidyCal)' },
   { value: 'OFFER_LETTER', label: 'Offer Letter' },
   { value: 'WELCOME', label: 'Welcome' },
   { value: 'REJECTION', label: 'Rejection' },
@@ -177,6 +179,38 @@ export function TemplateBuilder({ template, onSave, onCancel }: TemplateBuilderP
           <p className="text-xs text-gray-500 mt-1">
             Use {'{{variableName}}'} to insert variables. Example: Hello {'{{name}}'}, your interview is scheduled for {'{{date}}'}.
           </p>
+          <div className="mt-2 rounded-md bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700 space-y-1">
+            <p className="font-semibold text-slate-800">Common client / lead placeholders</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li>
+                <code className="bg-white px-1 rounded">{'{{clientName}}'}</code> — full name (also works if you only set{' '}
+                <code className="bg-white px-1 rounded">firstName</code> / <code className="bg-white px-1 rounded">lastName</code>)
+              </li>
+              <li>
+                <code className="bg-white px-1 rounded">{'{{firstName}}'}</code>,{' '}
+                <code className="bg-white px-1 rounded">{'{{lastName}}'}</code>,{' '}
+                <code className="bg-white px-1 rounded">{'{{fullName}}'}</code>
+              </li>
+              <li>
+                <code className="bg-white px-1 rounded">{'{{email}}'}</code> — when the send flow provides it
+              </li>
+            </ul>
+            <p className="text-slate-500 pt-1">
+              Report emails also support <code className="bg-white px-1 rounded">{'{{reportLink}}'}</code>,{' '}
+              <code className="bg-white px-1 rounded">{'{{reportSummary}}'}</code>, etc.
+            </p>
+            <p className="font-medium text-slate-800 pt-2">Quick copy — common names</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {COMMON_PLACEHOLDERS.map((ph) => (
+                <code key={ph} className="text-[10px] bg-white border border-slate-200 px-1 py-0.5 rounded">
+                  {`{{${ph}}}`}
+                </code>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-500 pt-1">
+              See Admin → Communications → “Where templates are used” for which flow fills which variable.
+            </p>
+          </div>
         </div>
 
         <div>

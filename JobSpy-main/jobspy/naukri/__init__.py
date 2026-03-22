@@ -65,7 +65,8 @@ class Naukri(Scraper):
 
     def scrape(self, scraper_input: ScraperInput) -> JobResponse:
         """
-        Scrapes Naukri API for jobs with scraper_input criteria
+        Scrapes Naukri API for jobs with scraper_input criteria.
+        Note: Naukri may return 406 (recaptcha required); this returns empty results without raising.
         :param scraper_input:
         :return: job_response
         """

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { Modal, Spinner, Badge, Button, JobAssignmentModal, ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { Modal, Spinner, Badge, Button, JobAssignmentModal, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 
 interface Job {
@@ -50,11 +50,17 @@ interface Application {
 }
 
 const STAGE_LABELS: Record<string, string> = {
+  PENDING_CLIENT_APPROVAL: 'Pending Approval',
   IDENTIFIED: 'Identified',
   RESUME_UPDATED: 'Resume Updated',
   COLD_MESSAGE_SENT: 'Cold Message Sent',
   CONNECTION_ACCEPTED: 'Connection Accepted',
   APPLIED: 'Applied',
+  FOLLOW_UP_1: 'Follow-up 1',
+  FOLLOW_UP_2: 'Follow-up 2',
+  FINAL_FOLLOW_UP: 'Final Follow-up',
+  NO_RESPONSE: 'No Response',
+  INTERVIEW_PREPARATION: 'Interview Preparation',
   INTERVIEW_SCHEDULED: 'Interview Scheduled',
   OFFER: 'Offer',
   REJECTED: 'Rejected',
@@ -74,7 +80,7 @@ export default function JobDetailPage() {
   const [assignmentJobId, setAssignmentJobId] = useState<string>('')
   const [assignmentJobTitle, setAssignmentJobTitle] = useState<string>('')
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   useEffect(() => {
     if (jobId) {
@@ -201,7 +207,6 @@ export default function JobDetailPage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -347,12 +352,25 @@ export default function JobDetailPage() {
                         <span className="font-semibold text-careerist-text-primary">
                           {application.client.firstName} {application.client.lastName}
                         </span>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
+                        {(() => {
+                          // Note: In Job Detail page, the application data fetch from /api/applications?jobId=...
+                          // need to ensure it includes applicationJobs. The service layer update should handle this.
+                          const jobs = (application as any).applicationJobs || []
+                          const count = jobs.length
+                          if (count > 1) {
+                            return (
+                              <span className="text-[11px] text-careerist-primary-yellow font-medium">
+                                (+{count - 1} more jobs)
+                              </span>
+                            )
+                          }
+                          return null
+                        })()}
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
                           application.stage === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                          application.stage === 'CLOSED' ? 'bg-gray-100 text-gray-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
+                            application.stage === 'CLOSED' ? 'bg-gray-100 text-gray-800' :
+                              'bg-blue-100 text-blue-800'
+                          }`}>
                           {STAGE_LABELS[application.stage] || application.stage}
                         </span>
                       </div>
@@ -482,9 +500,9 @@ function JobEditForm({
         onSuccess()
       } else {
         const data = await response.json().catch(() => ({ error: 'Failed to update job' }))
-        const errorMessage = typeof data.error === 'string' 
-          ? data.error 
-          : Array.isArray(data.error) 
+        const errorMessage = typeof data.error === 'string'
+          ? data.error
+          : Array.isArray(data.error)
             ? data.error.map((e: { message?: string } | string) => typeof e === 'string' ? e : e.message || 'Error').join(', ')
             : (data.error as { message?: string })?.message || 'Failed to update job'
         setError(errorMessage)

@@ -31,10 +31,15 @@ export default function LoginPage() {
       if (response.ok) {
         localStorage.setItem('token', data.token)
         localStorage.setItem('user', JSON.stringify(data.user))
-        
+
         const urlParams = new URLSearchParams(window.location.search)
-        const redirectTo = urlParams.get('redirect') || '/dashboard'
-        
+        let redirectTo = urlParams.get('redirect') || '/dashboard'
+
+        // Prevent redirecting to static internal files like index.html
+        if (redirectTo.includes('index.html')) {
+          redirectTo = '/dashboard'
+        }
+
         window.location.href = redirectTo
       } else {
         setError(data.error || 'Login failed. Please check your credentials.')
@@ -57,11 +62,11 @@ export default function LoginPage() {
             backgroundSize: '40px 40px'
           }}></div>
         </div>
-        
+
         {/* Accent Gradient Overlay */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#F4B400] opacity-5 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#F4B400] opacity-5 rounded-full blur-3xl"></div>
-        
+
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-center px-12 text-white">
           <div className="mb-8">
@@ -76,7 +81,7 @@ export default function LoginPage() {
               Recruitment Management System
             </p>
           </div>
-          
+
           <div className="mt-6 space-y-6">
             <div className="flex items-start space-x-4">
               <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
@@ -89,7 +94,7 @@ export default function LoginPage() {
                 <p className="text-white/70">Manage candidates, jobs, and placements all in one place</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-4">
               <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
                 <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +106,7 @@ export default function LoginPage() {
                 <p className="text-white/70">Monitor revenue, payments, and team productivity</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-4">
               <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
                 <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,7 +120,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Bottom Decorative Element */}
         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#1F3A5F]/80 to-transparent"></div>
       </div>

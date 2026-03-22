@@ -3,6 +3,18 @@ import { followUpQueue } from './queue'
 import { db } from '@/lib/db'
 import { evaluateAllRulesForEntityType } from '@/modules/rules/service'
 import { RuleEntity } from '@/modules/rules/schemas'
+import { processMeetingReminders } from '@/modules/communications/meeting-reminder.service'
+
+/**
+ * Process TidyCal meeting reminders (24h, 1h, 15m before meeting)
+ */
+export async function processMeetingReminderCron() {
+  try {
+    await processMeetingReminders()
+  } catch (error) {
+    console.error('[Scheduler] Meeting reminder error:', error)
+  }
+}
 
 /**
  * Check for overdue follow-ups and add them to the queue
@@ -83,16 +95,24 @@ export async function checkOverdueFollowUps() {
  * Initialize the cron scheduler
  */
 export function initializeScheduler() {
-  // Run every 15 minutes
+  // Run follow-up check every 15 minutes
   cron.schedule('*/15 * * * *', async () => {
     await checkOverdueFollowUps()
   })
 
-  console.log('[Scheduler] Follow-up automation scheduler initialized (runs every 15 minutes)')
+  // Run meeting reminders every 5 minutes for 24h/1h/15m windows
+  cron.schedule('*/5 * * * *', async () => {
+    await processMeetingReminderCron()
+  })
+
+  console.log('[Scheduler] Follow-up (15min) and meeting reminders (5min) initialized')
 
   // Run immediately on startup
   checkOverdueFollowUps().catch((err) => {
     console.error('[Scheduler] Error in initial follow-up check:', err)
+  })
+  processMeetingReminderCron().catch((err) => {
+    console.error('[Scheduler] Error in initial meeting reminder check:', err)
   })
 }
 

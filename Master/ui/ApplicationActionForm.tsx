@@ -19,6 +19,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   OFFER: 'Offer',
   REJECTION: 'Rejection',
   NOTE: 'Note',
+  NO_RESPONSE: 'No Response',
 }
 
 export function ApplicationActionForm({

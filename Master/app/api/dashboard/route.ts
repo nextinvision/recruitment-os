@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const corsResponse = handleCors(request)
     if (corsResponse) return corsResponse
 
-    const authHeader = request.headers.get('authorization') || 
+    const authHeader = request.headers.get('authorization') ||
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
 
@@ -66,22 +66,22 @@ export async function GET(request: NextRequest) {
       authContext.role
     )
 
-        // Get recent activities (last 10)
-        const recentActivitiesResult = await getActivities(
-          authContext.userId,
-          authContext.role,
-          {
-            endDate: new Date().toISOString(),
-          },
-          undefined,
-          { page: 1, pageSize: 10 }
-        )
-        const recentActivities = recentActivitiesResult.activities
+    // Get recent activities (last 10)
+    const recentActivitiesResult = await getActivities(
+      authContext.userId,
+      authContext.role,
+      {
+        endDate: new Date().toISOString(),
+      },
+      undefined,
+      { page: 1, pageSize: 10 }
+    )
+    const recentActivities = recentActivitiesResult.activities
 
     // Get recent jobs, clients, applications
     const [recentJobs, recentClients, recentApplications] = await Promise.all([
       db.job.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { recruiterId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.client.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { assignedUserId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.application.findMany({
-        where: authContext.role === UserRole.RECRUITER
+        where: (authContext.role === UserRole.RECRUITER || authContext.role === UserRole.SALES)
           ? { recruiterId: authContext.userId }
           : {},
         orderBy: { createdAt: 'desc' },
@@ -126,6 +126,11 @@ export async function GET(request: NextRequest) {
               id: true,
               title: true,
               company: true,
+            },
+          },
+          applicationJobs: {
+            include: {
+              job: true,
             },
           },
         },
@@ -172,6 +177,7 @@ export async function GET(request: NextRequest) {
         stage: app.stage,
         client: app.client,
         job: app.job,
+        applicationJobs: app.applicationJobs,
       })),
     }
 

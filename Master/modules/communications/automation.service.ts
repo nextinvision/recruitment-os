@@ -6,6 +6,7 @@
 import { db } from '@/lib/db'
 import { messageService } from './message.service'
 import { getTemplateByType } from './template.service'
+import { renderMessageTemplate } from './render-message-template'
 import { MessageChannel, MessageTemplateType } from '@prisma/client'
 
 export class CommunicationAutomation {
@@ -44,14 +45,21 @@ export class CommunicationAutomation {
     const recipientPhone = (entity as any).phone ?? undefined
     const recipientEmail = (entity as any).email
 
+    const contactName =
+      (entity as any).firstName && (entity as any).lastName
+        ? `${(entity as any).firstName} ${(entity as any).lastName}`
+        : (entity as any).contactName || ''
+
     // Render template
-    const content = this.renderTemplate(template.content, {
+    const content = renderMessageTemplate(template.content, {
       title: followUp.title,
       scheduledDate: followUp.scheduledDate.toLocaleDateString(),
       companyName: (entity as any).currentCompany || (entity as any).companyName || 'Client',
-      contactName: (entity as any).firstName && (entity as any).lastName
-        ? `${(entity as any).firstName} ${(entity as any).lastName}`
-        : (entity as any).contactName || '',
+      contactName,
+      name: contactName,
+      senderName: followUp.assignedUser
+        ? `${followUp.assignedUser.firstName} ${followUp.assignedUser.lastName}`
+        : 'Careerist Team',
     })
 
     // Send message
@@ -94,11 +102,13 @@ export class CommunicationAutomation {
     if (!application.job) return
 
     // Render template
-    const content = this.renderTemplate(template.content, {
+    const content = renderMessageTemplate(template.content, {
       candidateName: `${application.client.firstName} ${application.client.lastName}`,
+      clientName: `${application.client.firstName} ${application.client.lastName}`,
       jobTitle: application.job.title,
       company: application.job.company,
       interviewDate: new Date().toLocaleDateString(), // You may want to store actual interview date
+      interviewTime: 'TBD',
     })
 
     // Send message
@@ -139,8 +149,9 @@ export class CommunicationAutomation {
     }
 
     // Render template
-    const content = this.renderTemplate(template.content, {
+    const content = renderMessageTemplate(template.content, {
       candidateName: `${application.client.firstName} ${application.client.lastName}`,
+      clientName: `${application.client.firstName} ${application.client.lastName}`,
       jobTitle: application.job.title,
       company: application.job.company,
       salary: application.job.salaryRange || 'TBD',
@@ -161,20 +172,6 @@ export class CommunicationAutomation {
     })
   }
 
-  /**
-   * Render template with variables
-   */
-  private renderTemplate(template: string, variables: Record<string, unknown>): string {
-    let rendered = template
-
-    // Replace {{variable}} with actual values
-    Object.entries(variables).forEach(([key, value]) => {
-      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g')
-      rendered = rendered.replace(regex, String(value))
-    })
-
-    return rendered
-  }
 }
 
 export const communicationAutomation = new CommunicationAutomation()

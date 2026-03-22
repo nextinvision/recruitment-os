@@ -109,7 +109,7 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
       const interval = setInterval(loadNotifications, 30000)
       return () => clearInterval(interval)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   // Close dropdown when clicking outside
@@ -239,21 +239,18 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
                     <div
                       key={notification.id}
                       onClick={() => handleNotificationClick(notification)}
-                      className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                        !notification.read ? 'bg-blue-50' : ''
-                      }`}
+                      className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-50' : ''
+                        }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`shrink-0 mt-0.5 ${
-                          !notification.read ? 'text-blue-600' : 'text-gray-400'
-                        }`}>
+                        <div className={`shrink-0 mt-0.5 ${!notification.read ? 'text-blue-600' : 'text-gray-400'
+                          }`}>
                           {getNotificationIcon(notification.type)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
-                            <p className={`text-sm font-medium ${
-                              !notification.read ? 'text-gray-900' : 'text-gray-700'
-                            }`}>
+                            <p className={`text-sm font-medium ${!notification.read ? 'text-gray-900' : 'text-gray-700'
+                              }`}>
                               {notification.title}
                             </p>
                             {!notification.read && (
@@ -280,7 +277,7 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
                 <Link
                   href="/notifications"
                   onClick={() => setIsOpen(false)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium text-center block"
+                  className="text-sm text-[#1F3A5F] hover:text-[#F4B400] font-medium text-center block transition-colors"
                 >
                   View all notifications
                 </Link>

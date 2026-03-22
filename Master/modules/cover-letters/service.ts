@@ -6,8 +6,10 @@ export const createCoverLetterSchema = z.object({
   clientId: z.string().min(1, 'Client ID is required'),
   fileUrl: z.string().min(1, 'File URL is required'),
   fileName: z.string().min(1, 'File name is required'),
+  originalFileName: z.string().optional(),
   fileSize: z.number().int().min(1, 'File size is required'),
   uploadedBy: z.string().min(1, 'Uploaded by is required'),
+  description: z.string().optional(),
 })
 
 export const updateCoverLetterSchema = createCoverLetterSchema.partial().extend({

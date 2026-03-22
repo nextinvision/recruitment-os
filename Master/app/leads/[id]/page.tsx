@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { ActivityTimeline } from '@/ui/ActivityTimeline'
-import { ToastContainer, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import Link from 'next/link'
 import { formatINR } from '@/lib/currency'
 
@@ -20,7 +20,7 @@ interface Lead {
   industry?: string
   estimatedValue?: string
   notes?: string
-  assignedUser: {
+  assignedUser?: {
     id: string
     firstName: string
     lastName: string
@@ -69,7 +69,7 @@ export default function LeadProfilePage() {
   const [documents, setDocuments] = useState<LeadDocument[]>([])
   const [loading, setLoading] = useState(true)
   const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
-  const { toasts, showToast, removeToast } = useToast()
+  const { showToast } = useToast()
 
   useEffect(() => {
     if (leadId) {
@@ -185,7 +185,7 @@ export default function LeadProfilePage() {
                     ? `Converted from lead: ${lead.currentCompany}`
                     : lead?.notes || 'Converted from lead',
                 leadId: leadId,
-                assignedUserId: lead?.assignedUser.id,
+                assignedUserId: lead?.assignedUser?.id,
               }),
             })
 
@@ -246,7 +246,6 @@ export default function LeadProfilePage() {
 
   return (
     <DashboardLayout>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConfirmDialog
         isOpen={dialogState.isOpen}
         onClose={closeDialog}
@@ -329,7 +328,7 @@ export default function LeadProfilePage() {
             <div>
               <label className="text-sm font-medium text-careerist-text-secondary">Assigned To</label>
               <p className="text-careerist-text-primary">
-                {lead.assignedUser.firstName} {lead.assignedUser.lastName}
+                {lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : '—'}
               </p>
             </div>
             {lead.notes && (
