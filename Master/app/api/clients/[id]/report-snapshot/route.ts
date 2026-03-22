@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { AnalyticsService } from '@/modules/analytics/service'
 import { v4 as uuidv4 } from 'uuid'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
+import { buildReportEmailVariables } from '@/modules/communications/report-email-variables'
+import { buildEmailLinkAppendSection } from '@/modules/communications/email-appended-content'
 
 // GET /api/clients/[id]/report-snapshot - Get existing snapshot metadata
 export async function GET(
@@ -65,19 +67,27 @@ export async function POST(
 
                 const template = await getTemplateById(templateId)
                 if (template) {
-                    const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
-                    const reportLink = `${origin}/public/reports/${snapshot.token}`
-
-                    const variables = {
-                        firstName: client.firstName,
-                        lastName: client.lastName,
-                        fullName: `${client.firstName} ${client.lastName}`,
-                        reportLink,
+                    const metricsData = snapshot.data as {
+                        funnelPerformance?: Array<{ stage: string; count: number }>
+                        activityDistribution?: Array<{ type: string; count: number }>
+                    }
+                    const metrics = {
+                        funnelPerformance: metricsData?.funnelPerformance ?? [],
+                        activityDistribution: metricsData?.activityDistribution ?? [],
                     }
 
-                    // Extract userId from auth context if possible, or use a system ID
-                    // Using a placeholder for now if userId isn't easily accessible here
-                    const actualUserId = userId || 'system'
+                    const variables = buildReportEmailVariables({
+                        request: req,
+                        client: {
+                            firstName: client.firstName,
+                            lastName: client.lastName,
+                            email: client.email,
+                        },
+                        snapshotToken: snapshot.token,
+                        metrics,
+                    })
+
+                    const reportUrl = variables.reportUrl || variables.reportLink || variables.link || ''
 
                     await messageService.sendMessage({
                         templateId,
@@ -85,10 +95,16 @@ export async function POST(
                         recipientType: 'client',
                         recipientId: clientId,
                         recipientEmail: client.email,
-                        subject: template.subject || 'Updated Report',
+                        subject: template.subject || 'Your report is ready',
                         content: template.content,
                         variables,
-                        sentBy: actualUserId,
+                        appendedEmailHtml: buildEmailLinkAppendSection({
+                            url: reportUrl,
+                            heading: 'View your report',
+                            buttonLabel: 'Open report',
+                            intro: 'Your report link is below. You do not need to add the URL inside the email template.',
+                        }),
+                        sentBy: userId,
                     })
                 }
             }

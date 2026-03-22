@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { CompanySize, ContactRole } from '@prisma/client'
+import { CompanySize, ContactRole, ContactStatus } from '@prisma/client'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +80,7 @@ export const createContactSchema = z.object({
     phone: z.string().optional(),
     linkedinUrl: optionalUrl,
     notes: z.string().optional(),
+    status: z.nativeEnum(ContactStatus).optional(),
 })
 
 export const updateContactSchema = createContactSchema.partial().extend({
@@ -92,6 +93,44 @@ export const createNoteSchema = z.object({
     companyId: z.string().min(1),
     content: z.string().min(1, 'Note content is required'),
 })
+
+// ─── Import Schemas ───────────────────────────────────────────────────────────
+
+/** Optional email for import rows (same rules as contact email). */
+const importOptionalEmail = z.preprocess(
+    (val) => (val == null || (typeof val === 'string' && val.trim() === '') ? undefined : val),
+    z.string().email('Invalid email address').optional()
+)
+
+/**
+ * Bulk import row: **Company name** (`name`) required.
+ * Optional contact fields: contactName, designation, location (company), phoneNumber, emailId,
+ * outreachStatus, linkedInProfileLink, comments.
+ * Legacy company-only columns still accepted: industry, website, size, description, linkedinUrl.
+ */
+export const importCompanyRowSchema = z.object({
+    name: z.string().min(1, 'Company name is required').transform((s) => s.trim()),
+    contactName: optionalString,
+    designation: optionalString,
+    location: optionalString,
+    phoneNumber: optionalString,
+    emailId: importOptionalEmail,
+    outreachStatus: optionalString,
+    linkedInProfileLink: optionalUrl,
+    comments: optionalString,
+    industry: optionalString,
+    website: optionalUrl,
+    size: optionalCompanySize,
+    description: optionalString,
+    linkedinUrl: optionalUrl,
+})
+
+export const importCompaniesBodySchema = z.object({
+    companies: z.array(importCompanyRowSchema).min(1, 'At least one company is required'),
+})
+
+export type ImportCompanyRow = z.infer<typeof importCompanyRowSchema>
+export type ImportCompaniesBody = z.infer<typeof importCompaniesBodySchema>
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

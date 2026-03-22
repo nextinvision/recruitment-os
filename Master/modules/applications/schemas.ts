@@ -1,28 +1,55 @@
 import { z } from 'zod'
-import { ApplicationStage } from '@prisma/client'
+
+// Explicit list of application stages (must match Prisma ApplicationStage enum).
+// Used for Zod validation so PATCH/GET/filters accept all stages regardless of Prisma client version.
+const APPLICATION_STAGE_VALUES = [
+  'PENDING_CLIENT_APPROVAL',
+  'IDENTIFIED',
+  'RESUME_UPDATED',
+  'COLD_MESSAGE_SENT',
+  'CONNECTION_ACCEPTED',
+  'APPLIED',
+  'FOLLOW_UP_1',
+  'FOLLOW_UP_2',
+  'FINAL_FOLLOW_UP',
+  'NO_RESPONSE',
+  'INTERVIEW_PREPARATION',
+  'INTERVIEW_SCHEDULED',
+  'OFFER',
+  'REJECTED',
+  'CLOSED',
+] as const
+
+export type ApplicationStageValue = (typeof APPLICATION_STAGE_VALUES)[number]
+
+const applicationStageSchema = z.enum(APPLICATION_STAGE_VALUES)
 
 export const createApplicationSchema = z.object({
   jobId: z.string().min(1).optional().or(z.literal('')),
+  jobIds: z.array(z.string().min(1)).optional(),
   clientId: z.string().min(1, 'Client ID is required'),
   recruiterId: z.string().min(1, 'Recruiter ID is required'),
-  stage: z.nativeEnum(ApplicationStage).default(ApplicationStage.IDENTIFIED),
+  stage: applicationStageSchema.default('IDENTIFIED'),
   notes: z.string().optional(),
   followUpDate: z.string().datetime().optional(),
 }).transform((data) => ({
   ...data,
   jobId: data.jobId && data.jobId.trim() ? data.jobId.trim() : undefined,
+  jobIds: Array.isArray(data.jobIds)
+    ? Array.from(new Set(data.jobIds.map((id) => id.trim()).filter((id) => !!id)))
+    : undefined,
 }))
 
 export const updateApplicationSchema = z.object({
   id: z.string().min(1),
-  stage: z.nativeEnum(ApplicationStage).optional(),
+  stage: applicationStageSchema.optional(),
   notes: z.string().optional(),
   followUpDate: z.string().datetime().optional().nullable(),
 })
 
 // Filter schemas
 export const applicationFilterSchema = z.object({
-  stage: z.nativeEnum(ApplicationStage).optional(),
+  stage: applicationStageSchema.optional(),
   recruiterId: z.string().optional(),
   jobId: z.string().optional(),
   clientId: z.string().optional(),

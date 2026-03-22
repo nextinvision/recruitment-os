@@ -2,6 +2,7 @@
 
 import React, { forwardRef } from 'react'
 import type { ResumeDocument } from '@/modules/resume-builder/types'
+import { RESUME_PREVIEW_PADDING_CSS } from '@/modules/resume-builder/constants'
 
 interface ResumePreviewProps {
   document: ResumeDocument
@@ -49,7 +50,7 @@ export const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
       fontFamily: 'Arial, Helvetica, sans-serif',
       backgroundColor: 'white',
       color: TEXT_BASE_COLOR,
-      padding: '30pt 40pt',
+      padding: RESUME_PREVIEW_PADDING_CSS,
       width: '210mm',
       minHeight: '297mm',
       boxSizing: 'border-box',
@@ -220,10 +221,19 @@ export const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3pt' }}>
             {education.map((edu: any) => (
               <div key={edu.id}>
-                <strong>{edu.degree}{edu.specialization ? ` (${edu.specialization})` : ''}</strong>
-                {edu.institution && (
-                  <span> - <span style={{ color: THEME_BLUE }}>{edu.institution}</span></span>
-                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1pt' }}>
+                  <strong style={{ fontSize: '10.5pt', lineHeight: '1.2' }}>
+                    {edu.degree}{edu.specialization ? `, ${edu.specialization}` : ''}
+                  </strong>
+                  {edu.date && (
+                    <span style={{ fontSize: '9pt', whiteSpace: 'nowrap', marginLeft: '8pt' }}>
+                      {edu.date}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '9.5pt', lineHeight: '1.2' }}>
+                  {edu.institution}
+                </div>
               </div>
             ))}
           </div>
@@ -239,7 +249,16 @@ export const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3pt' }}>
             {certifications.map((c: any, i: number) => (
               <div key={c.id || i}>
-                <strong>{c.title}</strong>{c.issuer ? ` – ${c.issuer}` : ''}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div style={{ fontSize: '9.5pt', lineHeight: '1.2' }}>
+                    <strong>{c.title}</strong>{c.issuer ? ` – ${c.issuer}` : ''}
+                  </div>
+                  {c.date && (
+                    <span style={{ fontSize: '9pt', whiteSpace: 'nowrap', marginLeft: '8pt' }}>
+                      {c.date}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -247,14 +266,33 @@ export const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
       )
     }
 
-    const structureOrder = ['header', 'profile', 'awards', 'experience', 'education', 'certifications'];
+    const sectionOrder = doc.sectionOrder || ['profile', 'experience', 'awards', 'education', 'certifications'];
+
+    const renderCustomSection = (sectionId: string) => {
+      const section = doc.customSections?.find(s => s.id === sectionId);
+      if (!section || section.items.length === 0) return null;
+      return (
+        <section key={section.id} style={{ marginBottom: '12pt', pageBreakInside: 'avoid' }}>
+          <div style={sectionHeadingStyle}>{section.title}</div>
+          <ul style={{ listStyleType: 'disc', paddingLeft: '24pt', margin: 0 }}>
+            {section.items.filter(Boolean).map((item, i) => (
+              <li key={i} style={{ marginBottom: '2pt', paddingLeft: '4pt', textAlign: 'justify' }}>
+                {renderTextWithBold(item)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    };
 
     return (
       <div ref={ref} className={`resume-preview ${className}`} style={containerStyle}>
-        {structureOrder.map((section: string) => {
+        {renderHeader()}
+        {sectionOrder.map((section: string) => {
+          if (section.startsWith('custom-')) {
+            return renderCustomSection(section);
+          }
           switch (section) {
-            case 'header':
-              return <React.Fragment key="header">{renderHeader()}</React.Fragment>
             case 'profile':
               return <React.Fragment key="profile">{renderProfile()}</React.Fragment>
             case 'experience':

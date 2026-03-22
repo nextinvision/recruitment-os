@@ -97,3 +97,38 @@ export interface ClientsResult {
   pageSize: number
   totalPages: number
 }
+
+// Import: only name (or firstName+lastName) and email required; all other fields optional
+const requiredEmailSchema = z
+  .string()
+  .transform((val) => (typeof val === 'string' ? val.trim() : ''))
+  .refine((val) => val.length > 0, 'Email is required')
+  .refine((val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), 'Invalid email format')
+
+export const importClientRowSchema = z.object({
+  name: optionalString,
+  firstName: optionalString,
+  lastName: optionalString,
+  email: requiredEmailSchema,
+  phone: optionalString,
+  address: optionalString,
+  industry: optionalString,
+  currentJobTitle: optionalString,
+  experience: optionalString,
+  skills: z.union([z.string(), z.array(z.string())]).optional().transform((v) => {
+    if (v == null) return undefined
+    if (Array.isArray(v)) return v
+    if (typeof v === 'string' && v.trim()) return v.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+    return undefined
+  }),
+  notes: optionalString,
+  serviceType: z.nativeEnum(ServiceType).optional(),
+})
+
+export const importClientsBodySchema = z.object({
+  clients: z.array(importClientRowSchema).min(1, 'At least one client is required'),
+  assignedUserId: z.string().min(1).optional(),
+})
+
+export type ImportClientRow = z.infer<typeof importClientRowSchema>
+export type ImportClientsBody = z.infer<typeof importClientsBodySchema>

@@ -6,11 +6,6 @@ import { StatsCard, FunnelChartWidget, Spinner, Alert, Badge } from '@/ui'
 import { formatINR } from '@/lib/currency'
 
 interface SnapshotData {
-    financials: {
-        totalBilled: number
-        totalPaid: number
-        totalPending: number
-    }
     funnelPerformance: Array<{ stage: string; count: number }>
     activityDistribution: Array<{ type: string; count: number }>
 }
@@ -96,27 +91,6 @@ export default function PublicReportPage() {
                             </svg>
                             Last snapshot: {new Date(updatedAt).toLocaleString()}
                         </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <StatsCard
-                            title="Total Billed"
-                            value={formatINR(data.financials.totalBilled)}
-                            color="blue"
-                            icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                        />
-                        <StatsCard
-                            title="Total Paid"
-                            value={formatINR(data.financials.totalPaid)}
-                            color="green"
-                            icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                        />
-                        <StatsCard
-                            title="Pending Balance"
-                            value={formatINR(data.financials.totalPending)}
-                            color="orange"
-                            icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                        />
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

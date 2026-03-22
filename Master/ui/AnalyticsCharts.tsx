@@ -35,11 +35,17 @@ interface FunnelData {
 }
 
 const STAGE_LABELS: Record<string, string> = {
+    PENDING_CLIENT_APPROVAL: 'Pending Approval',
     IDENTIFIED: 'Identified',
     RESUME_UPDATED: 'Resume',
     COLD_MESSAGE_SENT: 'Contact',
     CONNECTION_ACCEPTED: 'Linked',
     APPLIED: 'Applied',
+    FOLLOW_UP_1: 'Follow-up 1',
+    FOLLOW_UP_2: 'Follow-up 2',
+    FINAL_FOLLOW_UP: 'Final F/up',
+    NO_RESPONSE: 'No Response',
+    INTERVIEW_PREPARATION: 'Prep',
     INTERVIEW_SCHEDULED: 'Interview',
     OFFER: 'Offer',
     REJECTED: 'Rejected',

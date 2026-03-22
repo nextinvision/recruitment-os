@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { UserRole, JobSource, JobStatus, JobType } from '@prisma/client'
+import { Prisma, UserRole, JobSource, JobStatus, JobType } from '@prisma/client'
 import {
   createJobSchema,
   updateJobSchema,
@@ -8,6 +8,7 @@ import {
   UpdateJobInput,
   BulkCreateJobsInput,
 } from './schemas'
+import type { BulkDeleteJobsInput } from './schemas'
 
 // Normalize job data
 function normalizeJobData(data: any): any {
@@ -158,6 +159,97 @@ export interface JobPaginationOptions {
   pageSize?: number
 }
 
+function startOfUtcDay(d: Date): Date {
+  const x = new Date(d.getTime())
+  x.setUTCHours(0, 0, 0, 0)
+  return x
+}
+
+function endOfUtcDay(d: Date): Date {
+  const x = new Date(d.getTime())
+  x.setUTCHours(23, 59, 59, 999)
+  return x
+}
+
+/**
+ * Canonical WHERE clause for job queries (list + export).
+ * - Recruiters are always scoped to their own jobs; recruiterId filter only applies for ADMIN/MANAGER.
+ * - Posted date range is inclusive (whole calendar days in UTC).
+ */
+export function buildJobWhereClause(
+  userId: string,
+  userRole: UserRole,
+  filters?: JobFilters
+): Prisma.JobWhereInput {
+  const where: Prisma.JobWhereInput = {}
+
+  if (userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) {
+    if (filters?.recruiterId) {
+      where.recruiterId = filters.recruiterId
+    }
+  } else {
+    where.recruiterId = userId
+  }
+
+  if (!filters) {
+    return where
+  }
+
+  if (filters.source) {
+    where.source = filters.source
+  }
+  if (filters.status) {
+    where.status = filters.status
+  }
+  if (filters.startDate || filters.endDate) {
+    where.createdAt = {}
+    if (filters.startDate) {
+      where.createdAt.gte = startOfUtcDay(filters.startDate)
+    }
+    if (filters.endDate) {
+      where.createdAt.lte = endOfUtcDay(filters.endDate)
+    }
+  }
+  if (filters.isDuplicate !== undefined) {
+    where.isDuplicate = filters.isDuplicate
+  }
+  if (filters.jobType) {
+    where.jobType = filters.jobType
+  }
+  if (filters.title) {
+    where.title = { contains: filters.title, mode: 'insensitive' }
+  }
+  if (filters.company) {
+    where.company = { contains: filters.company, mode: 'insensitive' }
+  }
+  if (filters.location) {
+    where.location = { contains: filters.location, mode: 'insensitive' }
+  }
+  if (filters.ctcRange) {
+    where.salaryRange = { contains: filters.ctcRange, mode: 'insensitive' }
+  }
+  if (filters.yearsOfExperience) {
+    where.experienceRequired = { contains: filters.yearsOfExperience, mode: 'insensitive' }
+  }
+  if (filters.skills) {
+    const skillList = filters.skills.split(',').map((s) => s.trim()).filter((s) => s !== '')
+    if (skillList.length > 0) {
+      where.skills = { hasSome: skillList }
+    }
+  }
+  if (filters.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: 'insensitive' } },
+      { company: { contains: filters.search, mode: 'insensitive' } },
+      { location: { contains: filters.search, mode: 'insensitive' } },
+      { description: { contains: filters.search, mode: 'insensitive' } },
+      { skills: { hasSome: [filters.search] } },
+    ]
+  }
+
+  return where
+}
+
 export interface JobsResult {
   jobs: any[]
   total: number
@@ -268,70 +360,7 @@ export async function getJobs(
   sortOptions?: JobSortOptions,
   pagination?: JobPaginationOptions
 ): Promise<JobsResult> {
-  const where: any = {}
-
-  // Role-based filtering
-  if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
-    where.recruiterId = userId
-  }
-
-  // Apply filters
-  if (filters) {
-    if (filters.source) {
-      where.source = filters.source
-    }
-    if (filters.status) {
-      where.status = filters.status
-    }
-    if (filters.recruiterId) {
-      where.recruiterId = filters.recruiterId
-    }
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) {
-        where.createdAt.gte = filters.startDate
-      }
-      if (filters.endDate) {
-        where.createdAt.lte = filters.endDate
-      }
-    }
-    if (filters.isDuplicate !== undefined) {
-      where.isDuplicate = filters.isDuplicate
-    }
-    if (filters.jobType) {
-      where.jobType = filters.jobType
-    }
-    if (filters.title) {
-      where.title = { contains: filters.title, mode: 'insensitive' }
-    }
-    if (filters.company) {
-      where.company = { contains: filters.company, mode: 'insensitive' }
-    }
-    if (filters.location) {
-      where.location = { contains: filters.location, mode: 'insensitive' }
-    }
-    if (filters.ctcRange) {
-      where.salaryRange = { contains: filters.ctcRange, mode: 'insensitive' }
-    }
-    if (filters.yearsOfExperience) {
-      where.experienceRequired = { contains: filters.yearsOfExperience, mode: 'insensitive' }
-    }
-    if (filters.skills) {
-      const skillList = filters.skills.split(',').map(s => s.trim()).filter(s => s !== '')
-      if (skillList.length > 0) {
-        where.skills = { hasSome: skillList }
-      }
-    }
-    if (filters.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { company: { contains: filters.search, mode: 'insensitive' } },
-        { location: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
-        { skills: { hasSome: [filters.search] } },
-      ]
-    }
-  }
+  const where = buildJobWhereClause(userId, userRole, filters)
 
   // Get total count
   const total = await db.job.count({ where })
@@ -448,6 +477,51 @@ export async function deleteJob(jobId: string) {
   await db.job.delete({
     where: { id: jobId },
   })
+}
+
+export interface BulkDeleteJobsResult {
+  deleted: string[]
+  deletedDetails: { jobId: string; title: string; company: string }[]
+  errors: { jobId: string; message: string }[]
+}
+
+export async function bulkDeleteJobs(
+  input: BulkDeleteJobsInput,
+  userId: string,
+  userRole: UserRole
+): Promise<BulkDeleteJobsResult> {
+  const { jobIds } = input
+  const deleted: string[] = []
+  const deletedDetails: { jobId: string; title: string; company: string }[] = []
+  const errors: { jobId: string; message: string }[] = []
+
+  for (const jobId of jobIds) {
+    const job = await getJobById(jobId)
+    if (!job) {
+      errors.push({ jobId, message: 'Job not found' })
+      continue
+    }
+    const canDelete =
+      userRole === 'ADMIN' ||
+      userRole === 'MANAGER' ||
+      job.recruiterId === userId
+    if (!canDelete) {
+      errors.push({ jobId, message: 'Forbidden' })
+      continue
+    }
+    try {
+      deletedDetails.push({ jobId, title: job.title, company: job.company })
+      await deleteJob(jobId)
+      deleted.push(jobId)
+    } catch (err) {
+      errors.push({
+        jobId,
+        message: err instanceof Error ? err.message : 'Failed to delete job',
+      })
+    }
+  }
+
+  return { deleted, deletedDetails, errors }
 }
 
 export async function bulkCreateJobs(input: BulkCreateJobsInput) {
@@ -720,28 +794,7 @@ export async function exportJobsToCSV(
   userRole: UserRole,
   filters?: JobFilters
 ): Promise<string> {
-  const where: any = {}
-
-  if (userRole !== UserRole.ADMIN && userRole !== UserRole.MANAGER) {
-    where.recruiterId = userId
-  }
-
-  if (filters) {
-    if (filters.source) where.source = filters.source
-    if (filters.status) where.status = filters.status
-    if (filters.recruiterId) where.recruiterId = filters.recruiterId
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) where.createdAt.gte = filters.startDate
-      if (filters.endDate) where.createdAt.lte = filters.endDate
-    }
-    if (filters.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { company: { contains: filters.search, mode: 'insensitive' } },
-      ]
-    }
-  }
+  const where = buildJobWhereClause(userId, userRole, filters)
 
   const jobs = await db.job.findMany({
     where,

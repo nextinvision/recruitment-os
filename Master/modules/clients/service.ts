@@ -9,6 +9,8 @@ import {
   ClientSortOptions,
   ClientPaginationOptions,
   ClientsResult,
+  importClientRowSchema,
+  ImportClientRow,
 } from './schemas'
 
 export async function createClient(input: CreateClientInput) {
@@ -86,6 +88,75 @@ export async function createClient(input: CreateClientInput) {
   return client
 }
 
+/** Derive firstName and lastName from import row (name or firstName/lastName). Requires at least name or both first+last. */
+function deriveNames(row: ImportClientRow): { firstName: string; lastName: string } {
+  const first = row.firstName?.trim()
+  const last = row.lastName?.trim()
+  const full = row.name?.trim()
+  if (first && last) return { firstName: first, lastName: last }
+  if (full) {
+    const parts = full.split(/\s+/)
+    if (parts.length >= 2) return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
+    return { firstName: full, lastName: '' }
+  }
+  if (first) return { firstName: first, lastName: last || '—' }
+  if (last) return { firstName: '—', lastName: last }
+  return { firstName: 'Unknown', lastName: 'Unknown' }
+}
+
+export interface ImportClientsResult {
+  created: Awaited<ReturnType<typeof createClient>>[]
+  errors: { row: number; email?: string; message: string }[]
+}
+
+export async function importClients(
+  rows: unknown[],
+  assignedUserId: string
+): Promise<ImportClientsResult> {
+  const created: Awaited<ReturnType<typeof createClient>>[] = []
+  const errors: { row: number; email?: string; message: string }[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i]
+    const parsed = importClientRowSchema.safeParse(raw)
+    if (!parsed.success) {
+      const msg = parsed.error.issues.map((issue) => issue.message).join('; ')
+      errors.push({ row: i + 1, email: typeof raw === 'object' && raw !== null && 'email' in raw ? String((raw as { email?: unknown }).email) : undefined, message: msg })
+      continue
+    }
+    const row = parsed.data
+    const { firstName, lastName } = deriveNames(row)
+    if (!firstName.trim() || !lastName.trim()) {
+      errors.push({ row: i + 1, email: row.email, message: 'Name is required (provide name or first name + last name)' })
+      continue
+    }
+    const input: CreateClientInput = {
+      firstName,
+      lastName,
+      email: row.email || undefined,
+      phone: row.phone || undefined,
+      address: row.address || undefined,
+      industry: row.industry || undefined,
+      currentJobTitle: row.currentJobTitle || undefined,
+      experience: row.experience || undefined,
+      skills: row.skills,
+      notes: row.notes || undefined,
+      serviceType: row.serviceType,
+      assignedUserId,
+    }
+    try {
+      const client = await createClient(input)
+      created.push(client)
+    } catch (err) {
+      errors.push({
+        row: i + 1,
+        email: row.email,
+        message: err instanceof Error ? err.message : 'Failed to create client',
+      })
+    }
+  }
+  return { created, errors }
+}
+
 export async function getClientById(clientId: string) {
   return db.client.findUnique({
     where: { id: clientId },
@@ -116,6 +187,14 @@ export async function getClientById(clientId: string) {
       },
       resumeDrafts: {
         orderBy: { updatedAt: 'desc' },
+      },
+      resumeLinks: {
+        orderBy: { sentAt: 'desc' },
+        include: {
+          resumeDraft: {
+            select: { id: true, template: true, updatedAt: true }
+          },
+        },
       },
       _count: {
         select: {

@@ -1,11 +1,12 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { ActivityTimeline, Modal, Button, Badge, Spinner, Input, Textarea, Select, Alert, FormActions, useToast, ConfirmDialog, useConfirmDialog, PreparationPipelineBoard, PreparationStepModal, FunnelChartWidget, StatsCard } from '@/ui'
+import { ActivityTimeline, Modal, Button, Badge, Spinner, Input, Textarea, Select, Alert, FormActions, useToast, ConfirmDialog, useConfirmDialog, PreparationPipelineBoard, PreparationStepModal, FunnelChartWidget, StatsCard, SendToWhatsAppButton } from '@/ui'
 import { ChevronDown, Clock, MapPin } from 'lucide-react'
 import { ResumePreview } from '@/components/resume-builder/ResumePreview'
+import { RESUME_PREVIEW_PADDING_CSS } from '@/modules/resume-builder/constants'
 import { formatINR } from '@/lib/currency'
 import Link from 'next/link'
 
@@ -70,6 +71,15 @@ interface Client {
     description?: string | null
     uploadedAt: string
   }>
+  /** Resume links sent to client (email with public URL); responses shown in Resume tab */
+  resumeLinks?: Array<{
+    id: string
+    token: string
+    sentAt: string
+    response: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+    respondedAt: string | null
+    resumeDraft: { id: string; template: string; updatedAt: string }
+  }>
 }
 
 interface ResumeDraft {
@@ -117,6 +127,7 @@ export default function ClientProfilePage() {
   const [generatingSnapshot, setGeneratingSnapshot] = useState(false)
   const [showReportNotificationModal, setShowReportNotificationModal] = useState(false)
   const [reportTemplates, setReportTemplates] = useState<any[]>([])
+  const [reportTemplateId, setReportTemplateId] = useState('')
 
   // Send Resume State
   const [showSendResumeModal, setShowSendResumeModal] = useState(false)
@@ -124,6 +135,49 @@ export default function ClientProfilePage() {
   const [sendResumeTemplateId, setSendResumeTemplateId] = useState('')
   const [sendingResume, setSendingResume] = useState(false)
   const [emailTemplates, setEmailTemplates] = useState<any[]>([])
+
+  const activeTabRef = useRef(activeTab)
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  const loadReportsData = useCallback(async () => {
+    if (!clientId) return
+    setLoadingReports(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/clients/${clientId}/analytics`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setReportsData(data)
+      } else {
+        showToast('Failed to load reports data', 'error')
+      }
+    } catch (err) {
+      console.error('Error loading reports:', err)
+      showToast('Error loading reports data', 'error')
+    } finally {
+      setLoadingReports(false)
+    }
+  }, [clientId, showToast])
+
+  const refreshReportsIfOnTab = useCallback(() => {
+    if (activeTabRef.current === 'reports') void loadReportsData()
+  }, [loadReportsData])
+
+  useEffect(() => {
+    if (activeTab !== 'reports' || !clientId) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadReportsData()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [activeTab, clientId, loadReportsData])
 
   useEffect(() => {
     if (!clientId) {
@@ -186,6 +240,7 @@ export default function ClientProfilePage() {
       if (response.ok) {
         const data = await response.json()
         setClient(data)
+        refreshReportsIfOnTab()
       } else if (response.status === 404) {
         setError('Client not found')
       } else {
@@ -223,6 +278,7 @@ export default function ClientProfilePage() {
         } else {
           setActivities([])
         }
+        refreshReportsIfOnTab()
       }
     } catch (err) {
       console.error('Failed to load activities:', err)
@@ -311,6 +367,7 @@ export default function ClientProfilePage() {
         setShowSendResumeModal(false)
         setResumeToSend(null)
         setSendResumeTemplateId('')
+        loadClient()
       } else {
         const data = await response.json()
         showToast(data.error || 'Failed to send resume', 'error')
@@ -427,7 +484,7 @@ export default function ClientProfilePage() {
             body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
             * { box-sizing: border-box; }
             @media print {
-              .resume-preview { width: 100% !important; margin: 0 !important; padding: 40pt 45pt !important; box-shadow: none !important; }
+              .resume-preview { width: 100% !important; margin: 0 !important; padding: ${RESUME_PREVIEW_PADDING_CSS} !important; box-shadow: none !important; }
             }
           </style>
         </head>
@@ -516,30 +573,6 @@ export default function ClientProfilePage() {
     }, 300)
   }
 
-  const loadReportsData = async () => {
-    if (!clientId) return
-    setLoadingReports(true)
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/clients/${clientId}/analytics`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setReportsData(data)
-      } else {
-        showToast('Failed to load reports data', 'error')
-      }
-    } catch (err) {
-      console.error('Error loading reports:', err)
-      showToast('Error loading reports data', 'error')
-    } finally {
-      setLoadingReports(false)
-    }
-  }
-
   const loadReportSnapshot = async () => {
     if (!clientId) return
     try {
@@ -572,6 +605,7 @@ export default function ClientProfilePage() {
       if (response.ok) {
         const data = await response.json()
         setReportSnapshot(data)
+        refreshReportsIfOnTab()
         showToast(sendEmail ? 'Report updated and email sent' : 'Shared report updated successfully', 'success')
         setShowReportNotificationModal(false)
       } else {
@@ -589,7 +623,7 @@ export default function ClientProfilePage() {
   const loadReportTemplates = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('/api/messages/templates?channel=EMAIL', {
+      const response = await fetch('/api/messages/templates', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (response.ok) {
@@ -604,6 +638,7 @@ export default function ClientProfilePage() {
   useEffect(() => {
     if (showReportNotificationModal) {
       loadReportTemplates()
+      setReportTemplateId('')
     }
   }, [showReportNotificationModal])
 
@@ -1082,6 +1117,49 @@ export default function ClientProfilePage() {
                     </Button>
                   </div>
                 )}
+
+                {/* Resume link responses: sent resume emails and client accept/reject */}
+                {client.resumeLinks && client.resumeLinks.length > 0 && (
+                  <div className="mt-10 pt-8 border-t border-careerist-border">
+                    <h3 className="text-base font-semibold text-careerist-text-primary mb-3">Resume link responses</h3>
+                    <p className="text-sm text-careerist-text-secondary mb-4">
+                      When you send a resume via email, the client can open the link to preview, download, and accept or reject. Responses appear below.
+                    </p>
+                    <div className="space-y-3">
+                      {client.resumeLinks.map((link) => (
+                        <div
+                          key={link.id}
+                          className="flex flex-wrap items-center justify-between gap-3 p-4 bg-careerist-bg-gray border border-careerist-border rounded-lg"
+                        >
+                          <div>
+                            <span className="font-medium text-careerist-text-primary">
+                              {link.resumeDraft?.template ?? 'Resume'}
+                            </span>
+                            <span className="text-careerist-text-secondary text-sm ml-2">
+                              Sent {new Date(link.sentAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {link.response === 'PENDING' && (
+                              <Badge variant="warning">Pending</Badge>
+                            )}
+                            {link.response === 'ACCEPTED' && (
+                              <Badge variant="success">Accepted</Badge>
+                            )}
+                            {link.response === 'REJECTED' && (
+                              <Badge variant="error">Rejected</Badge>
+                            )}
+                            {link.respondedAt && (
+                              <span className="text-xs text-careerist-text-secondary">
+                                {new Date(link.respondedAt).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1113,27 +1191,7 @@ export default function ClientProfilePage() {
                   </div>
                 ) : reportsData ? (
                   <>
-                    {/* Financial Overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <StatsCard
-                        title="Total Billed"
-                        value={formatINR(reportsData.financials.totalBilled)}
-                        color="blue"
-                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                      />
-                      <StatsCard
-                        title="Total Paid"
-                        value={formatINR(reportsData.financials.totalPaid)}
-                        color="green"
-                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                      />
-                      <StatsCard
-                        title="Pending Balance"
-                        value={formatINR(reportsData.financials.totalPending)}
-                        color="orange"
-                        icon={<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                      />
-                    </div>
+                    {/* Application Funnel & Activity Distribution */}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                       {/* Application Funnel */}
@@ -1144,7 +1202,12 @@ export default function ClientProfilePage() {
                         <h3 className="text-lg font-semibold text-careerist-text-primary mb-4">Activity Distribution</h3>
                         {reportsData.activityDistribution.length > 0 ? (
                           <div className="space-y-4">
-                            {reportsData.activityDistribution.map((activity: any) => (
+                            {(() => {
+                              const counts = reportsData.activityDistribution.map((a: { count: number }) =>
+                                typeof a.count === 'number' && !Number.isNaN(a.count) ? a.count : 0
+                              )
+                              const maxAct = Math.max(...counts, 1)
+                              return reportsData.activityDistribution.map((activity: any) => (
                               <div key={activity.type}>
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-sm font-medium text-careerist-text-primary">{activity.type}</span>
@@ -1153,16 +1216,47 @@ export default function ClientProfilePage() {
                                 <div className="w-full bg-gray-200 rounded-full h-2">
                                   <div
                                     className="bg-careerist-primary-navy h-2 rounded-full"
-                                    style={{ width: `${Math.min((activity.count / Math.max(...reportsData.activityDistribution.map((a: any) => a.count))) * 100, 100)}%` }}
+                                    style={{ width: `${Math.min(((typeof activity.count === 'number' ? activity.count : 0) / maxAct) * 100, 100)}%` }}
                                   />
                                 </div>
                               </div>
-                            ))}
+                            ))
+                            })()}
                           </div>
                         ) : (
                           <p className="text-sm text-careerist-text-secondary">No activity data recorded.</p>
                         )}
                       </div>
+                    </div>
+
+                    {/* Notes entered for this client (from NOTE activities) */}
+                    <div className="bg-careerist-card rounded-xl p-6 border border-careerist-border shadow-md">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-careerist-text-primary">Notes</h3>
+                        <Badge variant="neutral">{reportsData.notes?.length ?? 0}</Badge>
+                      </div>
+                      {reportsData.notes && reportsData.notes.length > 0 ? (
+                        <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                          {reportsData.notes.map((note: any) => (
+                            <div key={note.id} className="p-3 rounded-lg border border-careerist-border bg-white">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-careerist-text-primary">{note.title}</p>
+                                <p className="text-xs text-careerist-text-secondary whitespace-nowrap">
+                                  {new Date(note.occurredAt).toLocaleString()}
+                                </p>
+                              </div>
+                              {note.description && (
+                                <p className="text-sm text-careerist-text-primary whitespace-pre-wrap mt-1">
+                                  {note.description}
+                                </p>
+                              )}
+                              <p className="text-xs text-careerist-text-secondary mt-2">By {note.createdBy}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-careerist-text-secondary">No notes recorded for this client yet.</p>
+                      )}
                     </div>
 
                     {/* Reports Tab Footer: Share Functionality */}
@@ -1260,10 +1354,10 @@ export default function ClientProfilePage() {
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-careerist-text-secondary italic">Selected template will be used to send the resume report to the client.</p>
+                <p className="text-[10px] text-careerist-text-secondary italic">The email will include a unique link for the client to preview the resume, download it, and accept or reject. In your template, use <code className="bg-gray-100 px-1 rounded">{"{{resumeViewUrl}}"}</code> to insert this link.</p>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="flex flex-wrap justify-end gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setShowSendResumeModal(false)}>
                   Cancel
                 </Button>
@@ -1274,6 +1368,30 @@ export default function ClientProfilePage() {
                 >
                   Send Email
                 </Button>
+                {clientId && resumeToSend && (
+                  <SendToWhatsAppButton
+                    disabled={!sendResumeTemplateId || !client?.phone}
+                    onFetch={async () => {
+                      const token = localStorage.getItem('token')
+                      const res = await fetch('/api/messages/whatsapp-preview', {
+                        method: 'POST',
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                          clientId,
+                          templateId: sendResumeTemplateId,
+                          resumeDraftId: resumeToSend.id,
+                        }),
+                      })
+                      if (!res.ok) throw new Error((await res.json()).error || 'Failed to get preview')
+                      return res.json()
+                    }}
+                    entityName={client ? `${client.firstName} ${client.lastName}` : 'client'}
+                  />
+                )}
               </div>
             </div>
           </Modal>
@@ -1289,6 +1407,7 @@ export default function ClientProfilePage() {
             size="lg"
           >
             <ClientEditForm
+              key={client.id}
               client={client}
               onSuccess={() => {
                 setShowEditModal(false)
@@ -1378,44 +1497,131 @@ export default function ClientProfilePage() {
           >
             <div className="space-y-4">
               <p className="text-sm text-careerist-text-secondary">
-                Select an email template to notify the client about this report update.
+                Select an email template for the message text. The <strong>report link</strong> is always added below your template
+                automatically, so clients always receive a working URL even if the template omits link placeholders.
               </p>
+              <div className="text-xs text-careerist-text-secondary bg-careerist-bg-secondary rounded-lg p-3 border border-careerist-border space-y-1">
+                <p className="font-medium text-careerist-text-primary">Body placeholders (link vars optional / legacy)</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{reportLink}}'}</code>, <code className="bg-white px-1 rounded">{'{{reportUrl}}'}</code>,{' '}
+                    <code className="bg-white px-1 rounded">{'{{link}}'}</code> — optional in the template body; the real link is appended after the template
+                  </li>
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{firstName}}'}</code>, <code className="bg-white px-1 rounded">{'{{lastName}}'}</code>,{' '}
+                    <code className="bg-white px-1 rounded">{'{{fullName}}'}</code>
+                  </li>
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{reportSummary}}'}</code> — plain-text funnel & activity summary
+                  </li>
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{reportSummaryHtml}}'}</code> — HTML block for rich email bodies
+                  </li>
+                </ul>
+              </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-careerist-text-primary">Email Template</label>
                 <select
                   className="w-full p-2 border border-careerist-border rounded-lg bg-white text-sm"
-                  id="template-select"
+                  value={reportTemplateId}
+                  onChange={(e) => setReportTemplateId(e.target.value)}
                 >
                   <option value="">Select a template...</option>
                   {reportTemplates.map((t: any) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>{`${t.name} (${t.channel})`}</option>
                   ))}
                 </select>
+                <p className="text-[10px] text-careerist-text-secondary">
+                  All templates from Admin Communications are listed here. For <strong>Update & Send Email</strong>, choose an
+                  <strong> EMAIL</strong> template.
+                </p>
+                <p className="text-[10px] text-careerist-text-secondary">
+                  <strong>Send to WhatsApp</strong> uses the same template body (placeholders filled) and opens{' '}
+                  <code className="bg-gray-100 px-1 rounded">wa.me</code> so your installed WhatsApp Desktop or browser can send the message.
+                </p>
               </div>
 
+              {!client?.phone && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Add a phone number on this client&apos;s profile to use Send to WhatsApp.
+                </p>
+              )}
+
               <div className="flex flex-col gap-3 pt-4">
-                <Button
-                  onClick={() => {
-                    const templateSelect = document.getElementById('template-select') as HTMLSelectElement;
-                    const templateId = templateSelect?.value;
-                    if (!templateId && !reportSnapshot) {
-                      showToast('Please select a template for initial link generation', 'error');
-                      return;
-                    }
-                    handleUpdateSnapshot(templateId || undefined, !!templateId);
-                  }}
-                  isLoading={generatingSnapshot}
-                >
-                  Update & Send Email
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleUpdateSnapshot(undefined, false)}
-                  isLoading={generatingSnapshot}
-                >
-                  Update Without Email
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => {
+                      const templateId = reportTemplateId
+                      const selectedTemplate = reportTemplates.find((t: any) => t.id === templateId)
+                      if (!templateId && !reportSnapshot) {
+                        showToast('Please select a template for initial link generation', 'error');
+                        return;
+                      }
+                      if (templateId && selectedTemplate?.channel !== 'EMAIL') {
+                        showToast('Please select an EMAIL template to send report notification email', 'error')
+                        return
+                      }
+                      handleUpdateSnapshot(templateId || undefined, !!templateId);
+                    }}
+                    isLoading={generatingSnapshot}
+                  >
+                    Update & Send Email
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleUpdateSnapshot(undefined, false)}
+                    isLoading={generatingSnapshot}
+                  >
+                    Update Without Email
+                  </Button>
+                  {clientId && client?.phone && (
+                    <SendToWhatsAppButton
+                      disabled={generatingSnapshot}
+                      onFetch={async () => {
+                        const templateId = reportTemplateId
+                        if (!templateId) throw new Error('Please select a template first')
+                        const token = localStorage.getItem('token')
+                        if (!token) throw new Error('Please log in')
+
+                        let snapshot = reportSnapshot
+                        if (!snapshot) {
+                          const snapRes = await fetch(`/api/clients/${clientId}/report-snapshot`, {
+                            method: 'POST',
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              'Content-Type': 'application/json',
+                            },
+                            credentials: 'include',
+                            body: JSON.stringify({ sendEmail: false }),
+                          })
+                          if (!snapRes.ok) {
+                            const err = await snapRes.json().catch(() => ({}))
+                            throw new Error((err as { error?: string }).error || 'Could not generate report link. Try Update first.')
+                          }
+                          snapshot = await snapRes.json()
+                          setReportSnapshot(snapshot)
+                        }
+
+                        const res = await fetch(`/api/clients/${clientId}/report-whatsapp-preview`, {
+                          method: 'POST',
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                          },
+                          credentials: 'include',
+                          body: JSON.stringify({ templateId }),
+                        })
+                        if (!res.ok) {
+                          const err = await res.json().catch(() => ({}))
+                          throw new Error((err as { error?: string }).error || 'Failed to build WhatsApp message')
+                        }
+                        return res.json()
+                      }}
+                      entityName={client ? `${client.firstName} ${client.lastName}` : 'client'}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </Modal>
@@ -1456,37 +1662,61 @@ function ClientEditForm({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
+  const [assignableUsers, setAssignableUsers] = useState<
+    Array<{ id: string; firstName: string; lastName: string; role?: string }>
+  >([])
+  const [assignedUserId, setAssignedUserId] = useState(client.assignedUser.id)
 
   useEffect(() => {
-    loadRecruiters()
-  }, [])
+    setAssignedUserId(client.assignedUser.id)
+  }, [client.id, client.assignedUser.id])
 
-  const loadRecruiters = async () => {
-    try {
+  useEffect(() => {
+    const loadAssignable = async () => {
       const token = localStorage.getItem('token')
-      if (!token) return
-
-      const response = await fetch('/api/users?role=RECRUITER', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRecruiters(data.map((u: any) => ({
-          id: u.id,
-          firstName: u.firstName,
-          lastName: u.lastName,
-        })))
+      const raw = localStorage.getItem('user')
+      if (!token || !raw) return
+      let me: { id: string; firstName: string; lastName: string; role?: string }
+      try {
+        me = JSON.parse(raw)
+      } catch {
+        return
       }
-    } catch (err) {
-      console.error('Failed to load recruiters:', err)
+      try {
+        if (me.role === 'ADMIN' || me.role === 'MANAGER') {
+          const response = await fetch('/api/users?role=RECRUITER,MANAGER', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          })
+          if (response.ok) {
+            const data = await response.json()
+            setAssignableUsers(
+              data
+                .map((u: { id: string; firstName: string; lastName: string; role?: string }) => ({
+                  id: u.id,
+                  firstName: u.firstName,
+                  lastName: u.lastName,
+                  role: u.role,
+                }))
+                .sort((a: { firstName: string; lastName: string }, b: { firstName: string; lastName: string }) =>
+                  `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+                )
+            )
+          }
+        } else {
+          setAssignableUsers([
+            { id: me.id, firstName: me.firstName, lastName: me.lastName, role: me.role },
+          ])
+        }
+      } catch (err) {
+        console.error('Failed to load assignable users:', err)
+      }
     }
-  }
+    void loadAssignable()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1495,6 +1725,9 @@ function ClientEditForm({
 
     try {
       const token = localStorage.getItem('token')
+      const raw = localStorage.getItem('user')
+      const sessionUser = raw ? (() => { try { return JSON.parse(raw) as { role?: string } } catch { return null } })() : null
+      const canSetPrimaryAssignee = sessionUser?.role === 'ADMIN' || sessionUser?.role === 'MANAGER'
 
       const payload: Record<string, unknown> = {
         firstName: formData.firstName,
@@ -1514,6 +1747,10 @@ function ClientEditForm({
         gmailCreated: formData.gmailCreated,
         whatsappGroupCreated: formData.whatsappGroupCreated,
         linkedInOptimized: formData.linkedInOptimized,
+      }
+
+      if (canSetPrimaryAssignee && assignedUserId.trim()) {
+        payload.assignedUserId = assignedUserId.trim()
       }
 
       const response = await fetch(`/api/clients/${client.id}`, {
@@ -1621,6 +1858,38 @@ function ClientEditForm({
         rows={2}
       />
 
+      <Select
+        label="Assigned to (primary)"
+        helperText="Account owner shown on the client list. Separate from reverse recruiter below."
+        value={assignedUserId}
+        onChange={(e) => setAssignedUserId(e.target.value)}
+        options={(() => {
+          const opts: { value: string; label: string }[] = assignableUsers.map((u) => ({
+            value: u.id,
+            label: `${u.firstName} ${u.lastName}${u.role === 'MANAGER' ? ' (Manager)' : ''}`,
+          }))
+          const raw = localStorage.getItem('user')
+          if (raw) {
+            try {
+              const u = JSON.parse(raw) as { id?: string; firstName?: string; lastName?: string }
+              if (u?.id && !opts.some((o) => o.value === u.id)) {
+                opts.push({ value: u.id, label: `${u.firstName ?? ''} ${u.lastName ?? ''} (you)`.trim() })
+              }
+            } catch {
+              /* noop */
+            }
+          }
+          if (!opts.some((o) => o.value === client.assignedUser.id)) {
+            opts.push({
+              value: client.assignedUser.id,
+              label: `${client.assignedUser.firstName} ${client.assignedUser.lastName} (current assignee)`,
+            })
+          }
+          opts.sort((a, b) => a.label.localeCompare(b.label))
+          return [{ value: '', label: 'Select assignee' }, ...opts]
+        })()}
+      />
+
       <div className="grid grid-cols-2 gap-4">
         <Select
           label="Service Type"
@@ -1637,11 +1906,12 @@ function ClientEditForm({
         />
         <Select
           label="Reverse Recruiter"
+          helperText="Optional reverse-hire partner—not the primary assignee."
           value={formData.reverseRecruiterId}
           onChange={(e) => setFormData({ ...formData, reverseRecruiterId: e.target.value })}
           options={[
             { value: '', label: 'Select Reverse Recruiter' },
-            ...recruiters.map(r => ({ value: r.id, label: `${r.firstName} ${r.lastName}` })),
+            ...assignableUsers.map((r) => ({ value: r.id, label: `${r.firstName} ${r.lastName}` })),
           ]}
         />
       </div>
@@ -1717,8 +1987,9 @@ function ClientEditForm({
 }
 
 function PendingApprovalsList({ clientId }: { clientId: string }) {
-  const [approvals, setApprovals] = useState<any[]>([])
+  const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeSubTab, setActiveSubTab] = useState<'pending' | 'approved'>('pending')
 
   useEffect(() => {
     loadApprovals()
@@ -1727,12 +1998,12 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
   const loadApprovals = async () => {
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`/api/applications?clientId=${clientId}&stage=PENDING_CLIENT_APPROVAL`, {
+      const res = await fetch(`/api/clients/${clientId}/applications?pageSize=100`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (res.ok) {
         const data = await res.json()
-        setApprovals(data.applications || [])
+        setApplications(data.applications || [])
       }
     } catch (err) {
       console.error('Failed to load pending approvals', err)
@@ -1742,35 +2013,112 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
   }
 
   if (loading) return <div className="p-8 text-center"><Spinner /></div>
-  if (approvals.length === 0) {
+
+  const pending = applications.filter((app) => app.stage === 'PENDING_CLIENT_APPROVAL')
+  const decided = applications.filter((app) => app.stage === 'IDENTIFIED' || app.stage === 'REJECTED')
+
+  const hasPending = pending.length > 0
+  const hasDecided = decided.length > 0
+
+  const renderApplicationCard = (app: any) => {
+    const jobs = (app.applicationJobs || [])
+      .map((aj: any) => aj.job)
+      .filter((j: any) => j) as Array<{ id: string; title: string; company: string; location?: string }>
+    const primaryJob = jobs[0] || app.job || null
+    const extraCount = jobs.length > 1 ? jobs.length - 1 : 0
+    return (
+      <div key={app.id} className="p-6 hover:bg-gray-50 transition-colors">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-md font-bold text-gray-900">
+              {primaryJob?.title || '—'}
+              {extraCount > 0 && (
+                <span className="ml-1 text-[11px] text-gray-500 font-medium">
+                  (+{extraCount} more)
+                </span>
+              )}
+            </h4>
+            <p className="text-sm text-gray-600 font-medium">{primaryJob?.company || '—'}</p>
+            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {primaryJob?.location || '-'}</span>
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Sourced {new Date(app.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            {app.stage === 'PENDING_CLIENT_APPROVAL' && app.approvalToken && (
+              <>
+                <Badge variant="info" className="mb-2 block w-fit ml-auto border-blue-100 text-blue-700 bg-blue-50">Token Generated</Badge>
+                <p className="text-[10px] text-gray-400 font-mono select-all">/public/approvals/{app.approvalToken}</p>
+              </>
+            )}
+            {app.stage === 'IDENTIFIED' && app.approvedAt && (
+              <Badge variant="success" className="mb-1">Client Approved</Badge>
+            )}
+            {app.stage === 'REJECTED' && (
+              <Badge variant="error" className="mb-1">Client Rejected</Badge>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasPending && !hasDecided) {
     return (
       <div className="p-12 text-center text-gray-500">
         <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-        <p>No jobs currently pending client approval.</p>
+        <p>No jobs currently pending or recently decided for this client.</p>
       </div>
     )
   }
 
   return (
-    <div className="divide-y divide-gray-100">
-      {approvals.map((app) => (
-        <div key={app.id} className="p-6 hover:bg-gray-50 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-md font-bold text-gray-900">{app.job?.title}</h4>
-              <p className="text-sm text-gray-600 font-medium">{app.job?.company}</p>
-              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {app.job?.location}</span>
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Sourced {new Date(app.createdAt).toLocaleDateString()}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <Badge variant="info" className="mb-2 block w-fit ml-auto border-blue-100 text-blue-700 bg-blue-50">Token Generated</Badge>
-              <p className="text-[10px] text-gray-400 font-mono select-all">/public/approvals/{app.approvalToken}</p>
-            </div>
+    <div>
+      <div className="border-b border-gray-200 mb-4">
+        <nav className="flex -mb-px">
+          <button
+            onClick={() => setActiveSubTab('pending')}
+            className={`mr-6 py-2 px-1 border-b-2 text-sm font-medium ${
+              activeSubTab === 'pending'
+                ? 'border-[#F4B400] text-[#1F3A5F]'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Pending
+          </button>
+          <button
+            onClick={() => setActiveSubTab('approved')}
+            className={`py-2 px-1 border-b-2 text-sm font-medium ${
+              activeSubTab === 'approved'
+                ? 'border-[#16A34A] text-[#166534]'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Approved / Rejected
+          </button>
+        </nav>
+      </div>
+
+      {activeSubTab === 'pending' ? (
+        pending.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p>No jobs currently pending client approval.</p>
           </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {pending.map(renderApplicationCard)}
+          </div>
+        )
+      ) : decided.length === 0 ? (
+        <div className="p-12 text-center text-gray-500">
+          <p>No recently approved or rejected jobs for this client.</p>
         </div>
-      ))}
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {decided.map(renderApplicationCard)}
+        </div>
+      )}
     </div>
   )
 }

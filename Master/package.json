@@ -15,6 +15,9 @@
     "db:generate:safe": "node scripts/safe-generate.js",
     "db:clean": "node scripts/clean-prisma.js",
     "db:seed": "tsx prisma/seed.ts",
+    "db:ensure-meeting-reminder": "tsx scripts/ensure-meeting-reminder-template.ts",
+    "db:ensure-templates": "tsx scripts/ensure-default-templates.ts",
+    "test:meeting-reminder": "tsx scripts/test-meeting-reminder.ts",
     "db:migrate-lead": "tsx scripts/run-lead-migration.ts",
     "db:onboarding-tables": "prisma db execute --file ./scripts/apply-onboarding-tables.sql --schema prisma/schema.prisma",
     "db:application-job-optional": "prisma db execute --file ./scripts/apply-application-job-optional.sql --schema prisma/schema.prisma",
@@ -30,6 +33,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.4.0",
     "clsx": "^2.1.1",
+    "docx": "^9.6.1",
     "dotenv": "^17.2.3",
     "googleapis": "^171.4.0",
     "ioredis": "^5.9.2",
@@ -46,6 +50,7 @@
     "react-dom": "19.2.3",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.4.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

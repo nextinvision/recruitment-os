@@ -1,6 +1,33 @@
 import { db } from '@/lib/db'
 import { cacheService } from '@/lib/redis'
-import { UserRole } from '@prisma/client'
+import { ApplicationStage, UserRole } from '@prisma/client'
+
+/** Prisma groupBy returns `_count` as a number (v5); normalize if an aggregate object appears. */
+function prismaGroupByCount(row: { _count: number | { _all: number } }): number {
+  const c = row._count
+  if (typeof c === 'number' && !Number.isNaN(c)) return c
+  if (c && typeof c === 'object' && typeof c._all === 'number') return c._all
+  return 0
+}
+
+/** Canonical funnel order for client-level application pipeline (matches ApplicationStage enum). */
+const CLIENT_APPLICATION_FUNNEL_STAGES: ApplicationStage[] = [
+  ApplicationStage.PENDING_CLIENT_APPROVAL,
+  ApplicationStage.IDENTIFIED,
+  ApplicationStage.RESUME_UPDATED,
+  ApplicationStage.COLD_MESSAGE_SENT,
+  ApplicationStage.CONNECTION_ACCEPTED,
+  ApplicationStage.APPLIED,
+  ApplicationStage.FOLLOW_UP_1,
+  ApplicationStage.FOLLOW_UP_2,
+  ApplicationStage.FINAL_FOLLOW_UP,
+  ApplicationStage.NO_RESPONSE,
+  ApplicationStage.INTERVIEW_PREPARATION,
+  ApplicationStage.INTERVIEW_SCHEDULED,
+  ApplicationStage.OFFER,
+  ApplicationStage.REJECTED,
+  ApplicationStage.CLOSED,
+]
 
 export interface RecruiterMetrics {
   recruiterId: string
@@ -82,6 +109,11 @@ export class AnalyticsService {
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
     ]
@@ -154,7 +186,7 @@ export class AnalyticsService {
 
     const result = jobs.map((j) => ({
       source: j.source,
-      count: j._count,
+      count: prismaGroupByCount(j),
     }))
 
     // Cache for 1 hour (3600 seconds) as per FR-BE-106
@@ -182,11 +214,17 @@ export class AnalyticsService {
     })
 
     const stages = [
+      'PENDING_CLIENT_APPROVAL',
       'IDENTIFIED',
       'RESUME_UPDATED',
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
       'REJECTED',
@@ -412,6 +450,11 @@ export class AnalyticsService {
       'COLD_MESSAGE_SENT',
       'CONNECTION_ACCEPTED',
       'APPLIED',
+      'FOLLOW_UP_1',
+      'FOLLOW_UP_2',
+      'FINAL_FOLLOW_UP',
+      'NO_RESPONSE',
+      'INTERVIEW_PREPARATION',
       'INTERVIEW_SCHEDULED',
       'OFFER',
     ]
@@ -540,68 +583,86 @@ export class AnalyticsService {
   async getClientMetrics(clientId: string): Promise<{
     funnelPerformance: Array<{ stage: string; count: number }>
     activityDistribution: Array<{ type: string; count: number }>
-    financials: {
-      totalBilled: number
-      totalPaid: number
-      totalPending: number
-    }
+    notes: Array<{
+      id: string
+      title: string
+      description: string | null
+      occurredAt: Date
+      createdBy: string
+    }>
   }> {
-    const [applications, activities, revenues, payments] = await Promise.all([
-      db.application.findMany({
+    const [stageGroups, activities, noteActivities] = await Promise.all([
+      db.application.groupBy({
+        by: ['stage'],
         where: { clientId },
-        select: { stage: true }
+        _count: true,
       }),
       db.activity.groupBy({
         by: ['type'],
         where: { clientId },
-        _count: true
+        _count: true,
       }),
-      db.revenue.findMany({
-        where: { clientId },
-        select: { amount: true, status: true }
+      db.activity.findMany({
+        where: {
+          clientId,
+          type: 'NOTE',
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          occurredAt: true,
+          assignedUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 100,
       }),
-      db.payment.aggregate({
-        where: { clientId },
-        _sum: { amount: true }
-      })
     ])
 
-    const stages = [
-      'IDENTIFIED',
-      'RESUME_UPDATED',
-      'COLD_MESSAGE_SENT',
-      'CONNECTION_ACCEPTED',
-      'APPLIED',
-      'INTERVIEW_SCHEDULED',
-      'OFFER',
-      'REJECTED',
-      'CLOSED'
-    ]
+    const countByStage = new Map<string, number>()
+    for (const row of stageGroups) {
+      countByStage.set(row.stage, prismaGroupByCount(row))
+    }
 
-    const funnelPerformance = stages.map(stage => ({
+    const funnelPerformance = CLIENT_APPLICATION_FUNNEL_STAGES.map((stage) => ({
       stage,
-      count: applications.filter(a => a.stage === stage).length
+      count: countByStage.get(stage) ?? 0,
     }))
 
-    const activityDistribution = activities.map(a => ({
+    // Any DB stages not in the canonical list (e.g. after enum migration) still show up
+    for (const row of stageGroups) {
+      if (!CLIENT_APPLICATION_FUNNEL_STAGES.includes(row.stage)) {
+        funnelPerformance.push({
+          stage: row.stage,
+          count: prismaGroupByCount(row),
+        })
+      }
+    }
+
+    const activityDistribution = activities.map((a) => ({
       type: a.type,
-      count: a._count
+      count: prismaGroupByCount(a),
     }))
 
-    const totalBilled = revenues.reduce((sum, r) => sum + Number(r.amount), 0)
-    const totalPaid = Number(payments._sum.amount || 0)
-    const totalPending = revenues
-      .filter(r => r.status === 'PENDING')
-      .reduce((sum, r) => sum + Number(r.amount), 0)
+    const notes = noteActivities.map((n) => ({
+      id: n.id,
+      title: n.title,
+      description: n.description,
+      occurredAt: n.occurredAt,
+      createdBy: n.assignedUser
+        ? `${n.assignedUser.firstName} ${n.assignedUser.lastName}`.trim()
+        : 'Unknown',
+    }))
 
     return {
       funnelPerformance,
       activityDistribution,
-      financials: {
-        totalBilled,
-        totalPaid,
-        totalPending
-      }
+      notes,
     }
   }
 }

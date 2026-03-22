@@ -37,6 +37,11 @@ enum ApplicationStage {
   COLD_MESSAGE_SENT
   CONNECTION_ACCEPTED
   APPLIED
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  FINAL_FOLLOW_UP
+  NO_RESPONSE
+  INTERVIEW_PREPARATION
   INTERVIEW_SCHEDULED
   OFFER
   REJECTED
@@ -51,6 +56,7 @@ enum ApplicationActionType {
   OFFER
   REJECTION
   NOTE
+  NO_RESPONSE
 }
 
 enum JobStatus {
@@ -136,6 +142,12 @@ enum AttachmentType {
   FILE
   LINK
   TEXT
+}
+
+enum ClientJobApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum RevenueStatus {
@@ -236,9 +248,10 @@ model Job {
   similarityScore Float? // Similarity score (0-100) if duplicate
 
   // Relations
-  recruiter      User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
-  companyRecord  Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  applications   Application[]
+  recruiter       User             @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  companyRecord   Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  applications    Application[]
+  applicationJobs ApplicationJob[]
 
   @@index([recruiterId])
   @@index([source])
@@ -290,6 +303,7 @@ model Application {
   recruiter   User                    @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
   actions     ApplicationAction[]
   attachments ApplicationAttachment[]
+  applicationJobs ApplicationJob[]
 
   // Note: Unique constraint removed temporarily for migration (can be re-added after data migration)
   @@index([stage])
@@ -298,6 +312,22 @@ model Application {
   @@index([createdAt])
   @@index([followUpDate])
   @@map("applications")
+}
+
+model ApplicationJob {
+  id             String                  @id @default(cuid())
+  applicationId  String
+  jobId          String
+  status         ClientJobApprovalStatus @default(PENDING)
+  respondedAt    DateTime?
+  createdAt      DateTime                @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, jobId])
+  @@index([status])
+  @@map("application_jobs")
 }
 
 model ApplicationAction {
@@ -377,6 +407,12 @@ model CoverLetter {
   @@map("cover_letters")
 }
 
+enum ResumeLinkResponse {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model ResumeDraft {
   id        String   @id @default(cuid())
   userId    String
@@ -388,12 +424,32 @@ model ResumeDraft {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  resumeLinks  ResumeLink[]
 
   @@index([userId])
   @@index([clientId])
   @@map("resume_drafts")
+}
+
+model ResumeLink {
+  id           String             @id @default(cuid())
+  token        String             @unique
+  resumeDraftId String
+  clientId     String
+  sentAt       DateTime           @default(now())
+  response     ResumeLinkResponse @default(PENDING)
+  respondedAt  DateTime?
+  createdAt    DateTime           @default(now())
+
+  resumeDraft ResumeDraft @relation(fields: [resumeDraftId], references: [id], onDelete: Cascade)
+  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([resumeDraftId])
+  @@index([token])
+  @@map("resume_links")
 }
 
 model ClientDocument {
@@ -477,7 +533,7 @@ model Lead {
   assignedUserId String
   source         String?
   industry       String?
-  estimatedValue Decimal?   @db.Decimal(10, 2)
+  estimatedValue Decimal?   @db.Decimal(12, 2)
   notes          String?    @db.Text
   convertedAt    DateTime?
   externalId     String?
@@ -603,6 +659,7 @@ model Client {
   applications          Application[]
   onboardingSubmissions OnboardingFormSubmission[]
   resumeDrafts          ResumeDraft[]
+  resumeLinks           ResumeLink[]
   reportSnapshot        ReportSnapshot?
 
   @@unique([leadId])
@@ -661,6 +718,7 @@ model Activity {
   lead         Lead?           @relation(fields: [leadId], references: [id], onDelete: Cascade)
   client       Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   contact      CompanyContact? @relation(fields: [companyContactId], references: [id], onDelete: SetNull)
+  meetingRemindersSent MeetingReminderSent[]
 
   @@index([occurredAt])
   @@index([assignedUserId])
@@ -799,10 +857,32 @@ enum MessageStatus {
 enum MessageTemplateType {
   FOLLOW_UP
   INTERVIEW_REMINDER
+  MEETING_REMINDER
   OFFER_LETTER
   WELCOME
   REJECTION
   CUSTOM
+}
+
+enum MeetingReminderType {
+  REMINDER_24H
+  REMINDER_1H
+  REMINDER_15M
+}
+
+model MeetingReminderSent {
+  id           String              @id @default(cuid())
+  activityId   String
+  reminderType MeetingReminderType
+  occurredAt   DateTime            // Meeting time when reminder was sent (for reschedule detection)
+  sentAt       DateTime            @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, reminderType, occurredAt])
+  @@index([activityId])
+  @@index([occurredAt])
+  @@map("meeting_reminders_sent")
 }
 
 model MessageTemplate {

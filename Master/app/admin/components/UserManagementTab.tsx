@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DataTable } from '@/ui/DataTable'
 import { Modal } from '@/ui/Modal'
-import { useToast, useConfirmDialog } from '@/ui'
+import { useToast, useSharedConfirmDialog } from '@/ui'
+import { generateCompliantTempPassword } from '@/lib/temp-password'
 
 interface User {
   id: string
@@ -61,7 +62,7 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [filterRole, setFilterRole] = useState<string>('all')
-  const { showConfirm } = useConfirmDialog()
+  const { showConfirm } = useSharedConfirmDialog()
 
   useEffect(() => {
     loadUsers()
@@ -140,7 +141,7 @@ export function UserManagementTab({ showToast }: UserManagementTabProps) {
           const token = localStorage.getItem('token')
           if (!token) return
 
-          const tempPassword = Math.random().toString(36).slice(-12) + 'A1!'
+          const tempPassword = generateCompliantTempPassword()
 
           const response = await fetch(`/api/users/${userId}/reset-password`, {
             method: 'POST',

@@ -128,6 +128,11 @@ export async function GET(request: NextRequest) {
               company: true,
             },
           },
+          applicationJobs: {
+            include: {
+              job: true,
+            },
+          },
         },
       }),
     ])
@@ -172,6 +177,7 @@ export async function GET(request: NextRequest) {
         stage: app.stage,
         client: app.client,
         job: app.job,
+        applicationJobs: app.applicationJobs,
       })),
     }
 

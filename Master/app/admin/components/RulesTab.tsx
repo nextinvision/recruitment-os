@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { DataTable } from '@/ui/DataTable'
 import { Modal } from '@/ui/Modal'
 import { RuleBuilder } from '@/ui/RuleBuilder'
-import { useConfirmDialog } from '@/ui'
+import { useSharedConfirmDialog } from '@/ui'
 
 interface AutomationRule {
   id: string
@@ -45,7 +45,7 @@ export function RulesTab({ showToast }: RulesTabProps) {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null)
-  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
+  const { showConfirm } = useSharedConfirmDialog()
 
   useEffect(() => {
     loadRules()

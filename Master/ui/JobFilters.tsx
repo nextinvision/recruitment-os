@@ -24,9 +24,11 @@ interface JobFiltersProps {
   filters: JobFilters
   onChange: (filters: JobFilters) => void
   recruiters?: Array<{ id: string; firstName: string; lastName: string }>
+  /** When false, hides "Assigned Recruiter" (e.g. recruiters only see their own jobs server-side). */
+  showRecruiterFilter?: boolean
 }
 
-export function JobFilters({ filters, onChange, recruiters }: JobFiltersProps) {
+export function JobFilters({ filters, onChange, recruiters, showRecruiterFilter = true }: JobFiltersProps) {
   const updateFilter = (key: keyof JobFilters, value: any) => {
     onChange({
       ...filters,
@@ -158,7 +160,7 @@ export function JobFilters({ filters, onChange, recruiters }: JobFiltersProps) {
 
         {/* Date and Recruiter Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
-          {recruiters && recruiters.length > 0 && (
+          {showRecruiterFilter && recruiters && recruiters.length > 0 && (
             <Select
               label="Assigned Recruiter"
               value={filters.recruiterId || ''}

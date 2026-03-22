@@ -27,12 +27,14 @@ export interface ResumeEducation {
   degree: string
   specialization?: string
   institution: string
+  date?: string
 }
 
 export interface ResumeCertification {
   id: string
   title: string
   issuer: string
+  date?: string
 }
 
 export interface ResumeAward {
@@ -51,7 +53,9 @@ export interface ResumeDocument {
   education: ResumeEducation[]
   certifications: ResumeCertification[]
   /** Extra custom sections: { title, items[] } */
-  customSections?: { id: string; title: string; items: string[] }[]
+  customSections: { id: string; title: string; items: string[] }[]
+  /** Order of sections for rendering */
+  sectionOrder: string[]
 }
 
 export interface ResumeTailoringSuggestion {

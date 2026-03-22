@@ -4,6 +4,7 @@
  */
 
 import nodemailer from 'nodemailer'
+import { renderMessageTemplate } from './render-message-template'
 
 interface EmailMessage {
   to: string | string[]
@@ -217,15 +218,7 @@ export class EmailService {
    * Render HTML template with variables
    */
   renderTemplate(template: string, variables: Record<string, unknown>): string {
-    let rendered = template
-
-    // Replace {{variable}} with actual values
-    Object.entries(variables).forEach(([key, value]) => {
-      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g')
-      rendered = rendered.replace(regex, String(value))
-    })
-
-    return rendered
+    return renderMessageTemplate(template, variables)
   }
 
   /**

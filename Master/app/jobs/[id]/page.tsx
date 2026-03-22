@@ -50,11 +50,17 @@ interface Application {
 }
 
 const STAGE_LABELS: Record<string, string> = {
+  PENDING_CLIENT_APPROVAL: 'Pending Approval',
   IDENTIFIED: 'Identified',
   RESUME_UPDATED: 'Resume Updated',
   COLD_MESSAGE_SENT: 'Cold Message Sent',
   CONNECTION_ACCEPTED: 'Connection Accepted',
   APPLIED: 'Applied',
+  FOLLOW_UP_1: 'Follow-up 1',
+  FOLLOW_UP_2: 'Follow-up 2',
+  FINAL_FOLLOW_UP: 'Final Follow-up',
+  NO_RESPONSE: 'No Response',
+  INTERVIEW_PREPARATION: 'Interview Preparation',
   INTERVIEW_SCHEDULED: 'Interview Scheduled',
   OFFER: 'Offer',
   REJECTED: 'Rejected',
@@ -346,6 +352,20 @@ export default function JobDetailPage() {
                         <span className="font-semibold text-careerist-text-primary">
                           {application.client.firstName} {application.client.lastName}
                         </span>
+                        {(() => {
+                          // Note: In Job Detail page, the application data fetch from /api/applications?jobId=...
+                          // need to ensure it includes applicationJobs. The service layer update should handle this.
+                          const jobs = (application as any).applicationJobs || []
+                          const count = jobs.length
+                          if (count > 1) {
+                            return (
+                              <span className="text-[11px] text-careerist-primary-yellow font-medium">
+                                (+{count - 1} more jobs)
+                              </span>
+                            )
+                          }
+                          return null
+                        })()}
                         <span className={`px-2 py-1 rounded text-xs font-medium ${application.stage === 'OFFER' ? 'bg-green-100 text-green-800' :
                           application.stage === 'REJECTED' ? 'bg-red-100 text-red-800' :
                             application.stage === 'CLOSED' ? 'bg-gray-100 text-gray-800' :

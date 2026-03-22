@@ -36,6 +36,10 @@ export default function RevenuesPage() {
         <PageHeader
           title="Revenue & Invoices"
           description="Manage client subscriptions and installments"
+          action={!selectedClientId ? {
+            label: 'Create Invoice',
+            onClick: () => setShowFormModal(true)
+          } : undefined}
         />
 
         {!selectedClientId ? (

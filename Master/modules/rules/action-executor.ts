@@ -8,7 +8,7 @@ import { db } from '@/lib/db'
 import { notificationService } from '@/modules/notifications/service'
 import { createActivity } from '@/modules/activities/service'
 import { createFollowUp } from '@/modules/followups/service'
-import { NotificationType, NotificationChannel } from '@prisma/client'
+import { NotificationType, NotificationChannel, ApplicationStage } from '@prisma/client'
 
 export class ActionExecutor {
   /**
@@ -225,7 +225,7 @@ export class ActionExecutor {
       case 'APPLICATION':
         await db.application.update({
           where: { id: entityId },
-          data: { stage: newStatus as 'IDENTIFIED' | 'RESUME_UPDATED' | 'COLD_MESSAGE_SENT' | 'CONNECTION_ACCEPTED' | 'APPLIED' | 'INTERVIEW_SCHEDULED' | 'OFFER' | 'REJECTED' | 'CLOSED' },
+          data: { stage: newStatus as ApplicationStage },
         })
         break
     }

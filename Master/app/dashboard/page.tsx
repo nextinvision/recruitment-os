@@ -430,7 +430,18 @@ export default function DashboardPage() {
                         {app.client?.firstName} {app.client?.lastName}
                       </div>
                       <div className="text-xs text-[#64748B]">
-                        {app.job?.title} {app.job?.company ? `@ ${app.job.company}` : ''} • {app.stage.replace(/_/g, ' ')}
+                        {(() => {
+                          const jobs = (app.applicationJobs || []).map((aj: any) => aj.job).filter(Boolean)
+                          const primaryJob = jobs[0] || app.job
+                          const count = jobs.length > 0 ? jobs.length : (app.job ? 1 : 0)
+                          return (
+                            <>
+                              {primaryJob?.title} {primaryJob?.company ? `@ ${primaryJob.company}` : ''}
+                              {count > 1 && <span className="ml-1 text-[#F4B400] font-medium">(+{count - 1} more)</span>}
+                              {" • "}{app.stage.replace(/_/g, ' ')}
+                            </>
+                          )
+                        })()}
                       </div>
                     </Link>
                   ))

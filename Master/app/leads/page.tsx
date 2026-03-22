@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PipelineBoard, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Button, Spinner, useToast } from '@/ui'
+import { PipelineBoard, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Button, Spinner, useToast, ActivityTimeline, SendToWhatsAppButton } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { formatINR } from '@/lib/currency'
 
@@ -36,6 +36,19 @@ interface LeadDocument {
   fileSize: number
   mimeType: string | null
   uploadedAt: string
+}
+
+interface Activity {
+  id: string
+  type: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'TASK' | 'FOLLOW_UP'
+  title: string
+  description?: string
+  occurredAt: string
+  assignedUser: {
+    id: string
+    firstName: string
+    lastName: string
+  }
 }
 
 const LEAD_STAGES = ['NEW', 'CONTACTED', 'RESPONSE_RECEIVED', 'QUALIFIED', 'LOST']
@@ -388,6 +401,29 @@ function LeadDetailView({
   onConvertToClient?: (lead: Lead) => void
   onSendOnboarding?: () => void
 }) {
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [activitiesLoading, setActivitiesLoading] = useState(true)
+
+  useEffect(() => {
+    if (!lead?.id) return
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setActivitiesLoading(false)
+      return
+    }
+    setActivitiesLoading(true)
+    fetch(`/api/activities/entity/lead/${lead.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
+    })
+      .then((res) => (res.ok ? res.json() : { activities: [] }))
+      .then((data) => {
+        setActivities(Array.isArray(data) ? data : (data?.activities ?? []))
+      })
+      .catch(() => setActivities([]))
+      .finally(() => setActivitiesLoading(false))
+  }, [lead?.id])
+
   const statusColors: Record<string, string> = {
     NEW: 'bg-blue-100 text-blue-800',
     CONTACTED: 'bg-yellow-100 text-yellow-800',
@@ -444,6 +480,17 @@ function LeadDetailView({
           <p className="text-gray-900 text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded border border-gray-200">{lead.notes}</p>
         </div>
       )}
+
+      <div className="border-t border-gray-200 pt-4">
+        <label className="font-medium text-gray-500 block text-sm mb-2">Activities & Meetings</label>
+        {activitiesLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Spinner />
+          </div>
+        ) : (
+          <ActivityTimeline activities={activities} entityName={`${lead.firstName} ${lead.lastName}`} />
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
         <button
@@ -955,11 +1002,33 @@ function SendOnboardingModal({
         The email will include a link to the form with the lead's ID automatically attached.
       </div>
 
-      <FormActions
-        onCancel={onCancel}
-        submitLabel="Send Email"
-        isLoading={loading}
-      />
+      <div className="flex flex-wrap items-center gap-3 pt-4">
+        <FormActions
+          onCancel={onCancel}
+          submitLabel="Send Email"
+          isLoading={loading}
+          className="pt-0"
+        />
+        <SendToWhatsAppButton
+          disabled={!selectedFormId || !selectedTemplateId || !lead.phone}
+          onFetch={async () => {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/leads/${lead.id}/whatsapp-preview`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ formId: selectedFormId, templateId: selectedTemplateId }),
+            })
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed to get preview')
+            const { message, phone } = await res.json()
+            return { message, phone }
+          }}
+          entityName={`${lead.firstName} ${lead.lastName}`}
+        />
+      </div>
     </form>
   )
 }

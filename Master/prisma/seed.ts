@@ -8,6 +8,7 @@ async function main() {
 
   // Clear existing data (optional - comment out if you want to preserve existing data)
   console.log('🧹 Clearing existing data...')
+  await prisma.meetingReminderSent.deleteMany()
   await prisma.message.deleteMany()
   await prisma.messageTemplate.deleteMany()
   await prisma.automationRule.deleteMany()
@@ -702,6 +703,16 @@ async function main() {
       createdBy: manager1.id,
     },
     {
+      name: 'Meeting Reminder (TidyCal)',
+      type: MessageTemplateType.MEETING_REMINDER,
+      channel: MessageChannel.EMAIL,
+      subject: 'Meeting Reminder: {{reminderLabel}} until your appointment',
+      content: 'Hi {{leadName}},\n\nThis is a friendly reminder that your scheduled appointment is in {{reminderLabel}}.\n\nMeeting: {{meetingTitle}}\nDate: {{meetingDate}}\nTime: {{meetingTime}}\n\nIf you need to reschedule or have any questions, please reach out.\n\nBest regards,\n{{assignedUserName}}',
+      variables: JSON.stringify(['leadName', 'meetingTitle', 'meetingDate', 'meetingTime', 'reminderLabel', 'assignedUserName']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
       name: 'Welcome Email',
       type: MessageTemplateType.WELCOME,
       channel: MessageChannel.EMAIL,
@@ -738,6 +749,66 @@ async function main() {
       subject: null,
       content: 'Hi {{name}},\nI wanted to follow up on the proposal shared earlier. If you’ve already made a decision, I’d really appreciate a quick update — it helps me plan my schedule better. If you’re still evaluating options, I’d be happy to clarify any questions or modify the proposal based on your priorities. \nWarm regards, Karishma',
       variables: JSON.stringify(['name']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Interview reminder — Email',
+      type: MessageTemplateType.INTERVIEW_REMINDER,
+      channel: MessageChannel.EMAIL,
+      subject: 'Interview reminder: {{jobTitle}} at {{company}}',
+      content: '<p>Hi {{clientName}},</p><p>This is a reminder about your interview for <strong>{{jobTitle}}</strong> at <strong>{{company}}</strong>.</p><p><strong>Date:</strong> {{interviewDate}}<br/><strong>Time:</strong> {{interviewTime}}</p><p>Good luck!<br/>— Careerist Team</p>',
+      variables: JSON.stringify(['candidateName', 'clientName', 'jobTitle', 'company', 'interviewDate', 'interviewTime']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Job offer — Client email',
+      type: MessageTemplateType.OFFER_LETTER,
+      channel: MessageChannel.EMAIL,
+      subject: 'Congratulations — Offer: {{jobTitle}} at {{company}}',
+      content: '<p>Dear {{clientName}},</p><p>Offer for <strong>{{jobTitle}}</strong> at <strong>{{company}}</strong>.</p><p><strong>Compensation:</strong> {{salary}}<br/><strong>Start:</strong> {{startDate}}</p><p>— Careerist Team</p>',
+      variables: JSON.stringify(['candidateName', 'clientName', 'jobTitle', 'company', 'salary', 'startDate']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Job offer — WhatsApp',
+      type: MessageTemplateType.OFFER_LETTER,
+      channel: MessageChannel.WHATSAPP,
+      subject: null,
+      content: 'Hi {{clientName}}, offer for *{{jobTitle}}* at *{{company}}*. Compensation: {{salary}}. Start: {{startDate}}.',
+      variables: JSON.stringify(['candidateName', 'clientName', 'jobTitle', 'company', 'salary', 'startDate']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Resume share — Client (email)',
+      type: MessageTemplateType.CUSTOM,
+      channel: MessageChannel.EMAIL,
+      subject: 'Your tailored resume — {{clientName}}',
+      content: '<p>Dear {{clientName}},</p><p>Your resume is ready: <a href="{{resumeViewUrl}}">{{resumeViewUrl}}</a></p><p>ATS: {{atsScore}}</p>',
+      variables: JSON.stringify(['clientName', 'firstName', 'lastName', 'fullName', 'email', 'resumeViewUrl', 'atsScore', 'templateName']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Shared report — Client (email)',
+      type: MessageTemplateType.CUSTOM,
+      channel: MessageChannel.EMAIL,
+      subject: 'Your job search report — {{clientName}}',
+      content: '<p>Hi {{firstName}},</p><p>Report: <a href="{{reportLink}}">{{reportLink}}</a></p><div>{{reportSummaryHtml}}</div>',
+      variables: JSON.stringify(['clientName', 'firstName', 'lastName', 'fullName', 'email', 'reportLink', 'reportUrl', 'link', 'reportSummary', 'reportSummaryHtml']),
+      enabled: true,
+      createdBy: admin.id,
+    },
+    {
+      name: 'Lead onboarding — Form link (email)',
+      type: MessageTemplateType.CUSTOM,
+      channel: MessageChannel.EMAIL,
+      subject: 'Complete onboarding — {{clientName}}',
+      content: '<p>Hi {{clientName}},</p><p>Form: <a href="{{onboardingLink}}">{{onboardingLink}}</a></p>',
+      variables: JSON.stringify(['clientName', 'firstName', 'lastName', 'fullName', 'email', 'onboardingLink', 'formLink']),
       enabled: true,
       createdBy: admin.id,
     },

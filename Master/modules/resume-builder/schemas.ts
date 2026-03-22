@@ -23,6 +23,7 @@ const educationSchema = z.object({
   degree: z.string(),
   specialization: z.string().optional(),
   institution: z.string(),
+  date: z.string().optional(),
 })
 
 const awardSchema = z.object({
@@ -36,6 +37,7 @@ const certificationSchema = z.object({
   id: z.string(),
   title: z.string(),
   issuer: z.string(),
+  date: z.string().optional(),
 })
 
 export const resumeDocumentSchema = z.object({
@@ -54,7 +56,8 @@ export const resumeDocumentSchema = z.object({
         items: z.array(z.string()),
       })
     )
-    .optional(),
+    .default([]),
+  sectionOrder: z.array(z.string()).default(['profile', 'experience', 'awards', 'education', 'certifications']),
 })
 
 export const createResumeDraftSchema = z.object({

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { JobFetchService } from '@/modules/jobs/fetch-service'
+import {
+  filterValidJobSpySites,
+  JOBSPY_DEFAULT_PLATFORMS,
+} from '@/modules/jobs/jobspy-platforms'
 import { z } from 'zod'
 
 // Allow long-running scrape (gateway/proxy may still need higher timeout, e.g. nginx proxy_read_timeout 300)
@@ -147,16 +151,23 @@ export async function POST(request: NextRequest) {
                 source: 'ADZUNA',
               })
               break
-            case 'JOBSPY':
+            case 'JOBSPY': {
+              const sites =
+                validated.sites && validated.sites.length > 0
+                  ? filterValidJobSpySites(validated.sites)
+                  : [...JOBSPY_DEFAULT_PLATFORMS]
+              const sitesToUse =
+                sites.length > 0 ? sites : [...JOBSPY_DEFAULT_PLATFORMS]
               jobs = await fetchService.fetchFromJobSpy({
                 query: validated.query,
                 location: validated.location,
                 limit: validated.limit,
                 source: 'JOBSPY',
-                sites: validated.sites,
+                sites: sitesToUse,
                 country: validated.country,
               })
               break
+            }
             default:
               throw new Error(`Unsupported source: ${validated.source}`)
           }

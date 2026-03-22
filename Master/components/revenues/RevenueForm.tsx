@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input, Select, Textarea, FormActions, Alert, Button } from '@/ui'
 import { formatINR } from '@/lib/currency'
 
@@ -40,40 +40,55 @@ export function RevenueForm({
     })
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const [leads, setLeads] = useState<any[]>([])
     const [clients, setClients] = useState<any[]>([])
+    const [clientSearchQuery, setClientSearchQuery] = useState('')
+    const [clientSearchOpen, setClientSearchOpen] = useState(false)
+    const clientPickerRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        loadOptions()
+        loadClients()
     }, [])
 
-    const loadOptions = async () => {
+    const loadClients = async () => {
         try {
             const token = localStorage.getItem('token')
-            const [leadsRes, clientsRes] = await Promise.all([
-                fetch('/api/leads', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/clients', { headers: { 'Authorization': `Bearer ${token}` } }),
-            ])
-
-            if (leadsRes.ok) {
-                const data = await leadsRes.json()
-                setLeads(Array.isArray(data) ? data : (data.leads || data.data || []))
-            }
-            if (clientsRes.ok) {
-                const data = await clientsRes.json()
-                setClients(Array.isArray(data) ? data : (data.clients || data.data || []))
+            const response = await fetch('/api/clients?pageSize=100', { 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setClients(data.clients || data.data || data || [])
             }
         } catch (err) {
-            console.error('Failed to load options')
+            console.error('Failed to load clients')
         }
     }
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (clientPickerRef.current && !clientPickerRef.current.contains(e.target as Node)) {
+                setClientSearchOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    const filteredClients = clients.filter(c => {
+        const fullName = `${c.firstName} ${c.lastName}`.toLowerCase()
+        const email = (c.email || '').toLowerCase()
+        const query = clientSearchQuery.toLowerCase()
+        return fullName.includes(query) || email.includes(query)
+    })
+
+    const selectedClient = clients.find(c => c.id === formData.clientId)
 
     const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
         const newItems = [...formData.items]
         newItems[index] = { ...newItems[index], [field]: value }
 
         if (field === 'quantity' || field === 'rate') {
-            newItems[index].amount = newItems[index].quantity * newItems[index].rate
+            newItems[index].amount = (newItems[index].quantity || 0) * (newItems[index].rate || 0)
         }
 
         const subTotal = newItems.reduce((sum, item) => sum + item.amount, 0)
@@ -131,7 +146,13 @@ export function RevenueForm({
                 onSuccess()
             } else {
                 const data = await response.json()
-                setError(data.error || 'Failed to save revenue')
+                if (Array.isArray(data)) {
+                    // Handle Zod errors
+                    const errorMsgs = data.map((err: any) => err.message).join(', ')
+                    setError(errorMsgs)
+                } else {
+                    setError(data.error || 'Failed to save revenue')
+                }
             }
         } catch (err) {
             setError('Network error')
@@ -161,15 +182,60 @@ export function RevenueForm({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <Select
-                    label="Related Client"
-                    value={formData.clientId}
-                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value, leadId: '' })}
-                    options={[
-                        { value: '', label: 'Select Client' },
-                        ...clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))
-                    ]}
-                />
+                <div className="relative" ref={clientPickerRef}>
+                    <label className="block text-sm font-medium text-careerist-text-primary mb-1">
+                        Related Client <span className="text-red-500">*</span>
+                    </label>
+                    <div 
+                        className="w-full px-3 py-2 border border-careerist-border rounded-md cursor-pointer bg-white flex justify-between items-center"
+                        onClick={() => setClientSearchOpen(!clientSearchOpen)}
+                    >
+                        <span className={selectedClient ? "text-gray-900" : "text-gray-400"}>
+                            {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Select Client"}
+                        </span>
+                        <span className="text-gray-400">▼</span>
+                    </div>
+
+                    {clientSearchOpen && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-careerist-border rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col">
+                            <div className="p-2 border-b">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-careerist-yellow"
+                                    placeholder="Search by name or email..."
+                                    value={clientSearchQuery}
+                                    onChange={(e) => setClientSearchQuery(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            </div>
+                            <div className="overflow-y-auto">
+                                {filteredClients.length > 0 ? (
+                                    filteredClients.map(c => (
+                                        <div
+                                            key={c.id}
+                                            className="px-3 py-2 text-sm hover:bg-careerist-yellow-light cursor-pointer"
+                                            onClick={() => {
+                                                setFormData({ ...formData, clientId: c.id })
+                                                setClientSearchOpen(false)
+                                                setClientSearchQuery('')
+                                            }}
+                                        >
+                                            <div className="font-medium">{c.firstName} {c.lastName}</div>
+                                            <div className="text-xs text-gray-500">{c.email}</div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="px-3 py-4 text-sm text-center text-gray-500">
+                                        No clients found
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    <input type="hidden" required value={formData.clientId} />
+                </div>
+
                 <Select
                     label="Status"
                     value={formData.status}
@@ -200,6 +266,7 @@ export function RevenueForm({
                                 value={item.description}
                                 onChange={(e) => updateItem(index, 'description', e.target.value)}
                                 placeholder="Service name"
+                                required
                             />
                         </div>
                         <div className="col-span-2">

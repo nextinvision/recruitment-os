@@ -3,6 +3,10 @@ import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { analyticsService } from '@/modules/analytics/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 
+/** Always compute from DB; avoid CDN/router caching stale funnel/activity counts. */
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function OPTIONS(request: NextRequest) {
     return handleCors(request) || new NextResponse(null, { status: 204 })
 }

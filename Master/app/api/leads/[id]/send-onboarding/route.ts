@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { messageService } from '@/modules/communications/message.service'
 import { getTemplateById } from '@/modules/communications/template.service'
 import { MessageChannel } from '@prisma/client'
+import { buildEmailLinkAppendSection } from '@/modules/communications/email-appended-content'
 
 export async function OPTIONS(request: NextRequest) {
     return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -52,10 +53,14 @@ export async function POST(
         // 3. Prepare variables
         const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
         const formLink = `${origin}/onboarding/${formId}?leadId=${leadId}`
+        const fullName = `${lead.firstName} ${lead.lastName}`.trim()
         const variables = {
             firstName: lead.firstName,
             lastName: lead.lastName,
-            fullName: `${lead.firstName} ${lead.lastName}`,
+            fullName,
+            /** Alias for JSM / client-style templates (Dear {{clientName}}) */
+            clientName: fullName,
+            email: lead.email || '',
             onboardingLink: formLink,
             formLink, // Alias
         }
@@ -70,6 +75,12 @@ export async function POST(
             subject: template.subject || 'Onboarding Form',
             content: template.content,
             variables,
+            appendedEmailHtml: buildEmailLinkAppendSection({
+                url: formLink,
+                heading: 'Complete your onboarding',
+                buttonLabel: 'Open onboarding form',
+                intro: 'Use the secure link below to complete your form. The link is added automatically—you do not need {{formLink}} in your template.',
+            }),
             sentBy: authContext.userId,
         })
 

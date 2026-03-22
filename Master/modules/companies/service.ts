@@ -6,6 +6,7 @@ import {
     createContactSchema,
     updateContactSchema,
     createNoteSchema,
+    importCompanyRowSchema,
     CompanyFilters,
     CompanyPagination,
     CreateCompanyInput,
@@ -14,6 +15,12 @@ import {
     UpdateContactInput,
     CreateNoteInput,
 } from './schemas'
+import {
+    parseContactNameForImport,
+    mapDesignationToContactRole,
+    mapOutreachToContactStatus,
+    hasContactImportData,
+} from './import-helpers'
 
 // ─── Company CRUD ─────────────────────────────────────────────────────────────
 
@@ -153,6 +160,83 @@ export async function getCompanyStats() {
     return { total, totalContacts, withJobs }
 }
 
+// ─── Bulk Import ─────────────────────────────────────────────────────────────
+
+export interface ImportCompaniesResult {
+    created: Awaited<ReturnType<typeof createCompany>>[]
+    errors: { row: number; name?: string; message: string }[]
+}
+
+export async function importCompanies(
+    rows: unknown[],
+    userId: string
+): Promise<ImportCompaniesResult> {
+    const created: Awaited<ReturnType<typeof createCompany>>[] = []
+    const errors: { row: number; name?: string; message: string }[] = []
+
+    for (let i = 0; i < rows.length; i++) {
+        const raw = rows[i]
+        const parsed = importCompanyRowSchema.safeParse(raw)
+        if (!parsed.success) {
+            const msg = parsed.error.issues.map((issue) => issue.message).join('; ')
+            const name = typeof raw === 'object' && raw !== null && 'name' in raw ? String((raw as { name?: unknown }).name) : undefined
+            errors.push({ row: i + 1, name, message: msg })
+            continue
+        }
+        const row = parsed.data
+        const input: CreateCompanyInput = {
+            name: row.name,
+            industry: row.industry ?? undefined,
+            website: row.website ?? undefined,
+            location: row.location ?? undefined,
+            size: row.size ?? undefined,
+            description: row.description ?? undefined,
+            linkedinUrl: row.linkedinUrl ?? undefined,
+        }
+        try {
+            const company = await createCompany(input, userId)
+            created.push(company)
+
+            if (hasContactImportData(row)) {
+                const { firstName, lastName } = parseContactNameForImport(row.contactName)
+                const role = mapDesignationToContactRole(row.designation)
+                const status = mapOutreachToContactStatus(row.outreachStatus)
+                const contactInput: CreateContactInput = {
+                    companyId: company.id,
+                    firstName,
+                    lastName,
+                    role,
+                    email: row.emailId ?? undefined,
+                    phone: row.phoneNumber ?? undefined,
+                    linkedinUrl: row.linkedInProfileLink ?? undefined,
+                    notes: row.comments ?? undefined,
+                    ...(status ? { status } : {}),
+                }
+                try {
+                    await addContact(contactInput)
+                } catch (contactErr) {
+                    errors.push({
+                        row: i + 1,
+                        name: row.name,
+                        message:
+                            contactErr instanceof Error
+                                ? `Company created; contact failed: ${contactErr.message}`
+                                : 'Company created; contact failed',
+                    })
+                }
+            }
+        } catch (err) {
+            errors.push({
+                row: i + 1,
+                name: row.name,
+                message: err instanceof Error ? err.message : 'Failed to create company',
+            })
+        }
+    }
+
+    return { created, errors }
+}
+
 // ─── Contact CRUD ─────────────────────────────────────────────────────────────
 
 export async function addContact(input: CreateContactInput) {
@@ -168,6 +252,7 @@ export async function addContact(input: CreateContactInput) {
             phone: validated.phone || null,
             linkedinUrl: validated.linkedinUrl || null,
             notes: validated.notes || null,
+            ...(validated.status ? { status: validated.status } : {}),
         },
     })
 }

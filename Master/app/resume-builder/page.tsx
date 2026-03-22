@@ -11,6 +11,7 @@ import {
   parsedToResumeDocument,
 } from '@/modules/resume-builder/template'
 import type { ResumeDocument } from '@/modules/resume-builder/types'
+import { RESUME_PREVIEW_PADDING_CSS } from '@/modules/resume-builder/constants'
 
 const STORAGE_KEY = 'resume-builder-draft'
 
@@ -38,8 +39,10 @@ export default function ResumeBuilderPage() {
   const [tailorInputMode, setTailorInputMode] = useState<'search' | 'manual'>('search')
   const [manualJD, setManualJD] = useState('')
   const [jobSearchQuery, setJobSearchQuery] = useState('')
+  const [downloadOpen, setDownloadOpen] = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const downloadRef = useRef<HTMLDivElement>(null)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
 
@@ -153,6 +156,19 @@ export default function ResumeBuilderPage() {
     loadClients()
   }, [loadJobs, loadClients])
 
+  // Close Download dropdown when clicking outside (use global DOM document, not resume state)
+  useEffect(() => {
+    if (!downloadOpen || typeof window === 'undefined') return
+    const doc = window.document
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) {
+        setDownloadOpen(false)
+      }
+    }
+    doc.addEventListener('mousedown', handleClickOutside)
+    return () => doc.removeEventListener('mousedown', handleClickOutside)
+  }, [downloadOpen])
+
   const handleSaveDraft = async () => {
     setSaving(true)
     setError('')
@@ -201,7 +217,12 @@ export default function ResumeBuilderPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed')
+      // API may return 200 with success: false in edge cases; do not fill document with empty data
+      if (data.success === false) {
+        throw new Error(data.error || data.summary || 'Resume could not be parsed. Try a different file or format.')
+      }
       setDocument(parsedToResumeDocument(data))
+      showToast('Resume imported successfully', 'success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')
     } finally {
@@ -274,7 +295,7 @@ export default function ResumeBuilderPage() {
               .resume-preview {
                 width: 100% !important;
                 margin: 0 !important;
-                padding: 40pt 45pt !important; /* Force margins from config if needed */
+                padding: ${RESUME_PREVIEW_PADDING_CSS} !important;
                 box-shadow: none !important;
               }
             }
@@ -301,35 +322,37 @@ export default function ResumeBuilderPage() {
     }, 500)
   }
 
-  const handleExportWord = () => {
-    if (!previewRef.current) return
-    const content = previewRef.current.outerHTML
-    const title = `Resume - ${document.contact.name || 'Resume'}`
+  const handleExportWord = async () => {
+    try {
+      showToast('Preparing Word document...', 'info')
+      const res = await fetch('/api/resume-builder/export/word', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ document: document }),
+      })
 
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>${title}</title>
-      <style>
-        body { font-family: Arial, sans-serif; }
-        .resume-preview { width: 100%; margin: 0; padding: 20px; }
-      </style>
-      </head>
-      <body>
-        ${content}
-      </body>
-      </html>
-    `
-    const blob = new Blob(['\ufeff', html], {
-      type: 'application/msword'
-    })
-    const url = URL.createObjectURL(blob)
-    const link = window.document.createElement('a')
-    link.href = url
-    link.download = `${title}.doc`
-    window.document.body.appendChild(link)
-    link.click()
-    window.document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to export Word document')
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = `Resume-${document.contact.name || 'Export'}.docx`
+      window.document.body.appendChild(link)
+      link.click()
+      window.document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      showToast('Document downloaded successfully', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Export failed', 'error')
+    }
   }
 
   const handleTailor = async () => {
@@ -472,27 +495,48 @@ export default function ResumeBuilderPage() {
               AI Tailor
             </Button>
 
-            <div className="relative group">
-              <Button size="sm" className="flex items-center gap-1 pr-1.5">
+            <div className="relative" ref={downloadRef}>
+              <Button
+                type="button"
+                size="sm"
+                className="flex items-center gap-1 pr-1.5"
+                onClick={() => setDownloadOpen((o) => !o)}
+                aria-expanded={downloadOpen}
+                aria-haspopup="true"
+              >
                 Download
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className={`h-4 w-4 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
               </Button>
-              <div className="absolute right-0 top-full mt-1 w-40 bg-careerist-card border border-careerist-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none group-hover:pointer-events-auto">
-                <div className="p-1">
+              {downloadOpen && (
+                <div
+                  className="absolute right-0 top-full mt-1 w-40 bg-careerist-card border border-careerist-border rounded-lg shadow-xl z-50 py-1"
+                  role="menu"
+                  aria-label="Download options"
+                >
                   <button
-                    onClick={handleExportPDF}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      handleExportPDF()
+                      setDownloadOpen(false)
+                    }}
                     className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-careerist-bg-gray rounded-md transition-colors flex items-center gap-2"
                   >
-                    <span>Download PDF</span>
+                    Download PDF
                   </button>
                   <button
-                    onClick={handleExportWord}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      handleExportWord()
+                      setDownloadOpen(false)
+                    }}
                     className="w-full text-left px-3 py-2 text-xs text-careerist-text-primary hover:bg-careerist-bg-gray rounded-md transition-colors flex items-center gap-2"
                   >
-                    <span>Download Word</span>
+                    Download Word
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
             <Button variant="secondary" size="sm" onClick={handleSaveDraft} disabled={saving}>

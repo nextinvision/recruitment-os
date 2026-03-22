@@ -6,6 +6,7 @@
 
 import { db } from '@/lib/db'
 import { JobSource, JobStatus, JobType } from '@prisma/client'
+import { JOBSPY_DEFAULT_PLATFORMS } from './jobspy-platforms'
 import { createJob } from './service'
 
 interface JobFetchOptions {
@@ -191,8 +192,9 @@ export class JobFetchService {
 
   /**
    * Fetch jobs from JobSpy scraper API (FastAPI service).
+   * Calls the scraper once per platform so that one failing platform (e.g. Google 429) does not
+   * fail the entire request; results from succeeding platforms are merged.
    * Maps scraped records to FetchedJob and maps site to JobSource (LINKEDIN, INDEED, NAUKRI, OTHER).
-   * All scraped details are preserved: skills, experience_range, salary, and extra fields in notes.
    */
   async fetchFromJobSpy(options: JobFetchOptions): Promise<FetchedJob[]> {
     const {
@@ -205,48 +207,65 @@ export class JobFetchService {
 
     const baseUrl = process.env.JOBSPY_API_URL || 'http://127.0.0.1:8000'
     const url = `${baseUrl.replace(/\/$/, '')}/scrape`
+    const sitesToUse = sites && sites.length > 0 ? sites : [...JOBSPY_DEFAULT_PLATFORMS]
+    const resultsWantedTotal = Math.min(limit, 25)
+    const resultsWantedPerSite = Math.max(1, Math.ceil(resultsWantedTotal / sitesToUse.length))
 
-    // Cap per request so scrape finishes before typical 60s gateway timeout (each site runs in parallel)
-    const resultsWanted = Math.min(limit, 25)
-    const body = {
-      search_term: query,
-      location: location || undefined,
-      country: country.toLowerCase(),
-      results_wanted: resultsWanted,
-      sites: sites && sites.length > 0 ? sites : ['indeed', 'linkedin', 'naukri'],
-      hours_old: undefined as number | undefined,
-      verbose: 0,
+    const allRawJobs: Record<string, unknown>[] = []
+    const errorsBySite: string[] = []
+
+    for (const site of sitesToUse) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 90_000) // 90s per site
+
+      try {
+        const body = {
+          search_term: query,
+          location: location || undefined,
+          country: country.toLowerCase(),
+          results_wanted: resultsWantedPerSite,
+          sites: [site],
+          hours_old: undefined as number | undefined,
+          verbose: 0,
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+
+        if (!response.ok) {
+          const errText = await response.text()
+          errorsBySite.push(`${site}: ${response.status}`)
+          continue
+        }
+
+        const data = (await response.json()) as { jobs?: Record<string, unknown>[]; count?: number }
+        const rawJobs = Array.isArray(data.jobs) ? data.jobs : []
+        allRawJobs.push(...rawJobs)
+      } catch (err) {
+        clearTimeout(timeout)
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            errorsBySite.push(`${site}: timeout`)
+          } else {
+            errorsBySite.push(`${site}: ${err.message.slice(0, 80)}`)
+          }
+        }
+        // Continue with other sites
+      }
     }
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 120_000) // 2 min for scraper
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
-
-      if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(`JobSpy API error: ${response.status} - ${errText}`)
-      }
-
-      const data = await response.json() as { jobs?: Record<string, unknown>[]; count?: number }
-      const rawJobs = Array.isArray(data.jobs) ? data.jobs : []
-
-      return rawJobs.map((row: Record<string, unknown>) => this.mapJobSpyRowToFetchedJob(row))
-    } catch (err) {
-      clearTimeout(timeout)
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') throw new Error('JobSpy scraper timed out (2 min)')
-        throw err
-      }
-      throw err
+    if (errorsBySite.length > 0 && allRawJobs.length === 0) {
+      throw new Error(
+        `JobSpy: all platforms failed. ${errorsBySite.join('; ')}`
+      )
     }
+
+    return allRawJobs.map((row: Record<string, unknown>) => this.mapJobSpyRowToFetchedJob(row))
   }
 
   /**

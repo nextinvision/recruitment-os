@@ -133,8 +133,14 @@ export function useConfirmDialog() {
     setDialogState((prev) => ({ ...prev, isOpen: false }))
   }
 
+  // Keep latest callback so Confirm never runs a stale handler after re-renders
+  const onConfirmRef = React.useRef(dialogState.onConfirm)
+  React.useEffect(() => {
+    onConfirmRef.current = dialogState.onConfirm
+  }, [dialogState.onConfirm])
+
   const handleConfirm = () => {
-    dialogState.onConfirm()
+    onConfirmRef.current()
     closeDialog()
   }
 
@@ -144,5 +150,40 @@ export function useConfirmDialog() {
     closeDialog,
     handleConfirm,
   }
+}
+
+export type ConfirmDialogController = ReturnType<typeof useConfirmDialog>
+
+const ConfirmDialogContext = React.createContext<ConfirmDialogController | null>(null)
+
+/**
+ * Mount once near the app shell that also renders `<ConfirmDialog />`.
+ * Child components call `useSharedConfirmDialog()` so `showConfirm` updates the same dialog instance.
+ */
+export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
+  const confirm = useConfirmDialog()
+  return (
+    <ConfirmDialogContext.Provider value={confirm}>
+      {children}
+      <ConfirmDialog
+        isOpen={confirm.dialogState.isOpen}
+        onClose={confirm.closeDialog}
+        onConfirm={confirm.handleConfirm}
+        title={confirm.dialogState.title}
+        message={confirm.dialogState.message}
+        variant={confirm.dialogState.variant || 'danger'}
+        confirmText={confirm.dialogState.confirmText}
+        cancelText={confirm.dialogState.cancelText}
+      />
+    </ConfirmDialogContext.Provider>
+  )
+}
+
+export function useSharedConfirmDialog(): ConfirmDialogController {
+  const ctx = React.useContext(ConfirmDialogContext)
+  if (!ctx) {
+    throw new Error('useSharedConfirmDialog must be used within ConfirmDialogProvider')
+  }
+  return ctx
 }
 

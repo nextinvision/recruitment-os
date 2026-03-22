@@ -14,13 +14,8 @@ interface GoogleFetchPanelProps {
 }
 
 /**
- * GoogleFetchPanel
- *
- * Dedicated panel for fetching jobs via Google Jobs API (SerpApi) through the
- * Python backend (/api/fetch-jobs → SerpApi with pagination).
- *
- * Completely separate from JobFetchPanel — does not share state or components.
- * Stores fetched jobs in PostgreSQL via /api/jobs/fetch (source: SERPAPI).
+ * Panel for fetching jobs via external search (separate from JobFetchPanel).
+ * Stores fetched jobs in the database.
  */
 export function GoogleFetchPanel({ onFetchComplete }: GoogleFetchPanelProps) {
     const [query, setQuery] = useState('software engineer')
@@ -89,7 +84,7 @@ export function GoogleFetchPanel({ onFetchComplete }: GoogleFetchPanelProps) {
 
             if (onFetchComplete) onFetchComplete()
         } catch (err: any) {
-            setError(err.message || 'Failed to fetch from Google Jobs API.')
+            setError(err.message || 'Failed to fetch jobs.')
             setStatus('error')
         }
     }
@@ -100,14 +95,14 @@ export function GoogleFetchPanel({ onFetchComplete }: GoogleFetchPanelProps) {
             <div className="px-6 pt-6 pb-4 border-b border-gray-100">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-50 border border-blue-100">
-                        <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">Google Jobs Fetch (SerpApi)</h2>
+                        <h2 className="text-lg font-semibold text-gray-900">Extended job search</h2>
                         <p className="text-sm text-gray-500">
-                            Fetches real Google Jobs listings with pagination — up to 100 jobs per search title, saved to your database.
+                            Fetch job listings and save them to your database. Supports large result sets.
                         </p>
                     </div>
                 </div>
@@ -120,7 +115,6 @@ export function GoogleFetchPanel({ onFetchComplete }: GoogleFetchPanelProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div className="text-sm text-blue-800">
-                        <strong>How it works:</strong> Uses SerpApi Google Jobs API (10 jobs/page, paginated) via your Python backend.
                         All fetched jobs are deduplicated before saving — jobs already in your database are skipped automatically.
                     </div>
                 </div>
@@ -219,14 +213,14 @@ export function GoogleFetchPanel({ onFetchComplete }: GoogleFetchPanelProps) {
                         {status === 'fetching' ? (
                             <>
                                 <Spinner size="sm" className="mr-2" />
-                                Fetching Google Jobs…
+                                Fetching jobs…
                             </>
                         ) : (
                             <>
-                                <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
-                                Fetch from Google Jobs
+                                Fetch jobs
                             </>
                         )}
                     </Button>

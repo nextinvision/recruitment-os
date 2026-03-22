@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner, Button, JobFilters, Pagination, JobAssignmentModal, DuplicateResolutionModal } from '@/ui'
+import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHeader, Spinner, Button, JobFilters, Pagination, JobAssignmentModal, DuplicateResolutionModal, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { JobFetchPanel } from '@/components/jobs/JobFetchPanel'
 import { GoogleFetchPanel } from '@/components/jobs/GoogleFetchPanel'
@@ -41,6 +41,10 @@ export default function JobsPage() {
   const [duplicateGroups, setDuplicateGroups] = useState<any[]>([])
   const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
   const [userRole, setUserRole] = useState<string>('')
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const { showToast } = useToast()
+  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -55,8 +59,9 @@ export default function JobsPage() {
     if (activeTab !== 'fetch' && activeTab !== 'google') {
       loadJobs()
     }
+    // userRole: ensures recruiterId param / RBAC align after hydrating from localStorage
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sortBy, sortOrder, filters, activeTab])
+  }, [page, pageSize, sortBy, sortOrder, filters, activeTab, userRole])
 
   const loadRecruiters = async () => {
     try {
@@ -82,6 +87,11 @@ export default function JobsPage() {
     } catch (err) {
       console.error('Failed to load recruiters:', err)
     }
+  }
+
+  const handleFiltersChange = (next: JobFiltersType) => {
+    setFilters(next)
+    setPage(1)
   }
 
   const loadJobs = async () => {
@@ -110,7 +120,12 @@ export default function JobsPage() {
 
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
-      if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
+      if (
+        filters.recruiterId &&
+        (userRole === 'ADMIN' || userRole === 'MANAGER')
+      ) {
+        params.append('recruiterId', filters.recruiterId)
+      }
       if (filters.startDate) params.append('startDate', filters.startDate)
       if (filters.endDate) params.append('endDate', filters.endDate)
       if (filters.search) params.append('search', filters.search)
@@ -175,10 +190,16 @@ export default function JobsPage() {
 
       if (filters.source && activeTab === 'all') params.append('source', filters.source)
       if (filters.status) params.append('status', filters.status)
-      if (filters.recruiterId) params.append('recruiterId', filters.recruiterId)
+      if (
+        filters.recruiterId &&
+        (userRole === 'ADMIN' || userRole === 'MANAGER')
+      ) {
+        params.append('recruiterId', filters.recruiterId)
+      }
       if (filters.startDate) params.append('startDate', filters.startDate)
       if (filters.endDate) params.append('endDate', filters.endDate)
       if (filters.search) params.append('search', filters.search)
+      if (filters.isDuplicate !== undefined) params.append('isDuplicate', String(filters.isDuplicate))
       if (filters.title) params.append('title', filters.title)
       if (filters.company) params.append('company', filters.company)
       if (filters.location) params.append('location', filters.location)
@@ -268,17 +289,93 @@ export default function JobsPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedJobIds.size === 0) return
+    const token = localStorage.getItem('token')
+    if (!token) {
+      showToast('Please log in', 'error')
+      return
+    }
+    setBulkDeleting(true)
+    try {
+      const res = await fetch('/api/jobs/bulk-delete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ jobIds: Array.from(selectedJobIds) }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        const deleted = data.deleted ?? 0
+        setSelectedJobIds(new Set())
+        loadJobs()
+        showToast(deleted > 0 ? `${deleted} job(s) deleted` : 'No jobs deleted', deleted > 0 ? 'success' : 'info')
+        if (data.errors?.length > 0) {
+          showToast(`${data.errors.length} job(s) could not be deleted`, 'error')
+        }
+      } else {
+        showToast(data.error || 'Bulk delete failed', 'error')
+      }
+    } catch {
+      showToast('Request failed', 'error')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const tabs = [
     { id: 'all' as TabType, label: 'All Jobs', count: jobsData?.total },
     { id: 'fetch' as TabType, label: 'Fetch Jobs', count: null },
-    { id: 'google' as TabType, label: '🔍 Google Fetch', count: null },
+    { id: 'google' as TabType, label: 'Google Search', count: null },
     { id: 'linkedin' as TabType, label: 'LinkedIn', count: null },
     { id: 'indeed' as TabType, label: 'Indeed', count: null },
     { id: 'naukri' as TabType, label: 'Naukri', count: null },
     { id: 'other' as TabType, label: 'Other Sources', count: null },
   ]
 
+  const pageJobIds = jobsData?.jobs?.map((j) => j.id) ?? []
+  const allPageSelected = pageJobIds.length > 0 && pageJobIds.every((id) => selectedJobIds.has(id))
+
   const columns = [
+    {
+      key: '_select' as const,
+      header: '',
+      headerRender: () => (
+        <input
+          type="checkbox"
+          checked={allPageSelected}
+          onChange={() => {
+            if (allPageSelected) {
+              setSelectedJobIds((prev) => {
+                const next = new Set(prev)
+                pageJobIds.forEach((id) => next.delete(id))
+                return next
+              })
+            } else {
+              setSelectedJobIds((prev) => new Set([...prev, ...pageJobIds]))
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded border-gray-300 text-[#1F3A5F] focus:ring-[#F4B400]"
+        />
+      ),
+      render: (job: Job) => (
+        <input
+          type="checkbox"
+          checked={selectedJobIds.has(job.id)}
+          onChange={() => {
+            setSelectedJobIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(job.id)) next.delete(job.id)
+              else next.add(job.id)
+              return next
+            })
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded border-gray-300 text-[#1F3A5F] focus:ring-[#F4B400]"
+        />
+      ),
+    },
     {
       key: 'title',
       header: 'Title',
@@ -369,6 +466,16 @@ export default function JobsPage() {
 
   return (
     <DashboardLayout>
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        variant={dialogState.variant ?? 'danger'}
+        confirmText={dialogState.confirmText ?? 'Delete'}
+        cancelText={dialogState.cancelText ?? 'Cancel'}
+      />
       {loading && !jobsData && activeTab !== 'fetch' ? (
         <Spinner fullScreen />
       ) : (
@@ -379,6 +486,22 @@ export default function JobsPage() {
               description="Manage and track all job postings from multiple sources"
             />
             <div className="flex items-center gap-3">
+              {selectedJobIds.size > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    showConfirm(
+                      'Delete selected jobs',
+                      `Delete ${selectedJobIds.size} selected job(s)? This cannot be undone.`,
+                      () => handleBulkDelete(),
+                      { variant: 'danger', confirmText: 'Delete' }
+                    )
+                  }
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? 'Deleting…' : `Delete selected (${selectedJobIds.size})`}
+                </Button>
+              )}
               {(userRole === 'ADMIN' || userRole === 'MANAGER') && activeTab !== 'fetch' && (
                 <>
                   <Button variant="secondary" onClick={loadDuplicates}>
@@ -406,6 +529,7 @@ export default function JobsPage() {
                   onClick={() => {
                     setActiveTab(tab.id)
                     setPage(1) // Reset to first page when switching tabs
+                    setSelectedJobIds(new Set()) // Clear selection when switching tabs
                   }}
                   className={`
                     whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
@@ -438,8 +562,9 @@ export default function JobsPage() {
             <>
               <JobFilters
                 filters={filters}
-                onChange={setFilters}
+                onChange={handleFiltersChange}
                 recruiters={recruiters}
+                showRecruiterFilter={userRole === 'ADMIN' || userRole === 'MANAGER'}
               />
 
               {loading ? (
@@ -480,7 +605,7 @@ export default function JobsPage() {
                     onClick={() => setActiveTab('fetch')}
                     className="mt-4"
                   >
-                    Fetch Jobs from External Sources
+                    Get more jobs
                   </Button>
                 </div>
               )}

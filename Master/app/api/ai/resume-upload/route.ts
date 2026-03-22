@@ -12,7 +12,9 @@ export async function OPTIONS(request: NextRequest) {
  * Accepts a multipart/form-data resume file (PDF, DOC, DOCX).
  * Forwards it to the Python backend /api/analyze-resume endpoint.
  * Returns:
- *   { success, skills, experience_years, summary, education, contact, name, raw_text }
+ *   { success, skills, experience_years, summary, education, experience, contact, name, raw_text, ... }
+ * Education is left as structured [{ degree, institution, specialization }] so Resume Builder can map
+ * degree/institution/specialization correctly. ATS Analysis page handles both string and object via educationLabel().
  */
 export async function POST(request: NextRequest) {
     try {
@@ -28,7 +30,6 @@ export async function POST(request: NextRequest) {
 
         const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:8080'
 
-        // Forward the raw multipart body to Python backend unchanged
         const formData = await request.formData()
         const file = formData.get('resume') as File | null
 
@@ -40,7 +41,6 @@ export async function POST(request: NextRequest) {
             return addCorsHeaders(response, request.headers.get('origin'))
         }
 
-        // Re-create a FormData to forward
         const forwardForm = new FormData()
         forwardForm.append('resume', file)
 
@@ -60,22 +60,23 @@ export async function POST(request: NextRequest) {
 
         const result = await pythonResponse.json()
 
-        // Normalize education to string[] so the frontend never receives objects (React cannot render objects as children).
-        // Python backend may return education as objects { institution, degree, specialization }.
-        if (Array.isArray(result.education)) {
-            result.education = result.education.map((item: unknown) => {
-                if (typeof item === 'string') return item
-                if (item && typeof item === 'object' && !Array.isArray(item)) {
-                    const o = item as Record<string, unknown>
-                    const degree = typeof o.degree === 'string' ? o.degree : ''
-                    const specialization = typeof o.specialization === 'string' ? o.specialization : ''
-                    const institution = typeof o.institution === 'string' ? o.institution : ''
-                    const parts = [degree, specialization, institution].filter(Boolean)
-                    return parts.join(' — ') || 'Education'
-                }
-                return String(item)
-            })
+        // If Python returned success: false (e.g. no text extracted, Gemini/parse error), return 422 with actionable message
+        if (result.success === false) {
+            const msg =
+                typeof result.error === 'string' && result.error.trim()
+                    ? result.error
+                    : typeof result.summary === 'string' && result.summary.trim()
+                        ? result.summary
+                        : 'Resume could not be parsed. Try a text-based PDF or DOCX, or a different file.'
+            const response = NextResponse.json(
+                { error: msg, success: false },
+                { status: 422 }
+            )
+            return addCorsHeaders(response, request.headers.get('origin'))
         }
+
+        // Leave education as structured array so Resume Builder gets degree/institution/specialization.
+        // Do not flatten to string[] here; both Resume Builder and ATS page support object shape.
 
         const response = NextResponse.json(result, { status: 200 })
         return addCorsHeaders(response, request.headers.get('origin'))

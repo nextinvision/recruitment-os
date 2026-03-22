@@ -21,6 +21,48 @@ export interface TidyCalBooking {
 export class TidyCalService {
     private static readonly API_BASE_URL = 'https://tidycal.com/api'
 
+    /**
+     * Normalize different TidyCal payload shapes into a booking object.
+     * Supports:
+     * - direct booking object
+     * - { data: booking }
+     * - { data: { booking: booking } }
+     * - { booking: booking }
+     */
+    private static extractBookingPayload(payload: any): any {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Invalid TidyCal payload')
+        }
+
+        if (payload.id != null && (payload.contact || payload.email || payload.starts_at || payload.start_at)) {
+            return payload
+        }
+        if (payload.booking && typeof payload.booking === 'object') {
+            return payload.booking
+        }
+        if (payload.data && typeof payload.data === 'object') {
+            if (payload.data.id != null) return payload.data
+            if (payload.data.booking && typeof payload.data.booking === 'object') return payload.data.booking
+        }
+
+        // Last fallback for unknown webhook wrappers
+        if (payload.event_data && typeof payload.event_data === 'object') {
+            if (payload.event_data.booking) return payload.event_data.booking
+            if (payload.event_data.id != null) return payload.event_data
+        }
+
+        throw new Error('Could not locate booking object in TidyCal payload')
+    }
+
+    private static extractBookingsArray(data: any): any[] {
+        if (Array.isArray(data)) return data
+        if (Array.isArray(data?.data)) return data.data
+        if (Array.isArray(data?.bookings)) return data.bookings
+        if (Array.isArray(data?.data?.bookings)) return data.data.bookings
+        if (Array.isArray(data?.results)) return data.results
+        return []
+    }
+
     private static getHeaders() {
         const token = process.env.TIDYCAL_PERSONAL_ACCESS_TOKEN
         if (!token || token.trim() === '') {
@@ -58,23 +100,27 @@ export class TidyCalService {
         }
 
         const data = await response.json()
-        // TidyCal API returns bookings in a "data" field
-        return data.data || []
+        // Be lenient with response shape across API versions.
+        return this.extractBookingsArray(data) as TidyCalBooking[]
     }
 
     /**
      * Process a single TidyCal booking into Lead and Activity
      */
     static async processBooking(payload: any) {
+        const booking = this.extractBookingPayload(payload)
         // TidyCal API nesting: contact info is under 'contact', time is under 'starts_at'
-        const id = payload.id
-        const contact = payload.contact || {}
-        const name = contact.name || payload.first_name || 'TidyCal'
-        const email = contact.email || payload.email
-        const phone = payload.phone || null // Sometimes root, sometimes in questions
-        const questions = payload.questions || []
-        const booking_type = payload.booking_type || {}
-        const starts_at = payload.starts_at || payload.start_at
+        const id = booking.id
+        if (id == null) {
+            throw new Error('TidyCal booking is missing id')
+        }
+        const contact = booking.contact || {}
+        const name = contact.name || booking.first_name || 'TidyCal'
+        const email = contact.email || booking.email
+        const phone = booking.phone || null // Sometimes root, sometimes in questions
+        const questions = booking.questions || []
+        const booking_type = booking.booking_type || {}
+        const starts_at = booking.starts_at || booking.start_at
 
         // Extract phone from questions if not in root
         let extractedPhone = phone
@@ -176,7 +222,7 @@ export class TidyCalService {
         })
 
         const occurredAt = starts_at ? new Date(starts_at) : new Date()
-        const isCancelled = !!payload.cancelled_at
+        const isCancelled = !!booking.cancelled_at
         const bookingTitle = booking_type?.title || booking_type?.name || 'Meeting'
         const baseTitle = `TidyCal: ${bookingTitle} with ${firstName} ${lastName}`
         const finalTitle = isCancelled ? `[CANCELLED] ${baseTitle}` : baseTitle

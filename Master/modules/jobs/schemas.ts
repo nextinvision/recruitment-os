@@ -70,6 +70,10 @@ export const resolveDuplicateSchema = z.object({
   action: z.enum(['merge', 'delete']),
 })
 
+export const bulkDeleteJobsSchema = z.object({
+  jobIds: z.array(z.string().min(1, 'Job ID is required')).min(1, 'At least one job ID is required'),
+})
+
 export type CreateJobInput = z.input<typeof createJobSchema>
 export type UpdateJobInput = z.input<typeof updateJobSchema>
 export type BulkCreateJobsInput = z.input<typeof bulkCreateJobsSchema>
@@ -78,4 +82,5 @@ export type JobSortInput = z.input<typeof jobSortSchema>
 export type JobPaginationInput = z.input<typeof jobPaginationSchema>
 export type AssignJobInput = z.infer<typeof assignJobSchema>
 export type BulkAssignJobInput = z.infer<typeof bulkAssignJobSchema>
+export type BulkDeleteJobsInput = z.infer<typeof bulkDeleteJobsSchema>
 export type ResolveDuplicateInput = z.infer<typeof resolveDuplicateSchema>

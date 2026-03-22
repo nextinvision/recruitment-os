@@ -17,10 +17,17 @@ export async function GET(
 
         const { token } = await params
 
-        const application = await db.application.findUnique({
+        const application = await (db.application as any).findUnique({
             where: { approvalToken: token },
             include: {
                 job: true,
+                // applicationJobs relation is available in updated Prisma schema; ignore in older generated types
+                // @ts-ignore
+                applicationJobs: {
+                    include: {
+                        job: true,
+                    },
+                },
                 client: {
                     select: {
                         id: true,
@@ -81,6 +88,7 @@ export async function POST(
             return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
         }
 
+        // Update application stage and invalidate token
         const updated = await db.application.update({
             where: { id: application.id },
             data: {
@@ -89,6 +97,29 @@ export async function POST(
                 ...updateData
             }
         })
+
+        // Also stamp all attached jobs with APPROVED / REJECTED status at job level
+        try {
+            if (action === 'APPROVE') {
+                await (db as any).applicationJob.updateMany({
+                    where: { applicationId: application.id },
+                    data: {
+                        status: 'APPROVED',
+                        respondedAt: new Date(),
+                    },
+                })
+            } else if (action === 'REJECT') {
+                await (db as any).applicationJob.updateMany({
+                    where: { applicationId: application.id },
+                    data: {
+                        status: 'REJECTED',
+                        respondedAt: new Date(),
+                    },
+                })
+            }
+        } catch (err) {
+            console.error('Failed to update applicationJobs status on public approval:', err)
+        }
 
         const response = NextResponse.json({ success: true, stage: updated.stage }, { status: 200 })
         return addCorsHeaders(response, request.headers.get('origin'))

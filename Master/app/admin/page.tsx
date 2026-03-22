@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
-import { useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
+import { useToast, ConfirmDialogProvider } from '@/ui'
 import { UserManagementTab } from './components/UserManagementTab'
 import { SystemSettingsTab } from './components/SystemSettingsTab'
 import { SystemHealthTab } from './components/SystemHealthTab'
@@ -47,7 +47,6 @@ function AdminPageContent() {
   const [activeTab, setActiveTab] = useState<AdminTab>('users')
   const [userRole, setUserRole] = useState<string | null>(null)
   const { showToast } = useToast()
-  const { dialogState, showConfirm, closeDialog, handleConfirm } = useConfirmDialog()
 
   const allowedTabs = useMemo(() => getAllowedTabs(userRole), [userRole])
   const visibleTabs = useMemo(
@@ -135,16 +134,7 @@ function AdminPageContent() {
 
   return (
     <DashboardLayout>
-      <ConfirmDialog
-        isOpen={dialogState.isOpen}
-        onClose={closeDialog}
-        onConfirm={handleConfirm}
-        title={dialogState.title}
-        message={dialogState.message}
-        variant={dialogState.variant || 'danger'}
-        confirmText={dialogState.confirmText}
-        cancelText={dialogState.cancelText}
-      />
+      <ConfirmDialogProvider>
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <div className="mb-4">
@@ -176,6 +166,7 @@ function AdminPageContent() {
           {renderTabContent()}
         </div>
       </div>
+      </ConfirmDialogProvider>
     </DashboardLayout>
   )
 }

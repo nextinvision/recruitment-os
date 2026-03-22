@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { messageService } from '@/modules/communications/message.service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { MessageChannel } from '@prisma/client'
+import { randomUUID } from 'crypto'
+import { buildEmailLinkAppendSection } from '@/modules/communications/email-appended-content'
 
 export async function OPTIONS(request: NextRequest) {
     return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -44,21 +46,58 @@ export async function POST(request: NextRequest) {
             throw new Error('Template not found')
         }
 
-        // Fetch resume draft if ID is provided
+        // Resolve public app URL once (env is reliable for emails; origin can be missing in some environments)
+        const rawBase =
+            process.env.NEXT_PUBLIC_APP_URL ||
+            request.headers.get('origin') ||
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+        const baseUrl = (rawBase || 'https://careeristpro.cloud').replace(/\/$/, '')
+
+        // Fetch resume draft if ID is provided; create a shareable link and add URL to email
         let resumeDraft = null
+        let resumeViewUrl: string | null = null
         if (context?.resumeDraftId) {
             resumeDraft = await db.resumeDraft.findUnique({
-                where: { id: context.resumeDraftId }
+                where: { id: context.resumeDraftId },
+                select: { id: true, clientId: true, template: true, atsScore: true }
             })
+            if (resumeDraft && resumeDraft.clientId === clientId) {
+                const token = randomUUID()
+                resumeViewUrl = `${baseUrl}/public/resume/${token}`
+                await (db as any).resumeLink.create({
+                    data: {
+                        token,
+                        resumeDraftId: resumeDraft.id,
+                        clientId: clientId,
+                    }
+                })
+            }
         }
 
-        // Prepare variables for rendering
+        // Prepare variables — merge context first, then core client fields (so clientName always wins)
+        const fullName = `${client.firstName} ${client.lastName}`.trim()
         const variables = {
-            clientName: `${client.firstName} ${client.lastName}`,
-            atsScore: context?.atsScore || resumeDraft?.atsScore || 'N/A',
+            ...(context || {}),
+            firstName: client.firstName,
+            lastName: client.lastName,
+            fullName,
+            clientName: fullName,
+            email: client.email || '',
+            atsScore: context?.atsScore ?? resumeDraft?.atsScore ?? 'N/A',
             templateName: resumeDraft?.template || 'Tailored Resume',
-            ...(context || {})
+            resumeViewUrl: resumeViewUrl || '',
         }
+
+        const resolvedChannel = (channel as MessageChannel) || MessageChannel.EMAIL
+        const appendedEmailHtml =
+            resumeViewUrl && resolvedChannel === MessageChannel.EMAIL
+                ? buildEmailLinkAppendSection({
+                    url: resumeViewUrl,
+                    heading: 'Your resume',
+                    buttonLabel: 'View and respond',
+                    intro: 'View and download your resume, and accept or reject it. This link is added automatically for every send.',
+                  })
+                : undefined
 
         // Use messageService to send the message
         const messageId = await messageService.sendMessage({
@@ -68,8 +107,9 @@ export async function POST(request: NextRequest) {
             recipientEmail: client.email,
             templateId: templateId,
             subject: template.subject || 'Your Tailored Resume',
-            content: template.content, // messageService will handle rendering if variables are passed
+            content: template.content,
             variables,
+            ...(appendedEmailHtml ? { appendedEmailHtml } : {}),
             sentBy: authContext.userId,
         })
 
