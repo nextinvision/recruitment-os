@@ -39,10 +39,15 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 export function ApplicationFilters({ filters, onChange, recruiters }: ApplicationFiltersProps) {
-  const updateFilter = (key: keyof ApplicationFilters, value: any) => {
+  const updateFilter = (key: keyof ApplicationFilters, value: unknown) => {
+    const clear =
+      value === '' ||
+      value === undefined ||
+      value === null ||
+      (typeof value === 'string' && value.trim() === '')
     onChange({
       ...filters,
-      [key]: value || undefined,
+      [key]: clear ? undefined : value,
     })
   }
 

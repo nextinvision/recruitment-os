@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
+import { redactSalesMetricsFromSystemMetricsBlock } from '@/lib/financial-metrics-access'
 import { analyticsService } from '@/modules/analytics/service'
 import { getPendingFollowUps, getOverdueFollowUps, getTodayFollowUps } from '@/modules/followups/service'
 import { getActivities } from '@/modules/activities/service'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { UserRole } from '@prisma/client'
 import { db } from '@/lib/db'
+import { APPLICATION_JOBS_ORDER_BY } from '@/modules/applications/application-job-order'
 
 export async function OPTIONS(request: NextRequest) {
   return handleCors(request) || new NextResponse(null, { status: 204 })
@@ -129,6 +131,7 @@ export async function GET(request: NextRequest) {
             },
           },
           applicationJobs: {
+            orderBy: APPLICATION_JOBS_ORDER_BY,
             include: {
               job: true,
             },
@@ -183,12 +186,17 @@ export async function GET(request: NextRequest) {
 
     // Admin/Manager specific data
     if (authContext.role === UserRole.ADMIN || authContext.role === UserRole.MANAGER) {
-      const [recruiterComparison, platformAnalytics, funnelMetrics, systemMetrics] = await Promise.all([
+      const [recruiterComparison, platformAnalytics, funnelMetrics, systemMetricsRaw] = await Promise.all([
         analyticsService.getRecruiterComparison(startDate, endDate),
         analyticsService.getPlatformUsage(startDate, endDate),
         analyticsService.getFunnelPerformance(startDate, endDate),
         analyticsService.getSystemMetrics(startDate, endDate),
       ])
+
+      const systemMetrics = redactSalesMetricsFromSystemMetricsBlock(
+        systemMetricsRaw,
+        authContext.role
+      )
 
       dashboardData.admin = {
         systemMetrics,

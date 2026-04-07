@@ -431,8 +431,8 @@ function ReportsPageContent() {
           </div>
         </div>
 
-        {/* Sales Overview (ADMIN/MANAGER ONLY) */}
-        {(userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) && systemMetrics?.systemMetrics?.salesMetrics && (
+        {/* Sales & financial aggregates: ADMIN + SALES only (enforced in API via salesMetrics redaction) */}
+        {(userRole === UserRole.ADMIN || userRole === UserRole.SALES) && systemMetrics?.systemMetrics?.salesMetrics && (
           <div className="mb-8">
             <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mb-4 flex items-center gap-2">
               <span className="p-1.5 bg-green-100 text-green-600 rounded-md">

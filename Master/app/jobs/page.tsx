@@ -6,6 +6,7 @@ import { DataTable, Modal, Input, Textarea, Select, Alert, FormActions, PageHead
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { JobFetchPanel } from '@/components/jobs/JobFetchPanel'
 import { GoogleFetchPanel } from '@/components/jobs/GoogleFetchPanel'
+import { BulkJobsAssignmentModal } from '@/components/jobs/BulkJobsAssignmentModal'
 import { JobForm, type Job as JobType } from '@/components/jobs/JobForm'
 import Link from 'next/link'
 import type { JobFilters as JobFiltersType } from '@/ui'
@@ -38,6 +39,7 @@ export default function JobsPage() {
   const [assignmentJobId, setAssignmentJobId] = useState<string>('')
   const [assignmentJobTitle, setAssignmentJobTitle] = useState<string>('')
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false)
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [duplicateGroups, setDuplicateGroups] = useState<any[]>([])
   const [recruiters, setRecruiters] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
   const [userRole, setUserRole] = useState<string>('')
@@ -421,7 +423,9 @@ export default function JobsPage() {
       header: 'Applications',
       render: (job: Job) => (
         <span className="text-sm text-gray-700">
-          {job.applications?.length || 0}
+          {(job as Job & { assignedApplicationCount?: number }).assignedApplicationCount
+            ?? job.applications?.length
+            ?? 0}
         </span>
       ),
     },
@@ -486,6 +490,14 @@ export default function JobsPage() {
               description="Manage and track all job postings from multiple sources"
             />
             <div className="flex items-center gap-3">
+              {selectedJobIds.size > 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowBulkAssignModal(true)}
+                >
+                  Assign selected ({selectedJobIds.size})
+                </Button>
+              )}
               {selectedJobIds.size > 0 && (
                 <Button
                   variant="secondary"
@@ -646,6 +658,17 @@ export default function JobsPage() {
             jobTitle={assignmentJobTitle}
             onSuccess={() => {
               loadJobs()
+            }}
+          />
+
+          <BulkJobsAssignmentModal
+            isOpen={showBulkAssignModal}
+            onClose={() => setShowBulkAssignModal(false)}
+            jobIds={Array.from(selectedJobIds)}
+            onSuccess={() => {
+              setSelectedJobIds(new Set())
+              loadJobs()
+              showToast('Selected jobs assigned successfully', 'success')
             }}
           />
 

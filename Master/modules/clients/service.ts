@@ -12,6 +12,7 @@ import {
   importClientRowSchema,
   ImportClientRow,
 } from './schemas'
+import { normalizeIncomingReportOutreachCustomFields } from './report-outreach-fields'
 
 export async function createClient(input: CreateClientInput) {
   const validated = createClientSchema.parse(input)
@@ -49,6 +50,11 @@ export async function createClient(input: CreateClientInput) {
       linkedInOptimizedAt: validated.linkedInOptimizedAt ? new Date(validated.linkedInOptimizedAt) : null,
       jobSearchInitiated: validated.jobSearchInitiated || false,
       jobSearchInitiatedAt: validated.jobSearchInitiatedAt ? new Date(validated.jobSearchInitiatedAt) : null,
+      referralsSentCount: validated.referralsSentCount ?? null,
+      connectionRequestsSentCount: validated.connectionRequestsSentCount ?? null,
+      reportOutreachCustomFields: normalizeIncomingReportOutreachCustomFields(
+        validated.reportOutreachCustomFields ?? []
+      ),
     },
     include: {
       assignedUser: {
@@ -193,6 +199,19 @@ export async function getClientById(clientId: string) {
         include: {
           resumeDraft: {
             select: { id: true, template: true, updatedAt: true }
+          },
+        },
+      },
+      onboardingSubmissions: {
+        orderBy: { submittedAt: 'desc' },
+        include: {
+          form: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              fields: true,
+            },
           },
         },
       },
@@ -402,6 +421,12 @@ export async function updateClient(input: UpdateClientInput) {
   if (updateData.gmailCreatedAt === '') updateData.gmailCreatedAt = null
   if (updateData.linkedInOptimizedAt === '') updateData.linkedInOptimizedAt = null
   if (updateData.jobSearchInitiatedAt === '') updateData.jobSearchInitiatedAt = null
+
+  if (updateData.reportOutreachCustomFields !== undefined) {
+    updateData.reportOutreachCustomFields = normalizeIncomingReportOutreachCustomFields(
+      updateData.reportOutreachCustomFields
+    ) as unknown as object[]
+  }
 
   const client = await db.client.update({
     where: { id },

@@ -645,6 +645,12 @@ model Client {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Manual outreach metrics (Reports tab); embedded in shared report snapshot & emails
+  referralsSentCount            Int?
+  connectionRequestsSentCount   Int?
+  // User-defined outreach rows: [{ id, label, value }, ...]
+  reportOutreachCustomFields    Json     @default("[]")
+
   // Relations
   assignedUser          User                       @relation("ClientAssignedUser", fields: [assignedUserId], references: [id], onDelete: Cascade)
   reverseRecruiter      User?                      @relation("ClientReverseRecruiter", fields: [reverseRecruiterId], references: [id], onDelete: SetNull)

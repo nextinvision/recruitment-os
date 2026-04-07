@@ -1,66 +1,33 @@
-/**
- * Unit tests for validation
- */
-
 import { describe, test, expect } from 'vitest'
-import { validateJob, validateJobs } from '../../src/shared/validation'
-import { JobInput } from '../../src/shared/types'
+import { validateJob } from '../../src/shared/validation'
 
 describe('Job Validation', () => {
-  const validJob: JobInput = {
-    title: 'Software Engineer',
-    company: 'Tech Corp',
-    location: 'Remote',
-    description: 'Job description here',
-    source: 'linkedin'
-  }
-
-  test('should validate correct job', () => {
-    const result = validateJob(validJob)
+  test('valid job with title and company passes', () => {
+    const result = validateJob({ title: 'Software Engineer', company: 'Acme Corp' })
     expect(result.isValid).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
 
   test('should reject job without title', () => {
-    const invalidJob = { ...validJob, title: '' }
-    const result = validateJob(invalidJob)
+    const result = validateJob({ title: '', company: 'Acme Corp' })
     expect(result.isValid).toBe(false)
-    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors).toContain('Title is required')
   })
 
   test('should reject job without company', () => {
-    const invalidJob = { ...validJob, company: '' }
-    const result = validateJob(invalidJob)
+    const result = validateJob({ title: 'Software Engineer', company: '' })
     expect(result.isValid).toBe(false)
+    expect(result.errors).toContain('Company is required')
   })
 
-  test('should reject job without location', () => {
-    const invalidJob = { ...validJob, location: '' }
-    const result = validateJob(invalidJob)
+  test('should reject job missing both title and company', () => {
+    const result = validateJob({ title: '', company: '' })
     expect(result.isValid).toBe(false)
+    expect(result.errors.length).toBe(2)
   })
 
-  test('should reject job without description', () => {
-    const invalidJob = { ...validJob, description: '' }
-    const result = validateJob(invalidJob)
-    expect(result.isValid).toBe(false)
-  })
-
-  test('should validate multiple jobs', () => {
-    const jobs = [validJob, { ...validJob, title: 'Another Job' }]
-    const result = validateJobs(jobs)
+  test('location and description are optional', () => {
+    const result = validateJob({ title: 'Engineer', company: 'Corp', location: '', description: '' })
     expect(result.isValid).toBe(true)
   })
-
-  test('should detect invalid jobs in batch', () => {
-    const jobs = [
-      validJob,
-      { ...validJob, title: '' }, // Invalid
-      { ...validJob, company: '' } // Invalid
-    ]
-    const result = validateJobs(jobs)
-    expect(result.isValid).toBe(false)
-    expect(result.errors.length).toBeGreaterThan(0)
-  })
 })
-

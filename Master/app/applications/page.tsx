@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { PipelineBoard, Modal, ApplicationFilters, Pagination, Button, Spinner, PageHeader, ApplicationActionForm, useToast } from '@/ui'
+import { PipelineBoard, Modal, ApplicationFilters, Pagination, Button, Spinner, PageHeader, ApplicationActionForm, useToast, ConfirmDialog, useConfirmDialog } from '@/ui'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import type { ApplicationFilters as ApplicationFiltersType } from '@/ui'
 import { STAGES, STAGE_LABELS } from '@/components/applications/constants'
 import { ApplicationDetails, type Application } from '@/components/applications/ApplicationDetails'
 import { ApplicationForm } from '@/components/applications/ApplicationForm'
+import { openWhatsAppWithMessage } from '@/lib/whatsapp'
 
 interface ApplicationsResponse {
   applications: Application[]
@@ -34,7 +35,21 @@ export default function ApplicationsPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('list')
   const [updatingStageId, setUpdatingStageId] = useState<string | null>(null)
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([])
   const { showToast } = useToast()
+  const { showConfirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog()
+  const [appBaseUrl, setAppBaseUrl] = useState<string>('')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setAppBaseUrl(window.location.origin)
+    }
+  }, [])
+
+  const handleFiltersChange = useCallback((next: ApplicationFiltersType) => {
+    setPage(1)
+    setFilters(next)
+  }, [])
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -46,6 +61,11 @@ export default function ApplicationsPage() {
     loadApplications()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, sortBy, sortOrder, filters, viewMode])
+
+  useEffect(() => {
+    const availableIds = new Set((applicationsData?.applications || []).map((app) => app.id))
+    setSelectedApplicationIds((prev) => prev.filter((id) => availableIds.has(id)))
+  }, [applicationsData])
 
   const loadRecruiters = async () => {
     try {
@@ -185,8 +205,121 @@ export default function ApplicationsPage() {
     }
   }
 
+  const toggleApplicationSelection = (applicationId: string) => {
+    setSelectedApplicationIds((prev) =>
+      prev.includes(applicationId)
+        ? prev.filter((id) => id !== applicationId)
+        : [...prev, applicationId]
+    )
+  }
+
+  const toggleSelectAllOnPage = () => {
+    const pageIds = (applicationsData?.applications || []).map((app) => app.id)
+    if (pageIds.length === 0) return
+    const allSelected = pageIds.every((id) => selectedApplicationIds.includes(id))
+    setSelectedApplicationIds((prev) => {
+      if (allSelected) {
+        return prev.filter((id) => !pageIds.includes(id))
+      }
+      const merged = new Set([...prev, ...pageIds])
+      return Array.from(merged)
+    })
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedApplicationIds.length === 0) return
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/applications', {
+        method: 'DELETE',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ applicationIds: selectedApplicationIds }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        showToast(data.error || 'Failed to delete selected applications', 'error')
+        return
+      }
+
+      const deletedCount = Array.isArray(data.deletedIds) ? data.deletedIds.length : 0
+      const errorCount = Array.isArray(data.errors) ? data.errors.length : 0
+
+      if (deletedCount > 0) {
+        showToast(`Deleted ${deletedCount} application(s)`, 'success')
+      }
+      if (errorCount > 0) {
+        showToast(`${errorCount} application(s) could not be deleted`, 'error')
+      }
+
+      setSelectedApplicationIds([])
+      loadApplications()
+    } catch {
+      showToast('Failed to delete selected applications', 'error')
+    }
+  }
+
+  const getApplicationNumber = (app: Application) => `APP-${app.id.slice(-6).toUpperCase()}`
+
+  const isWhatsAppEnabledForApplication = (app: Application) => {
+    const isPendingStage = app.stage === 'PENDING_CLIENT_APPROVAL'
+    const hasApprovedJob = (app.applicationJobs || []).some((aj) => aj.status === 'APPROVED')
+    return isPendingStage || hasApprovedJob
+  }
+
+  const handleSendApplicationWhatsApp = (app: Application) => {
+    if (!isWhatsAppEnabledForApplication(app)) return
+
+    const phone = app.client?.phone
+    if (!phone) {
+      showToast('Client phone number is missing', 'error')
+      return
+    }
+
+    const jobs = (app.applicationJobs || [])
+      .map((aj) => aj.job)
+      .filter(Boolean) as { id: string; title: string; company: string }[]
+    const primaryJob = jobs[0] || app.job || null
+
+    const jobsText = jobs.length
+      ? jobs.map((job, idx) => `${idx + 1}. ${job.title} at ${job.company}`).join('\n')
+      : (primaryJob ? `1. ${primaryJob.title} at ${primaryJob.company}` : 'No jobs assigned')
+
+    const approvalLink = app.approvalToken ? `${appBaseUrl}/public/approvals/${app.approvalToken}` : ''
+    const message = [
+      `Hi ${app.client?.firstName || 'there'},`,
+      '',
+      'Please review the following assigned job opportunities:',
+      jobsText,
+      approvalLink ? '' : '(No approval link available for this application)',
+      approvalLink ? `\nReview link: ${approvalLink}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const opened = openWhatsAppWithMessage(phone, message)
+    if (!opened) {
+      showToast('Invalid or missing phone number', 'error')
+      return
+    }
+    showToast('WhatsApp opened with application details', 'success')
+  }
+
   return (
     <DashboardLayout>
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        message={dialogState.message}
+        variant={dialogState.variant || 'danger'}
+        confirmText={dialogState.confirmText || 'Delete'}
+        cancelText={dialogState.cancelText || 'Cancel'}
+      />
       {loading && !applicationsData ? (
         <Spinner fullScreen />
       ) : (
@@ -228,16 +361,28 @@ export default function ApplicationsPage() {
               }}>
                 Create Application
               </Button>
+              {viewMode === 'list' && selectedApplicationIds.length > 0 && (
+                <Button
+                  variant="danger"
+                  onClick={() =>
+                    showConfirm(
+                      'Delete selected applications',
+                      `Delete ${selectedApplicationIds.length} selected application(s)? This action cannot be undone.`,
+                      handleBulkDelete
+                    )
+                  }
+                >
+                  Delete Selected ({selectedApplicationIds.length})
+                </Button>
+              )}
             </div>
           </div>
 
-          {viewMode === 'list' && (
-            <ApplicationFilters
-              filters={filters}
-              onChange={setFilters}
-              recruiters={recruiters}
-            />
-          )}
+          <ApplicationFilters
+            filters={filters}
+            onChange={handleFiltersChange}
+            recruiters={recruiters}
+          />
 
           {viewMode === 'pipeline' ? (
             allApplications.length > 0 ? (
@@ -304,9 +449,28 @@ export default function ApplicationsPage() {
                     <table className="min-w-full divide-y divide-[#E5E7EB]">
                       <thead className="bg-[#1F3A5F]">
                         <tr>
+                          <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">
+                            <input
+                              type="checkbox"
+                              checked={
+                                (applicationsData?.applications || []).length > 0 &&
+                                (applicationsData?.applications || []).every((app) =>
+                                  selectedApplicationIds.includes(app.id)
+                                )
+                              }
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                toggleSelectAllOnPage()
+                              }}
+                              className="h-4 w-4 rounded border-white/50"
+                              aria-label="Select all applications on current page"
+                            />
+                          </th>
+                          <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">Application #</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">Client</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">Job</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">Stage</th>
+                          <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase">WhatsApp</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase hidden md:table-cell">Days in Stage</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase hidden md:table-cell">Follow-up</th>
                           <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-white uppercase text-right">Actions</th>
@@ -325,6 +489,21 @@ export default function ApplicationsPage() {
                               onClick={() => handleItemClick(app)}
                               className="hover:bg-[rgba(244,180,0,0.05)] cursor-pointer transition-colors"
                             >
+                              <td
+                                className="px-4 sm:px-6 py-4 whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedApplicationIds.includes(app.id)}
+                                  onChange={() => toggleApplicationSelection(app.id)}
+                                  className="h-4 w-4 rounded border-gray-300"
+                                  aria-label={`Select application ${getApplicationNumber(app)}`}
+                                />
+                              </td>
+                              <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                                <span className="text-xs font-semibold text-[#0F172A]">{getApplicationNumber(app)}</span>
+                              </td>
                               <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-[#0F172A]">
                                   {app.client ? `${app.client.firstName} ${app.client.lastName}` : '—'}
@@ -364,6 +543,22 @@ export default function ApplicationsPage() {
                                     </option>
                                   ))}
                                 </select>
+                              </td>
+                              <td
+                                className="px-4 sm:px-6 py-4 whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={!isWhatsAppEnabledForApplication(app)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleSendApplicationWhatsApp(app)
+                                  }}
+                                >
+                                  WhatsApp
+                                </Button>
                               </td>
                               <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-[#0F172A] hidden md:table-cell">
                                 {app.daysInCurrentStage !== undefined ? `${app.daysInCurrentStage} days` : '-'}

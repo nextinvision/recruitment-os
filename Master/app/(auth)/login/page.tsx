@@ -12,6 +12,53 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const leftPanelFeatures = [
+    {
+      title: 'Pipeline Visibility',
+      description:
+        'Track each candidate stage with clear progress, ownership, and outcomes.',
+      icon: (
+        <svg className="w-5 h-5 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M3 7h18M7 12h10M10 17h4"
+          />
+        </svg>
+      ),
+    },
+    {
+      title: 'Operational Control',
+      description:
+        'Coordinate jobs, interviews, and placements from one professional workspace.',
+      icon: (
+        <svg className="w-5 h-5 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 17v-6m3 6V7m3 10v-4m3 7H6a2 2 0 01-2-2V6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2z"
+          />
+        </svg>
+      ),
+    },
+    {
+      title: 'Team Alignment',
+      description:
+        'Keep recruiters and managers aligned with shared context and activity history.',
+      icon: (
+        <svg className="w-5 h-5 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M17 20h5v-1a4 4 0 00-5-3.87M9 20H2v-1a4 4 0 015.87-3.5M16 3.13a4 4 0 010 7.75M8 3.13a4 4 0 000 7.75M12 13a4 4 0 100-8 4 4 0 000 8z"
+          />
+        </svg>
+      ),
+    },
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,81 +99,88 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 via-sky-50/95 to-blue-50/90">
       {/* Left Side - Branding & Visual */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#1F3A5F] via-[#1F3A5F] to-[#152A4A] relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-sky-100/80 via-white/50 to-sky-50/90 backdrop-blur-[2px] border-r border-sky-200/60">
         {/* Decorative Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-full h-full" style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`,
-            backgroundSize: '40px 40px'
-          }}></div>
+        <div className="absolute inset-0 opacity-[0.35]">
+          <div
+            className="absolute top-0 left-0 w-full h-full"
+            style={{
+              backgroundImage: `radial-gradient(circle at 1.5px 1.5px, rgba(14, 116, 144, 0.12) 1px, transparent 0)`,
+              backgroundSize: '34px 34px',
+            }}
+          />
         </div>
 
         {/* Accent Gradient Overlay */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#F4B400] opacity-5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#F4B400] opacity-5 rounded-full blur-3xl"></div>
+        <div className="absolute -top-24 -right-20 w-[30rem] h-[30rem] bg-sky-300/25 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -left-20 w-[28rem] h-[28rem] bg-blue-200/30 rounded-full blur-3xl" />
 
         {/* Content */}
-        <div className="relative z-10 flex flex-col justify-center px-12 text-white">
-          <div className="mb-8">
-            <div className="flex justify-center mb-2">
+        <div className="relative z-10 w-full flex flex-col justify-center px-14 py-14 text-slate-800">
+          <div className="max-w-2xl">
+            <div className="flex items-center mb-8">
               <img
                 src="/logo.png"
                 alt="Careerist Logo"
-                className="w-64 h-64 object-contain"
+                className="w-40 h-40 object-contain"
               />
             </div>
-            <p className="text-xl text-white/90 font-light text-center">
-              Recruitment Management System
+
+            <h1 className="text-4xl xl:text-5xl font-bold leading-tight text-slate-900">
+              Built for modern recruitment agencies.
+            </h1>
+            <p className="mt-4 text-lg text-slate-600 max-w-xl leading-relaxed">
+              Centralize hiring operations with structure, visibility, and confident decision making across every role and pipeline.
             </p>
-          </div>
 
-          <div className="mt-6 space-y-6">
-            <div className="flex items-start space-x-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
-                <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-1 text-white">Streamline Recruitment</h3>
-                <p className="text-white/70">Manage candidates, jobs, and placements all in one place</p>
-              </div>
+            <div className="mt-10 grid grid-cols-1 gap-4">
+              {leftPanelFeatures.map((feature) => (
+                <div
+                  key={feature.title}
+                  className="group rounded-2xl border border-sky-200/70 bg-white/65 backdrop-blur-md p-5 shadow-sm shadow-sky-900/5 transition-all duration-200 hover:bg-white/85 hover:border-sky-300/80"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="shrink-0 w-10 h-10 rounded-xl bg-sky-100/90 flex items-center justify-center border border-sky-200/80">
+                      {feature.icon}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">{feature.title}</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="flex items-start space-x-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
-                <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
+            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500/80"></div>
+                <span>Secure access</span>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-1 text-white">Track Performance</h3>
-                <p className="text-white/70">Monitor revenue, payments, and team productivity</p>
+              <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-sky-500"></div>
+                <span>Real-time tracking</span>
               </div>
-            </div>
-
-            <div className="flex items-start space-x-4">
-              <div className="shrink-0 w-12 h-12 rounded-full bg-[#F4B400]/20 flex items-center justify-center border border-[#F4B400]/30">
-                <svg className="w-6 h-6 text-[#F4B400]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-1 text-white">Team Collaboration</h3>
-                <p className="text-white/70">Work together seamlessly with your recruitment team</p>
+              <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                <span>Team-ready workflow</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Bottom Decorative Element */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#1F3A5F]/80 to-transparent"></div>
+        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-sky-100/50 to-transparent pointer-events-none" />
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-[#F8FAFC]">
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-transparent">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
@@ -141,7 +195,7 @@ export default function LoginPage() {
           </div>
 
           {/* Login Card */}
-          <div className="bg-white rounded-2xl shadow-xl border border-[#E5E7EB] p-8 sm:p-10">
+          <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl shadow-sky-900/5 border border-sky-100/90 p-8 sm:p-10">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold text-[#0F172A] mb-2">
                 Welcome Back
@@ -244,9 +298,20 @@ export default function LoginPage() {
           </div>
 
           {/* Footer */}
-          <p className="mt-6 text-center text-sm text-[#64748B]">
-            © {new Date().getFullYear()} Careerist. All rights reserved.
-          </p>
+          <div className="mt-6 text-center text-sm text-[#64748B] space-y-1">
+            <p>© {new Date().getFullYear()} Careerist. All rights reserved.</p>
+            <p>
+              Managed &amp; Developed by{' '}
+              <a
+                href="https://mindwebsolutions.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-sky-700 hover:text-sky-800 transition-colors"
+              >
+                Mind Web Solutions
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </div>

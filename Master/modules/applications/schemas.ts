@@ -47,14 +47,20 @@ export const updateApplicationSchema = z.object({
   followUpDate: z.string().datetime().optional().nullable(),
 })
 
+/** HTML date (YYYY-MM-DD) or full ISO datetime (query params / APIs). */
+const applicationFilterDateStringSchema = z.union([
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  z.iso.datetime(),
+])
+
 // Filter schemas
 export const applicationFilterSchema = z.object({
   stage: applicationStageSchema.optional(),
   recruiterId: z.string().optional(),
   jobId: z.string().optional(),
   clientId: z.string().optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
+  startDate: applicationFilterDateStringSchema.optional(),
+  endDate: applicationFilterDateStringSchema.optional(),
   search: z.string().optional(),
   hasFollowUp: z.boolean().optional(),
   overdueFollowUps: z.boolean().optional(),

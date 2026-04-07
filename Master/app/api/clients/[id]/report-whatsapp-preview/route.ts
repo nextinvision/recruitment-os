@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { db } from '@/lib/db'
-import { buildReportEmailVariables } from '@/modules/communications/report-email-variables'
+import { buildReportEmailVariables, type ClientMetricsSnapshot } from '@/modules/communications/report-email-variables'
 import { renderMessageTemplate } from '@/modules/communications/render-message-template'
 
 /**
@@ -52,10 +52,7 @@ export async function POST(
     if (!template) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     if (!snapshot) return NextResponse.json({ error: 'Report snapshot not found. Update the report first.' }, { status: 400 })
 
-    const data = snapshot.data as {
-      funnelPerformance?: Array<{ stage: string; count: number }>
-      activityDistribution?: Array<{ type: string; count: number }>
-    }
+    const data = snapshot.data as ClientMetricsSnapshot
     const variables = buildReportEmailVariables({
       request,
       client: {
@@ -67,6 +64,10 @@ export async function POST(
       metrics: {
         funnelPerformance: data?.funnelPerformance ?? [],
         activityDistribution: data?.activityDistribution ?? [],
+        referralsSentCount: data?.referralsSentCount ?? null,
+        connectionRequestsSentCount: data?.connectionRequestsSentCount ?? null,
+        applicationPipelineLog: data?.applicationPipelineLog ?? [],
+        reportOutreachCustomFields: data?.reportOutreachCustomFields ?? [],
       },
     })
 

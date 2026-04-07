@@ -155,6 +155,10 @@ export function JobAssignmentModal({
           <p className="text-sm text-[#64748B] mb-4">
             Assigning: <span className="font-medium text-[#0F172A]">{jobTitle}</span>
           </p>
+          <p className="text-xs text-[#64748B] mb-4 leading-relaxed">
+            If the client already has an application, this job is added to that same pipeline (multiple jobs per client).
+            Otherwise a new application is created.
+          </p>
         </div>
 
         <div className="flex items-center gap-4 mb-4">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth, requireRole } from '@/lib/rbac'
+import { redactSalesMetricsFromSystemMetricsBlock } from '@/lib/financial-metrics-access'
 import { analyticsService } from '@/modules/analytics/service'
 import { UserRole } from '@prisma/client'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
@@ -17,19 +18,29 @@ export async function GET(request: NextRequest) {
       (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
     const authContext = requireAuth(await getAuthContext(authHeader))
     
-    // Only ADMIN and MANAGER can access system metrics
-    requireRole(authContext, [UserRole.ADMIN, UserRole.MANAGER])
+    // Operational analytics: roles that may use Reports / pipeline views (financial subset redacted below).
+    requireRole(authContext, [
+      UserRole.ADMIN,
+      UserRole.MANAGER,
+      UserRole.RECRUITER,
+      UserRole.SALES,
+    ])
 
     const searchParams = request.nextUrl.searchParams
     const startDate = new Date(searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     const endDate = new Date(searchParams.get('endDate') || new Date())
 
-    const [platformUsage, funnelPerformance, systemMetrics, averageTime] = await Promise.all([
+    const [platformUsage, funnelPerformance, systemMetricsRaw, averageTime] = await Promise.all([
       analyticsService.getPlatformUsage(startDate, endDate),
       analyticsService.getFunnelPerformance(startDate, endDate),
       analyticsService.getSystemMetrics(startDate, endDate),
       analyticsService.getAverageTimePerStage(startDate, endDate),
     ])
+
+    const systemMetrics = redactSalesMetricsFromSystemMetricsBlock(
+      systemMetricsRaw,
+      authContext.role
+    )
 
     const response = NextResponse.json({
       platformUsage,

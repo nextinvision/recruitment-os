@@ -10,6 +10,7 @@ import {
   ApplicationPaginationOptions,
   ApplicationsResult,
 } from './schemas'
+import { APPLICATION_JOBS_ORDER_BY } from './application-job-order'
 
 // Stage lifecycle definition - allowed transitions (with explicit
 // allowance for moving into PENDING_CLIENT_APPROVAL when sending jobs to client)
@@ -101,6 +102,97 @@ export function calculateDaysSinceCreation(application: any): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24))
 }
 
+/**
+ * Applies list/export filters to a Prisma Application where clause.
+ * jobId matches primary Application.jobId OR any ApplicationJob row (multi-job applications).
+ */
+export function applyApplicationFiltersToWhere(
+  where: Record<string, unknown>,
+  filters: ApplicationFilters
+) {
+  if (filters.stage) {
+    where.stage = filters.stage
+  }
+  if (filters.recruiterId) {
+    where.recruiterId = filters.recruiterId
+  }
+  if (filters.jobId) {
+    const and = (where.AND as unknown[] | undefined) ?? []
+    where.AND = [
+      ...and,
+      {
+        OR: [
+          { jobId: filters.jobId },
+          { applicationJobs: { some: { jobId: filters.jobId } } },
+        ],
+      },
+    ]
+  }
+  if (filters.clientId) {
+    where.clientId = filters.clientId
+  }
+  if (filters.startDate || filters.endDate) {
+    where.createdAt = {}
+    if (filters.startDate) {
+      ;(where.createdAt as { gte?: Date; lte?: Date }).gte = new Date(filters.startDate as string | number | Date)
+    }
+    if (filters.endDate) {
+      ;(where.createdAt as { gte?: Date; lte?: Date }).lte = new Date(filters.endDate as string | number | Date)
+    }
+  }
+  const searchTerm = filters.search?.trim()
+  if (searchTerm) {
+    const and = (where.AND as unknown[] | undefined) ?? []
+    where.AND = [
+      ...and,
+      {
+        OR: [
+          { job: { title: { contains: searchTerm, mode: 'insensitive' } } },
+          { job: { company: { contains: searchTerm, mode: 'insensitive' } } },
+          {
+            applicationJobs: {
+              some: {
+                job: {
+                  OR: [
+                    { title: { contains: searchTerm, mode: 'insensitive' } },
+                    { company: { contains: searchTerm, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+          { client: { firstName: { contains: searchTerm, mode: 'insensitive' } } },
+          { client: { lastName: { contains: searchTerm, mode: 'insensitive' } } },
+          { client: { email: { contains: searchTerm, mode: 'insensitive' } } },
+          { client: { phone: { contains: searchTerm, mode: 'insensitive' } } },
+          { notes: { contains: searchTerm, mode: 'insensitive' } },
+          {
+            recruiter: {
+              OR: [
+                { firstName: { contains: searchTerm, mode: 'insensitive' } },
+                { lastName: { contains: searchTerm, mode: 'insensitive' } },
+                { email: { contains: searchTerm, mode: 'insensitive' } },
+              ],
+            },
+          },
+        ],
+      },
+    ]
+  }
+  if (filters.hasFollowUp !== undefined) {
+    if (filters.hasFollowUp) {
+      where.followUpDate = { not: null }
+    } else {
+      where.followUpDate = null
+    }
+  }
+  if (filters.overdueFollowUps) {
+    where.followUpDate = {
+      lt: new Date(),
+    }
+  }
+}
+
 export async function createApplication(input: CreateApplicationInput) {
   const validated = createApplicationSchema.parse(input)
 
@@ -109,21 +201,10 @@ export async function createApplication(input: CreateApplicationInput) {
     : (validated.jobId ? [validated.jobId] : [])
   // NOTE: jobIds may be empty – applications are allowed without jobs.
 
-  // When jobs are selected, check for duplicate (same job + client) via ApplicationJob join
+  // Applications can be created multiple times for the same client (and even same job)
+  // as per business workflow; only validate that selected jobs exist.
   if (jobIds.length > 0) {
-    const existingForClient = await (db as any).applicationJob.findFirst({
-      where: {
-        application: {
-          clientId: validated.clientId,
-        },
-        jobId: { in: jobIds },
-      },
-    })
-    if (existingForClient) {
-      throw new Error('Application already exists for one or more selected jobs for this client')
-    }
-
-    // Validate jobs exist when provided; client is always required
+    // Validate jobs exist when provided; client is always required.
     const jobs = await db.job.findMany({
       where: { id: { in: jobIds } },
     })
@@ -199,6 +280,7 @@ export async function createApplication(input: CreateApplicationInput) {
         },
       },
       applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
         include: {
           job: true,
         },
@@ -314,6 +396,7 @@ export async function getApplicationById(applicationId: string) {
       // applicationJobs relation is available in updated Prisma schema; ignore in older generated types
       // @ts-ignore
       applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
         include: {
           job: true,
         },
@@ -368,51 +451,8 @@ export async function getApplications(
     where.recruiterId = userId
   }
 
-  // Apply filters
   if (filters) {
-    if (filters.stage) {
-      where.stage = filters.stage
-    }
-    if (filters.recruiterId) {
-      where.recruiterId = filters.recruiterId
-    }
-    if (filters.jobId) {
-      where.jobId = filters.jobId
-    }
-    if (filters.clientId) {
-      where.clientId = filters.clientId
-    }
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) {
-        where.createdAt.gte = filters.startDate
-      }
-      if (filters.endDate) {
-        where.createdAt.lte = filters.endDate
-      }
-    }
-    if (filters.search) {
-      where.OR = [
-        { job: { title: { contains: filters.search, mode: 'insensitive' } } },
-        { job: { company: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { firstName: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { lastName: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { email: { contains: filters.search, mode: 'insensitive' } } },
-        { notes: { contains: filters.search, mode: 'insensitive' } },
-      ]
-    }
-    if (filters.hasFollowUp !== undefined) {
-      if (filters.hasFollowUp) {
-        where.followUpDate = { not: null }
-      } else {
-        where.followUpDate = null
-      }
-    }
-    if (filters.overdueFollowUps) {
-      where.followUpDate = {
-        lt: new Date(),
-      }
-    }
+    applyApplicationFiltersToWhere(where, filters)
   }
 
   // Get total count
@@ -470,6 +510,7 @@ export async function getApplications(
       // applicationJobs relation is available in updated Prisma schema; ignore in older generated types
       // @ts-ignore
       applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
         include: {
           job: true,
         },
@@ -544,6 +585,7 @@ export async function getApplicationsByStage(stage: ApplicationStage) {
         },
       },
       applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
         include: {
           job: true,
         },
@@ -586,6 +628,7 @@ export async function updateApplication(input: UpdateApplicationInput) {
     data: updateData,
     include: {
       applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
         include: {
           job: true,
         },
@@ -671,6 +714,7 @@ export async function updateApplication(input: UpdateApplicationInput) {
           },
           // @ts-ignore - applicationJobs relation added in updated Prisma schema
           applicationJobs: {
+            orderBy: APPLICATION_JOBS_ORDER_BY,
             include: {
               job: true,
             },
@@ -778,6 +822,75 @@ export async function deleteApplication(applicationId: string) {
   })
 }
 
+export interface BulkDeleteApplicationsResult {
+  deletedIds: string[]
+  deletedApplications: Array<{
+    id: string
+    recruiterId: string
+    clientId: string | null
+    job: { title: string } | null
+  }>
+  errors: Array<{ id: string; message: string }>
+}
+
+export async function bulkDeleteApplications(
+  applicationIds: string[],
+  userId: string,
+  userRole: UserRole
+): Promise<BulkDeleteApplicationsResult> {
+  const uniqueIds = Array.from(new Set(applicationIds.filter(Boolean)))
+  if (uniqueIds.length === 0) {
+    return { deletedIds: [], deletedApplications: [], errors: [] }
+  }
+
+  const applications = await db.application.findMany({
+    where: { id: { in: uniqueIds } },
+    select: {
+      id: true,
+      recruiterId: true,
+      clientId: true,
+      job: { select: { title: true } },
+    },
+  })
+
+  const byId = new Map(applications.map((a) => [a.id, a]))
+  const errors: Array<{ id: string; message: string }> = []
+  const deletable: typeof applications = []
+
+  for (const id of uniqueIds) {
+    const app = byId.get(id)
+    if (!app) {
+      errors.push({ id, message: 'Application not found' })
+      continue
+    }
+    const canDelete =
+      userRole === UserRole.ADMIN ||
+      userRole === UserRole.MANAGER ||
+      app.recruiterId === userId
+    if (!canDelete) {
+      errors.push({ id, message: 'Forbidden' })
+      continue
+    }
+    deletable.push(app)
+  }
+
+  const deletedIds: string[] = []
+  if (deletable.length > 0) {
+    await db.$transaction(async (tx) => {
+      for (const app of deletable) {
+        await tx.application.delete({ where: { id: app.id } })
+        deletedIds.push(app.id)
+      }
+    })
+  }
+
+  return {
+    deletedIds,
+    deletedApplications: deletable,
+    errors,
+  }
+}
+
 // Get upcoming follow-ups
 export async function getUpcomingFollowUps(userId: string, userRole: UserRole, daysAhead: number = 1) {
   const where: any = {
@@ -878,39 +991,8 @@ export async function exportApplicationsToCSV(
     where.recruiterId = userId
   }
 
-  // Apply filters (same as getApplications)
   if (filters) {
-    if (filters.stage) {
-      where.stage = filters.stage
-    }
-    if (filters.recruiterId) {
-      where.recruiterId = filters.recruiterId
-    }
-    if (filters.jobId) {
-      where.jobId = filters.jobId
-    }
-    if (filters.clientId) {
-      where.clientId = filters.clientId
-    }
-    if (filters.startDate || filters.endDate) {
-      where.createdAt = {}
-      if (filters.startDate) {
-        where.createdAt.gte = filters.startDate
-      }
-      if (filters.endDate) {
-        where.createdAt.lte = filters.endDate
-      }
-    }
-    if (filters.search) {
-      where.OR = [
-        { job: { title: { contains: filters.search, mode: 'insensitive' } } },
-        { job: { company: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { firstName: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { lastName: { contains: filters.search, mode: 'insensitive' } } },
-        { client: { email: { contains: filters.search, mode: 'insensitive' } } },
-        { notes: { contains: filters.search, mode: 'insensitive' } },
-      ]
-    }
+    applyApplicationFiltersToWhere(where, filters)
   }
 
   const applications = await db.application.findMany({
