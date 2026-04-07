@@ -7,6 +7,8 @@ import { DashboardLayout } from '@/components/DashboardLayout'
 import Link from 'next/link'
 import type { ClientFilters as ClientFiltersType } from '@/ui'
 import { mapExcelRowsToImportRows } from '@/modules/clients/excel-import'
+import { readSpreadsheetRows } from '@/lib/spreadsheet'
+import { OnboardingSubmissionFieldsDisplay } from '@/components/clients/OnboardingResponsesCard'
 
 type FormFieldType = 'text' | 'email' | 'phone' | 'number' | 'textarea' | 'select' | 'section'
 interface OnboardingFormField {
@@ -30,7 +32,7 @@ interface OnboardingSubmission {
   submittedAt: string
   data: Record<string, unknown>
   formId: string
-  form?: { id: string; title: string }
+  form?: { id: string; title: string; description?: string | null; fields?: unknown }
   clientId: string | null
   client?: { id: string; firstName: string; lastName: string } | null
 }
@@ -589,12 +591,7 @@ export default function ClientsPage() {
               onFileSelect={async (file: File) => {
                 setImportLoading(true)
                 try {
-                  const XLSX = (await import('xlsx')).default
-                  const data = await file.arrayBuffer()
-                  const wb = XLSX.read(data, { type: 'array' })
-                  const sheet = wb.Sheets[wb.SheetNames[0]]
-                  if (!sheet) { showToast('No sheet in file', 'error'); return }
-                  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+                  const rows = await readSpreadsheetRows(file)
                   const mapped = mapExcelRowsToImportRows(rows)
                   setImportRows(mapped as Array<Record<string, unknown>>)
                   setImportStep('preview')
@@ -1212,6 +1209,8 @@ function OnboardingFormsSection({
   onCreateClient: (submissionId: string) => void
   createClientLoadingId: string | null
 }) {
+  const [detailSubmission, setDetailSubmission] = useState<OnboardingSubmission | null>(null)
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
@@ -1281,7 +1280,16 @@ function OnboardingFormsSection({
                     <tr key={s.id}>
                       <td className="px-4 py-3 text-sm text-gray-700">{s.form?.title ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{new Date(s.submittedAt).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={preview}>{preview}</td>
+                      <td className="px-4 py-3 text-sm max-w-xs">
+                        <button
+                          type="button"
+                          onClick={() => setDetailSubmission(s)}
+                          className="w-full text-left truncate text-careerist-primary-navy hover:text-careerist-primary-yellow hover:underline focus:outline-none focus:ring-2 focus:ring-careerist-primary-yellow rounded px-0.5 -mx-0.5"
+                          title="View full submission"
+                        >
+                          {preview}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-sm">
                         {s.clientId && s.client ? (
                           <Link href={`/clients/${s.client.id}`} className="text-careerist-primary-navy hover:text-careerist-primary-yellow">
@@ -1310,6 +1318,50 @@ function OnboardingFormsSection({
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={detailSubmission !== null}
+        onClose={() => setDetailSubmission(null)}
+        title={detailSubmission ? `Submission — ${detailSubmission.form?.title ?? 'Form'}` : 'Submission'}
+        size="xl"
+      >
+        {detailSubmission ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Submitted {new Date(detailSubmission.submittedAt).toLocaleString()}
+            </p>
+            {detailSubmission.form?.description ? (
+              <p className="text-sm text-gray-500 border-l-2 border-careerist-primary-yellow pl-3">
+                {detailSubmission.form.description}
+              </p>
+            ) : null}
+            <div className="max-h-[min(60vh,520px)] overflow-y-auto pr-1">
+              <OnboardingSubmissionFieldsDisplay
+                fields={detailSubmission.form?.fields}
+                data={detailSubmission.data}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              {!detailSubmission.clientId ? (
+                <Button
+                  size="sm"
+                  onClick={() => onCreateClient(detailSubmission.id)}
+                  disabled={createClientLoadingId === detailSubmission.id}
+                >
+                  {createClientLoadingId === detailSubmission.id ? 'Creating...' : 'Create client'}
+                </Button>
+              ) : detailSubmission.client ? (
+                <Link
+                  href={`/clients/${detailSubmission.client.id}`}
+                  className="text-sm font-medium text-careerist-primary-navy hover:text-careerist-primary-yellow"
+                >
+                  View client: {detailSubmission.client.firstName} {detailSubmission.client.lastName}
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   )
 }
@@ -1330,7 +1382,16 @@ function OnboardingFormBuilder({
   const [error, setError] = useState('')
 
   const addField = () => {
-    setFields((prev) => [...prev, { id: crypto.randomUUID(), key: `field_${prev.length}`, label: 'New field', type: 'text', required: false }])
+    setFields((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        key: `field_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`,
+        label: 'New field',
+        type: 'text',
+        required: false,
+      },
+    ])
   }
   const removeField = (id: string) => {
     setFields((prev) => prev.filter((f) => f.id !== id))
@@ -1355,6 +1416,11 @@ function OnboardingFormBuilder({
         setError('Each field must have a key and label')
         return
       }
+    }
+    const inputKeys = fields.filter((f) => f.type !== 'section').map((f) => f.key.trim())
+    if (new Set(inputKeys).size !== inputKeys.length) {
+      setError('Each input field must have a unique key (duplicate keys cause shared answers on the public form)')
+      return
     }
     const token = localStorage.getItem('token')
     if (!token) return

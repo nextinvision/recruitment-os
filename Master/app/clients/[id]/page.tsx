@@ -9,6 +9,13 @@ import { ResumePreview } from '@/components/resume-builder/ResumePreview'
 import { RESUME_PREVIEW_PADDING_CSS } from '@/modules/resume-builder/constants'
 import { formatINR } from '@/lib/currency'
 import Link from 'next/link'
+import { OnboardingResponsesCard } from '@/components/clients/OnboardingResponsesCard'
+import type { OnboardingSubmissionForOverview } from '@/components/clients/OnboardingResponsesCard'
+import { ReportOutreachCustomFieldsEditor } from '@/components/clients/ReportOutreachCustomFieldsEditor'
+import {
+  parseStoredReportOutreachCustomFields,
+  type ReportOutreachCustomFieldRow,
+} from '@/modules/clients/report-outreach-fields'
 
 interface Client {
   id: string
@@ -80,6 +87,12 @@ interface Client {
     respondedAt: string | null
     resumeDraft: { id: string; template: string; updatedAt: string }
   }>
+  /** Saved on Reports tab; embedded in shared public report & notification templates */
+  referralsSentCount?: number | null
+  connectionRequestsSentCount?: number | null
+  /** User-defined outreach rows for shared report */
+  reportOutreachCustomFields?: ReportOutreachCustomFieldRow[] | unknown
+  onboardingSubmissions?: OnboardingSubmissionForOverview[]
 }
 
 interface ResumeDraft {
@@ -128,6 +141,10 @@ export default function ClientProfilePage() {
   const [showReportNotificationModal, setShowReportNotificationModal] = useState(false)
   const [reportTemplates, setReportTemplates] = useState<any[]>([])
   const [reportTemplateId, setReportTemplateId] = useState('')
+  const [reportReferralsInput, setReportReferralsInput] = useState('')
+  const [reportConnectionsInput, setReportConnectionsInput] = useState('')
+  const [reportCustomOutreachRows, setReportCustomOutreachRows] = useState<ReportOutreachCustomFieldRow[]>([])
+  const [savingReportOutreach, setSavingReportOutreach] = useState(false)
 
   // Send Resume State
   const [showSendResumeModal, setShowSendResumeModal] = useState(false)
@@ -642,6 +659,88 @@ export default function ClientProfilePage() {
     }
   }, [showReportNotificationModal])
 
+  useEffect(() => {
+    if (!client) return
+    setReportReferralsInput(
+      client.referralsSentCount != null && client.referralsSentCount !== undefined
+        ? String(client.referralsSentCount)
+        : ''
+    )
+    setReportConnectionsInput(
+      client.connectionRequestsSentCount != null && client.connectionRequestsSentCount !== undefined
+        ? String(client.connectionRequestsSentCount)
+        : ''
+    )
+    setReportCustomOutreachRows(parseStoredReportOutreachCustomFields(client.reportOutreachCustomFields))
+  }, [client])
+
+  const parseOptionalNonNegativeInt = (raw: string): number | null => {
+    const t = raw.trim()
+    if (t === '') return null
+    const n = parseInt(t, 10)
+    if (Number.isNaN(n) || n < 0) {
+      throw new Error('Use whole numbers ≥ 0, or leave blank')
+    }
+    return n
+  }
+
+  const saveReportOutreachMetrics = async () => {
+    if (!clientId) return
+    let referrals: number | null
+    let connections: number | null
+    try {
+      referrals = parseOptionalNonNegativeInt(reportReferralsInput)
+      connections = parseOptionalNonNegativeInt(reportConnectionsInput)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Invalid number', 'error')
+      return
+    }
+    for (const r of reportCustomOutreachRows) {
+      if (r.value.trim() !== '' && r.label.trim() === '') {
+        showToast('Give each custom field a name if it has a value', 'error')
+        return
+      }
+    }
+    const customToSave = reportCustomOutreachRows
+      .filter((r) => r.label.trim().length > 0)
+      .map((r) => ({
+        id: r.id,
+        label: r.label.trim(),
+        value: r.value.trim(),
+      }))
+
+    setSavingReportOutreach(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          referralsSentCount: referrals,
+          connectionRequestsSentCount: connections,
+          reportOutreachCustomFields: customToSave,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast((err as { error?: string }).error || 'Failed to save outreach metrics', 'error')
+        return
+      }
+      const updated = await res.json()
+      setClient(updated)
+      showToast('Outreach metrics saved', 'success')
+    } catch (err) {
+      console.error(err)
+      showToast('Failed to save outreach metrics', 'error')
+    } finally {
+      setSavingReportOutreach(false)
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -857,6 +956,8 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 </div>
+
+                <OnboardingResponsesCard submissions={client.onboardingSubmissions ?? []} />
 
               </>
             )}
@@ -1197,9 +1298,12 @@ export default function ClientProfilePage() {
                       {/* Application Funnel */}
                       <FunnelChartWidget data={reportsData.funnelPerformance} />
 
-                      {/* Activity Distribution */}
+                      {/* Activity Distribution — client Activity model by type (NOT application log actions) */}
                       <div className="bg-careerist-card rounded-xl p-6 border border-careerist-border shadow-md">
-                        <h3 className="text-lg font-semibold text-careerist-text-primary mb-4">Activity Distribution</h3>
+                        <h3 className="text-lg font-semibold text-careerist-text-primary mb-1">Activity Distribution</h3>
+                        <p className="text-xs text-careerist-text-secondary mb-4">
+                          Client activity timeline by type (calls, emails, meetings, etc.). Application &quot;Log Action&quot; entries are listed separately below.
+                        </p>
                         {reportsData.activityDistribution.length > 0 ? (
                           <div className="space-y-4">
                             {(() => {
@@ -1229,33 +1333,110 @@ export default function ClientProfilePage() {
                       </div>
                     </div>
 
-                    {/* Notes entered for this client (from NOTE activities) */}
+                    {/* Manual outreach counts — persisted on client, embedded when sharing report */}
                     <div className="bg-careerist-card rounded-xl p-6 border border-careerist-border shadow-md">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-careerist-text-primary">Notes</h3>
-                        <Badge variant="neutral">{reportsData.notes?.length ?? 0}</Badge>
+                      <h3 className="text-lg font-semibold text-careerist-text-primary mb-1">Outreach metrics</h3>
+                      <p className="text-sm text-careerist-text-secondary mb-4">
+                        Enter totals for this client, <strong>Save</strong>, then use <strong>Generate Share Link</strong> or <strong>Update Progress</strong> so the public report and email/WhatsApp summaries include these numbers.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium text-careerist-text-primary mb-1">
+                            No. of referral sent
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="e.g. 12"
+                            value={reportReferralsInput}
+                            onChange={(e) => setReportReferralsInput(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-careerist-text-primary mb-1">
+                            No. of connection request sent
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="e.g. 30"
+                            value={reportConnectionsInput}
+                            onChange={(e) => setReportConnectionsInput(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
                       </div>
-                      {reportsData.notes && reportsData.notes.length > 0 ? (
-                        <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                          {reportsData.notes.map((note: any) => (
-                            <div key={note.id} className="p-3 rounded-lg border border-careerist-border bg-white">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-careerist-text-primary">{note.title}</p>
-                                <p className="text-xs text-careerist-text-secondary whitespace-nowrap">
-                                  {new Date(note.occurredAt).toLocaleString()}
+                      <div className="border-t border-careerist-border pt-4 mt-4">
+                        <h4 className="text-sm font-semibold text-careerist-text-primary mb-3">Custom outreach fields</h4>
+                        <ReportOutreachCustomFieldsEditor
+                          rows={reportCustomOutreachRows}
+                          onChange={setReportCustomOutreachRows}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="mt-4"
+                        onClick={() => void saveReportOutreachMetrics()}
+                        isLoading={savingReportOutreach}
+                      >
+                        Save outreach metrics
+                      </Button>
+                    </div>
+
+                    {/* Applications → Log Action entries for this client */}
+                    <div className="bg-careerist-card rounded-xl p-6 border border-careerist-border shadow-md">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-lg font-semibold text-careerist-text-primary">Application pipeline log</h3>
+                        <Badge variant="neutral">{reportsData.applicationPipelineLog?.length ?? 0}</Badge>
+                      </div>
+                      <p className="text-xs text-careerist-text-secondary mb-4">
+                        Actions logged from <strong>Applications</strong> (Log Action on each card). Included in the shared report and client emails when you update the snapshot.
+                      </p>
+                      {reportsData.applicationPipelineLog && reportsData.applicationPipelineLog.length > 0 ? (
+                        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                          {reportsData.applicationPipelineLog.map((entry: any) => {
+                            const actionLabel =
+                              {
+                                APPLIED: 'Applied',
+                                OUTREACH: 'Outreach',
+                                FOLLOW_UP: 'Follow-up',
+                                INTERVIEW: 'Interview',
+                                OFFER: 'Offer',
+                                REJECTION: 'Rejection',
+                                NOTE: 'Note',
+                                NO_RESPONSE: 'No Response',
+                              }[entry.actionType as string] || String(entry.actionType || '').replace(/_/g, ' ')
+                            const role = [entry.jobTitle, entry.company].filter(Boolean).join(' · ') || 'Application'
+                            return (
+                              <div key={entry.id} className="p-3 rounded-lg border border-careerist-border bg-white">
+                                <div className="flex flex-wrap justify-between gap-2 text-xs text-careerist-text-secondary">
+                                  <span>{new Date(entry.performedAt).toLocaleString()}</span>
+                                  <span>{entry.performedBy}</span>
+                                </div>
+                                <p className="text-sm font-medium text-careerist-text-primary mt-2">
+                                  {role}
+                                  <span className="text-careerist-text-secondary font-normal">
+                                    {' '}
+                                    · Stage {String(entry.stage || '').replace(/_/g, ' ')} · {actionLabel}
+                                  </span>
                                 </p>
+                                {entry.description && (
+                                  <p className="text-sm text-careerist-text-primary whitespace-pre-wrap mt-1">{entry.description}</p>
+                                )}
                               </div>
-                              {note.description && (
-                                <p className="text-sm text-careerist-text-primary whitespace-pre-wrap mt-1">
-                                  {note.description}
-                                </p>
-                              )}
-                              <p className="text-xs text-careerist-text-secondary mt-2">By {note.createdBy}</p>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       ) : (
-                        <p className="text-sm text-careerist-text-secondary">No notes recorded for this client yet.</p>
+                        <p className="text-sm text-careerist-text-secondary">
+                          No application log actions yet. Open <strong>Applications</strong> and use <strong>Log Action</strong> on a client&apos;s application.
+                        </p>
                       )}
                     </div>
 
@@ -1516,6 +1697,14 @@ export default function ClientProfilePage() {
                   </li>
                   <li>
                     <code className="bg-white px-1 rounded">{'{{reportSummaryHtml}}'}</code> — HTML block for rich email bodies
+                  </li>
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{referralsSentCount}}'}</code>,{' '}
+                    <code className="bg-white px-1 rounded">{'{{connectionRequestsSentCount}}'}</code> — saved outreach totals (empty if not set)
+                  </li>
+                  <li>
+                    <code className="bg-white px-1 rounded">{'{{outreachCustomSummary}}'}</code>,{' '}
+                    <code className="bg-white px-1 rounded">{'{{outreachCustomSummaryHtml}}'}</code> — custom outreach name/value lines only
                   </li>
                 </ul>
               </div>
@@ -1986,6 +2175,83 @@ function ClientEditForm({
   )
 }
 
+/** A single job row flattened from an application, carrying the parent application's metadata. */
+type ApprovalJobCard = {
+  applicationJobId: string | null
+  applicationId: string
+  jobId: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  respondedAt: string | null
+  job: { id?: string; title: string; company: string; location?: string } | null
+  applicationStage: string
+  approvalToken: string | null
+  createdAt: string
+}
+
+function flattenApplicationsToJobCards(applications: any[]): ApprovalJobCard[] {
+  const cards: ApprovalJobCard[] = []
+
+  for (const app of applications) {
+    const ajList = (app.applicationJobs || []) as any[]
+
+    if (ajList.length > 0) {
+      for (const aj of ajList) {
+        cards.push({
+          applicationJobId: aj.id,
+          applicationId: app.id,
+          jobId: aj.jobId,
+          status: (aj.status as ApprovalJobCard['status']) || 'PENDING',
+          respondedAt: aj.respondedAt ? String(aj.respondedAt) : null,
+          job: aj.job || null,
+          applicationStage: app.stage,
+          approvalToken: app.approvalToken || null,
+          createdAt: app.createdAt,
+        })
+      }
+    } else if (app.job?.id) {
+      let status: ApprovalJobCard['status'] = 'PENDING'
+      if (app.stage === 'PENDING_CLIENT_APPROVAL') status = 'PENDING'
+      else if (app.stage === 'REJECTED') status = 'REJECTED'
+      else status = 'APPROVED'
+      cards.push({
+        applicationJobId: null,
+        applicationId: app.id,
+        jobId: app.job.id,
+        status,
+        respondedAt: app.approvedAt ? String(app.approvedAt) : null,
+        job: app.job,
+        applicationStage: app.stage,
+        approvalToken: app.approvalToken || null,
+        createdAt: app.createdAt,
+      })
+    }
+  }
+
+  return cards
+}
+
+function JobClientDecisionBadge({ status }: { status: ApprovalJobCard['status'] }) {
+  if (status === 'APPROVED') {
+    return (
+      <Badge variant="success" className="text-[10px] px-2 py-0.5 font-semibold uppercase tracking-wide">
+        Approved
+      </Badge>
+    )
+  }
+  if (status === 'REJECTED') {
+    return (
+      <Badge variant="error" className="text-[10px] px-2 py-0.5 font-semibold uppercase tracking-wide">
+        Declined
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="warning" className="text-[10px] px-2 py-0.5 font-semibold uppercase tracking-wide">
+      Pending
+    </Badge>
+  )
+}
+
 function PendingApprovalsList({ clientId }: { clientId: string }) {
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1998,9 +2264,12 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
   const loadApprovals = async () => {
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`/api/clients/${clientId}/applications?pageSize=100`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      const res = await fetch(
+        `/api/clients/${clientId}/applications?pageSize=100&sortBy=createdAt&sortOrder=desc`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
       if (res.ok) {
         const data = await res.json()
         setApplications(data.applications || [])
@@ -2014,48 +2283,64 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
 
   if (loading) return <div className="p-8 text-center"><Spinner /></div>
 
-  const pending = applications.filter((app) => app.stage === 'PENDING_CLIENT_APPROVAL')
-  const decided = applications.filter((app) => app.stage === 'IDENTIFIED' || app.stage === 'REJECTED')
+  const allCards = flattenApplicationsToJobCards(applications)
+  const pendingCards = allCards.filter(
+    (c) => c.applicationStage === 'PENDING_CLIENT_APPROVAL' && c.status === 'PENDING'
+  )
+  const decidedCards = allCards.filter(
+    (c) => c.status === 'APPROVED' || c.status === 'REJECTED'
+  )
 
-  const hasPending = pending.length > 0
-  const hasDecided = decided.length > 0
+  const hasPending = pendingCards.length > 0
+  const hasDecided = decidedCards.length > 0
 
-  const renderApplicationCard = (app: any) => {
-    const jobs = (app.applicationJobs || [])
-      .map((aj: any) => aj.job)
-      .filter((j: any) => j) as Array<{ id: string; title: string; company: string; location?: string }>
-    const primaryJob = jobs[0] || app.job || null
-    const extraCount = jobs.length > 1 ? jobs.length - 1 : 0
+  const renderJobCard = (card: ApprovalJobCard) => {
+    const job = card.job
     return (
-      <div key={app.id} className="p-6 hover:bg-gray-50 transition-colors">
-        <div className="flex items-center justify-between">
-          <div>
+      <div
+        key={card.applicationJobId || `${card.applicationId}-${card.jobId}`}
+        className="p-6 cursor-default select-none"
+        role="group"
+        aria-label="Job approval card"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
             <h4 className="text-md font-bold text-gray-900">
-              {primaryJob?.title || '—'}
-              {extraCount > 0 && (
-                <span className="ml-1 text-[11px] text-gray-500 font-medium">
-                  (+{extraCount} more)
-                </span>
-              )}
+              {job?.title || '—'}
             </h4>
-            <p className="text-sm text-gray-600 font-medium">{primaryJob?.company || '—'}</p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {primaryJob?.location || '-'}</span>
-              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Sourced {new Date(app.createdAt).toLocaleDateString()}</span>
+            <p className="text-sm text-gray-600 font-medium">{job?.company || '—'}</p>
+            <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3 shrink-0" /> {job?.location || '-'}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 shrink-0" /> Sourced {new Date(card.createdAt).toLocaleDateString()}
+              </span>
             </div>
           </div>
-          <div className="text-right">
-            {app.stage === 'PENDING_CLIENT_APPROVAL' && app.approvalToken && (
+
+          <div className="flex flex-col items-end gap-2 shrink-0 lg:max-w-[220px]">
+            <JobClientDecisionBadge status={card.status} />
+            {card.respondedAt && (
+              <span className="text-[10px] text-gray-400">
+                {new Date(card.respondedAt).toLocaleString(undefined, {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
+            {card.applicationStage === 'PENDING_CLIENT_APPROVAL' && card.approvalToken && (
               <>
-                <Badge variant="info" className="mb-2 block w-fit ml-auto border-blue-100 text-blue-700 bg-blue-50">Token Generated</Badge>
-                <p className="text-[10px] text-gray-400 font-mono select-all">/public/approvals/{app.approvalToken}</p>
+                <Badge variant="info" className="w-fit border-blue-100 text-blue-700 bg-blue-50 text-[10px]">
+                  Token active
+                </Badge>
+                <p className="text-[10px] text-gray-400 font-mono select-all break-all">
+                  /public/approvals/{card.approvalToken}
+                </p>
               </>
             )}
-            {app.stage === 'IDENTIFIED' && app.approvedAt && (
-              <Badge variant="success" className="mb-1">Client Approved</Badge>
-            )}
-            {app.stage === 'REJECTED' && (
-              <Badge variant="error" className="mb-1">Client Rejected</Badge>
+            {card.applicationStage === 'IDENTIFIED' && card.status === 'APPROVED' && (
+              <Badge variant="success" className="text-[10px]">Pipeline started</Badge>
             )}
           </div>
         </div>
@@ -2084,7 +2369,7 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Pending
+            Pending ({pendingCards.length})
           </button>
           <button
             onClick={() => setActiveSubTab('approved')}
@@ -2094,29 +2379,29 @@ function PendingApprovalsList({ clientId }: { clientId: string }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Approved / Rejected
+            Approved / Rejected ({decidedCards.length})
           </button>
         </nav>
       </div>
 
       {activeSubTab === 'pending' ? (
-        pending.length === 0 ? (
+        pendingCards.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
             <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p>No jobs currently pending client approval.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {pending.map(renderApplicationCard)}
+            {pendingCards.map(renderJobCard)}
           </div>
         )
-      ) : decided.length === 0 ? (
+      ) : decidedCards.length === 0 ? (
         <div className="p-12 text-center text-gray-500">
           <p>No recently approved or rejected jobs for this client.</p>
         </div>
       ) : (
         <div className="divide-y divide-gray-100">
-          {decided.map(renderApplicationCard)}
+          {decidedCards.map(renderJobCard)}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ServiceType } from '@prisma/client'
+import { reportOutreachCustomFieldsSchema } from './report-outreach-fields'
 
 // Normalize email: accept any string from leads/forms; store only valid email or undefined (avoids 400 on convert)
 const emailSchema = z
@@ -48,6 +49,12 @@ export const createClientSchema = z.object({
   linkedInOptimizedAt: z.string().datetime().optional(),
   jobSearchInitiated: z.boolean().optional(),
   jobSearchInitiatedAt: z.string().datetime().optional(),
+
+  /** Reports / shared client report — non-negative integers or null to clear */
+  referralsSentCount: z.union([z.number().int().min(0), z.null()]).optional(),
+  connectionRequestsSentCount: z.union([z.number().int().min(0), z.null()]).optional(),
+  /** User-defined outreach metrics (label + value) */
+  reportOutreachCustomFields: reportOutreachCustomFieldsSchema.optional(),
 })
 
 export const updateClientSchema = createClientSchema.partial().extend({

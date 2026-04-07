@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
-import { assignJobToCandidate, bulkAssignJobToCandidates } from '@/modules/jobs/service'
-import { assignJobSchema, bulkAssignJobSchema } from '@/modules/jobs/schemas'
+import { assignJobToCandidate, bulkAssignJobToCandidates, bulkAssignJobsToCandidate } from '@/modules/jobs/service'
+import { assignJobSchema, bulkAssignJobSchema, bulkAssignJobsToCandidateSchema } from '@/modules/jobs/schemas'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { logMutation } from '@/lib/mutation-logger'
 
@@ -20,7 +20,36 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Check if it's bulk assignment
+    // Multiple jobs -> one client
+    if (body.jobIds && Array.isArray(body.jobIds) && body.candidateId) {
+      const validated = bulkAssignJobsToCandidateSchema.parse(body)
+      const result = await bulkAssignJobsToCandidate(
+        validated.jobIds,
+        validated.candidateId,
+        authContext.userId
+      )
+
+      await logMutation({
+        request,
+        userId: authContext.userId,
+        action: 'UPDATE',
+        entity: 'Application',
+        entityId: result.application.id,
+        entityName: `Bulk job assignment to client ${validated.candidateId}`,
+        newData: {
+          assignedJobIds: result.assignedJobIds,
+          count: result.count,
+        },
+      }).catch((err) => {
+        console.error('Failed to log mutation:', err)
+      })
+
+      const response = NextResponse.json(result, { status: 201 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+
+    // One job -> many clients
     if (body.candidateIds && Array.isArray(body.candidateIds)) {
       const validated = bulkAssignJobSchema.parse(body)
       const result = await bulkAssignJobToCandidates(

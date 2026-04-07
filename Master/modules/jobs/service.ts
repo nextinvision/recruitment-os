@@ -9,6 +9,7 @@ import {
   BulkCreateJobsInput,
 } from './schemas'
 import type { BulkDeleteJobsInput } from './schemas'
+import { APPLICATION_JOBS_ORDER_BY } from '@/modules/applications/application-job-order'
 
 // Normalize job data
 function normalizeJobData(data: any): any {
@@ -410,6 +411,11 @@ export async function getJobs(
           id: true,
         },
       },
+      applicationJobs: {
+        select: {
+          applicationId: true,
+        },
+      },
     },
     orderBy,
     skip,
@@ -418,8 +424,22 @@ export async function getJobs(
 
   const totalPages = Math.ceil(total / pageSize)
 
+  const jobsWithAssignmentCount = jobs.map((job) => {
+    const applicationIds = new Set<string>()
+    for (const a of job.applications) {
+      applicationIds.add(a.id)
+    }
+    for (const aj of job.applicationJobs) {
+      applicationIds.add(aj.applicationId)
+    }
+    return {
+      ...job,
+      assignedApplicationCount: applicationIds.size,
+    }
+  })
+
   return {
-    jobs,
+    jobs: jobsWithAssignmentCount,
     total,
     page,
     pageSize,
@@ -570,75 +590,165 @@ export async function bulkCreateJobs(input: BulkCreateJobsInput) {
   }
 }
 
-// Assign job to candidate (creates application)
+const ASSIGN_APPLICATION_INCLUDE = {
+  job: true,
+  client: true,
+  recruiter: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+    },
+  },
+  applicationJobs: {
+    orderBy: APPLICATION_JOBS_ORDER_BY,
+    include: {
+      job: true,
+    },
+  },
+} as const
+
+/** True if this job is already linked to the client (primary Application.jobId or ApplicationJob). */
+async function isJobAlreadyAssignedToClient(clientId: string, jobId: string): Promise<boolean> {
+  const asPrimary = await db.application.findFirst({
+    where: { clientId, jobId },
+    select: { id: true },
+  })
+  if (asPrimary) return true
+
+  const viaJoin = await db.applicationJob.findFirst({
+    where: {
+      jobId,
+      application: { clientId },
+    },
+    select: { id: true },
+  })
+  return !!viaJoin
+}
+
+async function isJobAlreadyAssignedToClientTx(
+  tx: Prisma.TransactionClient,
+  clientId: string,
+  jobId: string
+): Promise<boolean> {
+  const asPrimary = await tx.application.findFirst({
+    where: { clientId, jobId },
+    select: { id: true },
+  })
+  if (asPrimary) return true
+
+  const viaJoin = await tx.applicationJob.findFirst({
+    where: {
+      jobId,
+      application: { clientId },
+    },
+    select: { id: true },
+  })
+  return !!viaJoin
+}
+
+/** Legacy rows may have Application.jobId set but no ApplicationJob row; keep join table consistent. */
+export async function ensurePrimaryJobInApplicationJobs(
+  applicationId: string,
+  primaryJobId: string | null,
+  existingRows: { jobId: string }[]
+) {
+  if (!primaryJobId) return
+  if (existingRows.some((r) => r.jobId === primaryJobId)) return
+  await db.applicationJob.create({
+    data: { applicationId, jobId: primaryJobId },
+  })
+}
+
+async function ensurePrimaryJobInApplicationJobsTx(
+  tx: Prisma.TransactionClient,
+  applicationId: string,
+  primaryJobId: string | null,
+  existingRows: { jobId: string }[]
+) {
+  if (!primaryJobId) return
+  if (existingRows.some((r) => r.jobId === primaryJobId)) return
+  await tx.applicationJob.create({
+    data: { applicationId, jobId: primaryJobId },
+  })
+}
+
+/**
+ * Assign a job to a client: adds an ApplicationJob row to the client's existing application when one exists
+ * (one pipeline per client), otherwise creates a new application with primary job + join row.
+ */
 export async function assignJobToCandidate(
   jobId: string,
   candidateId: string,
   recruiterId: string
 ) {
-  // Validate job exists
   const job = await db.job.findUnique({ where: { id: jobId } })
   if (!job) {
     throw new Error('Job not found')
   }
 
-  // Note: Application.clientId references Client, not Candidate. Use assignJobToClient instead.
-  // Validate client exists (clientId must reference clients table)
   const client = await db.client.findUnique({ where: { id: candidateId } })
   if (!client) {
     throw new Error('Client not found. Job assignment requires a valid Client ID (from Clients, not Candidates).')
   }
 
-  // Check if application already exists
-  const existingApplication = await db.application.findFirst({
-    where: {
-      jobId,
-      clientId: candidateId,
+  if (await isJobAlreadyAssignedToClient(candidateId, jobId)) {
+    throw new Error('This job is already assigned to this client')
+  }
+
+  const existingApp = await db.application.findFirst({
+    where: { clientId: candidateId },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      applicationJobs: { orderBy: APPLICATION_JOBS_ORDER_BY },
     },
   })
 
-  if (existingApplication) {
-    throw new Error('Application already exists for this job and client')
+  if (existingApp) {
+    await ensurePrimaryJobInApplicationJobs(
+      existingApp.id,
+      existingApp.jobId,
+      existingApp.applicationJobs
+    )
+
+    await db.applicationJob.create({
+      data: {
+        applicationId: existingApp.id,
+        jobId,
+      },
+    })
+
+    return db.application.findUniqueOrThrow({
+      where: { id: existingApp.id },
+      include: ASSIGN_APPLICATION_INCLUDE,
+    })
   }
 
-  // Create application (clientId references clients table)
-  const application = await db.application.create({
+  return db.application.create({
     data: {
       jobId,
       clientId: candidateId,
       recruiterId,
       stage: 'IDENTIFIED',
-    },
-    include: {
-      job: true,
-      client: true,
-      recruiter: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-        },
+      applicationJobs: {
+        create: [{ jobId }],
       },
     },
+    include: ASSIGN_APPLICATION_INCLUDE,
   })
-
-  return application
 }
 
-// Bulk assign job to multiple candidates
+/** Bulk assign: same semantics as assignJobToCandidate per client. */
 export async function bulkAssignJobToCandidates(
   jobId: string,
   candidateIds: string[],
   recruiterId: string
 ) {
-  // Validate job exists
   const job = await db.job.findUnique({ where: { id: jobId } })
   if (!job) {
     throw new Error('Job not found')
   }
 
-  // Note: Application.clientId references Client, not Candidate. Use bulkAssignJobToClients instead.
-  // Validate all clients exist (clientIds must reference clients table)
   const clients = await db.client.findMany({
     where: {
       id: { in: candidateIds },
@@ -651,39 +761,232 @@ export async function bulkAssignJobToCandidates(
     throw new Error(`One or more clients not found. Job assignment requires valid Client IDs (from Clients, not Candidates). Missing: ${missing.join(', ')}`)
   }
 
-  // Create applications in transaction
   const result = await db.$transaction(async (tx) => {
-    const createdApplications = []
+    const applications: any[] = []
 
     for (const clientId of candidateIds) {
-      // Check if application already exists
-      const existing = await tx.application.findFirst({
-        where: {
-          jobId,
-          clientId,
+      if (await isJobAlreadyAssignedToClientTx(tx, clientId, jobId)) {
+        continue
+      }
+
+      const existingApp = await tx.application.findFirst({
+        where: { clientId },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          applicationJobs: { orderBy: APPLICATION_JOBS_ORDER_BY },
         },
       })
 
-      if (!existing) {
-        const application = await tx.application.create({
+      if (existingApp) {
+        await ensurePrimaryJobInApplicationJobsTx(
+          tx,
+          existingApp.id,
+          existingApp.jobId,
+          existingApp.applicationJobs
+        )
+
+        await tx.applicationJob.create({
+          data: {
+            applicationId: existingApp.id,
+            jobId,
+          },
+        })
+
+        const full = await tx.application.findUniqueOrThrow({
+          where: { id: existingApp.id },
+          include: ASSIGN_APPLICATION_INCLUDE,
+        })
+        applications.push(full)
+      } else {
+        const created = await tx.application.create({
           data: {
             jobId,
             clientId,
             recruiterId,
             stage: 'IDENTIFIED',
+            applicationJobs: {
+              create: [{ jobId }],
+            },
           },
         })
-        createdApplications.push(application)
+        const full = await tx.application.findUniqueOrThrow({
+          where: { id: created.id },
+          include: ASSIGN_APPLICATION_INCLUDE,
+        })
+        applications.push(full)
       }
     }
 
     return {
-      count: createdApplications.length,
-      applications: createdApplications,
+      count: applications.length,
+      applications,
     }
   })
 
   return result
+}
+
+/** Bulk assign multiple jobs to a single client in one request. */
+export async function bulkAssignJobsToCandidate(
+  jobIds: string[],
+  candidateId: string,
+  recruiterId: string
+) {
+  const uniqueJobIds = Array.from(new Set(jobIds))
+  if (uniqueJobIds.length === 0) {
+    throw new Error('At least one job is required')
+  }
+
+  const client = await db.client.findUnique({ where: { id: candidateId } })
+  if (!client) {
+    throw new Error('Client not found. Job assignment requires a valid Client ID (from Clients, not Candidates).')
+  }
+
+  const jobs = await db.job.findMany({
+    where: { id: { in: uniqueJobIds } },
+    select: { id: true },
+  })
+  if (jobs.length !== uniqueJobIds.length) {
+    const found = new Set(jobs.map((j) => j.id))
+    const missing = uniqueJobIds.filter((id) => !found.has(id))
+    throw new Error(`One or more jobs not found. Missing: ${missing.join(', ')}`)
+  }
+
+  return db.$transaction(async (tx) => {
+    const existingApp = await tx.application.findFirst({
+      where: { clientId: candidateId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        applicationJobs: { orderBy: APPLICATION_JOBS_ORDER_BY },
+      },
+    })
+
+    const assignedJobIds: string[] = []
+    let applicationId: string
+
+    if (existingApp) {
+      applicationId = existingApp.id
+      await ensurePrimaryJobInApplicationJobsTx(
+        tx,
+        existingApp.id,
+        existingApp.jobId,
+        existingApp.applicationJobs
+      )
+
+      for (const jobId of uniqueJobIds) {
+        if (await isJobAlreadyAssignedToClientTx(tx, candidateId, jobId)) {
+          continue
+        }
+        await tx.applicationJob.create({
+          data: {
+            applicationId: existingApp.id,
+            jobId,
+          },
+        })
+        assignedJobIds.push(jobId)
+      }
+    } else {
+      const primaryJobId = uniqueJobIds[0]
+      const created = await tx.application.create({
+        data: {
+          jobId: primaryJobId,
+          clientId: candidateId,
+          recruiterId,
+          stage: 'IDENTIFIED',
+          applicationJobs: {
+            create: uniqueJobIds.map((jobId) => ({ jobId })),
+          },
+        },
+      })
+      applicationId = created.id
+      assignedJobIds.push(...uniqueJobIds)
+    }
+
+    const application = await tx.application.findUniqueOrThrow({
+      where: { id: applicationId },
+      include: ASSIGN_APPLICATION_INCLUDE,
+    })
+
+    return {
+      count: assignedJobIds.length,
+      assignedJobIds,
+      application,
+    }
+  })
+}
+
+export async function getAssignedJobsForClient(
+  clientId: string,
+  userId: string,
+  userRole: UserRole
+) {
+  const client = await db.client.findUnique({
+    where: { id: clientId },
+    select: { id: true },
+  })
+  if (!client) {
+    throw new Error('Client not found')
+  }
+
+  const accessWhere =
+    userRole === UserRole.ADMIN || userRole === UserRole.MANAGER
+      ? { clientId }
+      : { clientId, recruiterId: userId }
+
+  const applications = await db.application.findMany({
+    where: accessWhere,
+    select: {
+      id: true,
+      jobId: true,
+      applicationJobs: {
+        orderBy: APPLICATION_JOBS_ORDER_BY,
+        select: { jobId: true, createdAt: true },
+      },
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const jobIdToAssignedAt = new Map<string, Date>()
+
+  for (const app of applications) {
+    if (app.jobId && !app.applicationJobs.some((aj) => aj.jobId === app.jobId)) {
+      const current = jobIdToAssignedAt.get(app.jobId)
+      if (!current || app.createdAt > current) {
+        jobIdToAssignedAt.set(app.jobId, app.createdAt)
+      }
+    }
+
+    for (const aj of app.applicationJobs) {
+      const current = jobIdToAssignedAt.get(aj.jobId)
+      if (!current || aj.createdAt > current) {
+        jobIdToAssignedAt.set(aj.jobId, aj.createdAt)
+      }
+    }
+  }
+
+  const jobIds = Array.from(jobIdToAssignedAt.keys())
+  if (jobIds.length === 0) {
+    return []
+  }
+
+  const jobs = await db.job.findMany({
+    where: { id: { in: jobIds } },
+    select: {
+      id: true,
+      title: true,
+      company: true,
+      location: true,
+      createdAt: true,
+    },
+  })
+
+  return jobs
+    .map((job) => ({
+      ...job,
+      assignedAt: jobIdToAssignedAt.get(job.id)?.toISOString() ?? job.createdAt.toISOString(),
+    }))
+    .sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime())
 }
 
 // Get duplicate jobs
@@ -765,15 +1068,33 @@ export async function resolveDuplicate(
   }
 
   if (action === 'merge') {
-    // Merge: Transfer applications from duplicate to original, then delete duplicate
+    // Merge: Transfer applications and ApplicationJob links from duplicate to original, then delete duplicate
     await db.$transaction(async (tx) => {
-      // Update applications to point to original job
+      const joinRows = await tx.applicationJob.findMany({
+        where: { jobId: duplicateId },
+      })
+      for (const link of joinRows) {
+        const already = await tx.applicationJob.findFirst({
+          where: {
+            applicationId: link.applicationId,
+            jobId: originalId,
+          },
+        })
+        if (already) {
+          await tx.applicationJob.delete({ where: { id: link.id } })
+        } else {
+          await tx.applicationJob.update({
+            where: { id: link.id },
+            data: { jobId: originalId },
+          })
+        }
+      }
+
       await tx.application.updateMany({
         where: { jobId: duplicateId },
         data: { jobId: originalId },
       })
 
-      // Delete duplicate
       await tx.job.delete({
         where: { id: duplicateId },
       })
@@ -811,6 +1132,11 @@ export async function exportJobsToCSV(
           id: true,
         },
       },
+      applicationJobs: {
+        select: {
+          applicationId: true,
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -832,21 +1158,30 @@ export async function exportJobsToCSV(
     'Is Duplicate',
   ]
 
-  const rows = jobs.map(job => [
-    job.id,
-    job.title,
-    job.company,
-    job.location,
-    job.source,
-    job.status,
-    job.skills.join('; '),
-    job.experienceRequired || '',
-    job.salaryRange || '',
-    `${job.recruiter.firstName} ${job.recruiter.lastName}`,
-    job.applications.length.toString(),
-    job.createdAt.toISOString(),
-    job.isDuplicate ? 'Yes' : 'No',
-  ])
+  const rows = jobs.map((job) => {
+    const applicationIds = new Set<string>()
+    for (const a of job.applications) {
+      applicationIds.add(a.id)
+    }
+    for (const aj of job.applicationJobs) {
+      applicationIds.add(aj.applicationId)
+    }
+    return [
+      job.id,
+      job.title,
+      job.company,
+      job.location,
+      job.source,
+      job.status,
+      job.skills.join('; '),
+      job.experienceRequired || '',
+      job.salaryRange || '',
+      `${job.recruiter.firstName} ${job.recruiter.lastName}`,
+      String(applicationIds.size),
+      job.createdAt.toISOString(),
+      job.isDuplicate ? 'Yes' : 'No',
+    ]
+  })
 
   const csv = [
     headers.join(','),

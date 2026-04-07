@@ -1,5 +1,5 @@
 import { getApiUrl } from '../shared/constants.js'
-import { LoginCredentials, LoginResponse, JobInput, BulkJobsResponse } from '../shared/types.js'
+import { LoginCredentials, LoginResponse, BulkJobsResponse } from '../shared/types.js'
 import { API_ENDPOINTS, STORAGE_KEYS } from '../shared/constants.js'
 
 export class ApiClient {
@@ -132,7 +132,7 @@ export class ApiClient {
     return !!token
   }
 
-  async submitBulkJobs(jobs: JobInput[]): Promise<BulkJobsResponse> {
+  async submitBulkJobs(jobs: any[]): Promise<BulkJobsResponse> {
     const token = await this.getToken()
     if (!token) {
       throw new Error('Not authenticated. Please login first.')
@@ -153,7 +153,22 @@ export class ApiClient {
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Submission failed' }))
         console.error('[API Client] Submit error:', error)
-        throw new Error(error.error || `Submission failed: ${response.statusText}`)
+        let message = 'Submission failed'
+        if (typeof error.error === 'string') {
+          message = error.error
+        } else if (Array.isArray(error.error)) {
+          message = error.error
+            .map((err: any) => {
+              if (typeof err === 'string') return err
+              if (err?.message) return err.message
+              if (err?.path?.length) return `${err.path.join('.')}: ${err.message || 'Invalid value'}`
+              return 'Validation error'
+            })
+            .join('; ')
+        } else if (error.error?.message) {
+          message = error.error.message
+        }
+        throw new Error(message || `Submission failed: ${response.statusText}`)
       }
 
       const result = await response.json()

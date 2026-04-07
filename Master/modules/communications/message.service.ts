@@ -13,6 +13,33 @@ import { blankTemplateLinkVariablesForBody } from './email-appended-content'
 
 export type SendMessagePayload = SendMessageInput & { sentBy: string }
 
+function looksLikeHtml(input: string): boolean {
+  // Heuristic: treat content as HTML if it contains common markup tags.
+  // We intentionally keep this conservative to avoid changing templates that are already HTML.
+  return (
+    /<!doctype|<html\b|<\/\s*[a-z][\s\S]*?>/i.test(input) ||
+    /<(p|div|br|span|a|table|tr|td|th|ul|ol|li|h[1-6]|strong|em|code|pre|img|button|section|article|header|footer)\b/i.test(input)
+  )
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function plainTextToEmailHtml(plainText: string): string {
+  // Convert plain-text newlines into <br/> while preserving the content as text nodes.
+  const escaped = escapeHtml(plainText)
+  const withBreaks = escaped.replace(/\r\n|\r|\n/g, '<br/>')
+  return `
+<div style="font-family: Arial,Helvetica,sans-serif;font-size:14px;color:#111;line-height:1.4;">
+  ${withBreaks}
+</div>`.trim()
+}
+
 export class MessageService {
   /**
    * Send message with retry logic
@@ -45,6 +72,10 @@ export class MessageService {
 
     let renderedContent = renderMessageTemplate(content, varsForBody)
     const renderedSubject = subject ? renderMessageTemplate(subject, vars) : ''
+
+    if (channel === MessageChannel.EMAIL && renderedContent && !looksLikeHtml(renderedContent)) {
+      renderedContent = plainTextToEmailHtml(renderedContent)
+    }
 
     if (channel === MessageChannel.EMAIL && appendedEmailHtml && appendedEmailHtml.trim() !== '') {
       renderedContent = `${renderedContent}${appendedEmailHtml}`

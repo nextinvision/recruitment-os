@@ -3,8 +3,10 @@ import { db } from '@/lib/db'
 import { AnalyticsService } from '@/modules/analytics/service'
 import { v4 as uuidv4 } from 'uuid'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
-import { buildReportEmailVariables } from '@/modules/communications/report-email-variables'
+import { buildReportEmailVariables, type ClientMetricsSnapshot } from '@/modules/communications/report-email-variables'
 import { buildEmailLinkAppendSection } from '@/modules/communications/email-appended-content'
+import { buildReportSnapshotData } from '@/modules/communications/report-snapshot-merge'
+import { parseStoredReportOutreachCustomFields } from '@/modules/clients/report-outreach-fields'
 
 // GET /api/clients/[id]/report-snapshot - Get existing snapshot metadata
 export async function GET(
@@ -43,15 +45,32 @@ export async function POST(
         const analyticsService = new AnalyticsService()
         const metrics = await analyticsService.getClientMetrics(clientId)
 
+        const clientRow = await db.client.findUnique({
+            where: { id: clientId },
+            select: {
+                referralsSentCount: true,
+                connectionRequestsSentCount: true,
+                reportOutreachCustomFields: true,
+            },
+        })
+
+        const snapshotPayload = buildReportSnapshotData(metrics, {
+            referralsSentCount: clientRow?.referralsSentCount ?? null,
+            connectionRequestsSentCount: clientRow?.connectionRequestsSentCount ?? null,
+            reportOutreachCustomFields: parseStoredReportOutreachCustomFields(
+                clientRow?.reportOutreachCustomFields
+            ),
+        })
+
         const snapshot = await db.reportSnapshot.upsert({
             where: { clientId },
             create: {
                 clientId,
-                data: metrics as any,
+                data: snapshotPayload as any,
                 token: uuidv4()
             },
             update: {
-                data: metrics as any,
+                data: snapshotPayload as any,
                 updatedAt: new Date()
             }
         })
@@ -67,13 +86,14 @@ export async function POST(
 
                 const template = await getTemplateById(templateId)
                 if (template) {
-                    const metricsData = snapshot.data as {
-                        funnelPerformance?: Array<{ stage: string; count: number }>
-                        activityDistribution?: Array<{ type: string; count: number }>
-                    }
-                    const metrics = {
+                    const metricsData = snapshot.data as ClientMetricsSnapshot
+                    const metricsForEmail: ClientMetricsSnapshot = {
                         funnelPerformance: metricsData?.funnelPerformance ?? [],
                         activityDistribution: metricsData?.activityDistribution ?? [],
+                        referralsSentCount: metricsData?.referralsSentCount ?? null,
+                        connectionRequestsSentCount: metricsData?.connectionRequestsSentCount ?? null,
+                        applicationPipelineLog: metricsData?.applicationPipelineLog ?? [],
+                        reportOutreachCustomFields: metricsData?.reportOutreachCustomFields ?? [],
                     }
 
                     const variables = buildReportEmailVariables({
@@ -84,7 +104,7 @@ export async function POST(
                             email: client.email,
                         },
                         snapshotToken: snapshot.token,
-                        metrics,
+                        metrics: metricsForEmail,
                     })
 
                     const reportUrl = variables.reportUrl || variables.reportLink || variables.link || ''

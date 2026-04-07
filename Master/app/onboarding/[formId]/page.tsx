@@ -43,9 +43,9 @@ function OnboardingFormContent() {
       .then((data: FormPublic) => {
         setForm(data)
         const initial: Record<string, string | number | string[]> = {}
-          ; (data.fields || []).forEach((f) => {
-            if (f.type !== 'section') initial[f.key] = ''
-          })
+        ;(data.fields || []).forEach((f) => {
+          if (f.type !== 'section') initial[f.id] = ''
+        })
         setValues(initial)
       })
       .catch((err) => {
@@ -55,8 +55,8 @@ function OnboardingFormContent() {
       .finally(() => setLoading(false))
   }, [formId])
 
-  const handleChange = (key: string, value: string | number | string[]) => {
-    setValues((prev) => ({ ...prev, [key]: value }))
+  const handleChange = (fieldId: string, value: string | number | string[]) => {
+    setValues((prev) => ({ ...prev, [fieldId]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,10 +65,16 @@ function OnboardingFormContent() {
     setSubmitting(true)
     setError('')
     try {
+      const data: Record<string, string | number | string[]> = {}
+      for (const f of form.fields) {
+        if (f.type === 'section') continue
+        const v = values[f.id]
+        if (v !== undefined) data[f.key] = v
+      }
       const res = await fetch(`/api/onboarding-forms/${formId}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: values, leadId: leadId || undefined }),
+        body: JSON.stringify({ data, leadId: leadId || undefined }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -189,8 +195,10 @@ function OnboardingFormContent() {
                   )
                 }
 
-                const value = values[field.key]
+                const value = values[field.id]
                 const commonProps = {
+                  id: `onboarding-${field.id}`,
+                  name: field.id,
                   label: field.label,
                   required: field.required,
                   placeholder: field.placeholder,
@@ -203,14 +211,14 @@ function OnboardingFormContent() {
                       <Textarea
                         {...commonProps}
                         value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleChange(field.key, e.target.value)}
+                        onChange={(e) => handleChange(field.id, e.target.value)}
                         rows={4}
                       />
                     ) : field.type === 'select' ? (
                       <Select
                         {...commonProps}
                         value={typeof value === 'string' || typeof value === 'number' ? value : ''}
-                        onChange={(e) => handleChange(field.key, e.target.value)}
+                        onChange={(e) => handleChange(field.id, e.target.value)}
                         options={[
                           { value: '', label: field.placeholder || 'Please select an option...' },
                           ...(field.options || []).map((o) => ({ value: o, label: o })),
@@ -223,7 +231,7 @@ function OnboardingFormContent() {
                         value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
                         onChange={(e) =>
                           handleChange(
-                            field.key,
+                            field.id,
                             field.type === 'number' ? (e.target.value ? Number(e.target.value) : '') : e.target.value
                           )
                         }

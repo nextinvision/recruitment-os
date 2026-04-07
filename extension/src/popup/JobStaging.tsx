@@ -20,7 +20,6 @@ export const JobStaging: React.FC<JobStagingProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
-    // Auto-select all valid jobs
     const validJobIds = jobs.filter(j => j.isValid).map(j => j.id)
     setSelectedIds(new Set(validJobIds))
   }, [jobs])
@@ -28,43 +27,25 @@ export const JobStaging: React.FC<JobStagingProps> = ({
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
 
   const handleSelectAll = () => {
-    const validJobIds = jobs.filter(j => j.isValid).map(j => j.id)
-    setSelectedIds(new Set(validJobIds))
+    setSelectedIds(new Set(jobs.filter(j => j.isValid).map(j => j.id)))
   }
 
-  const handleDeselectAll = () => {
-    setSelectedIds(new Set())
-  }
+  const handleDeselectAll = () => setSelectedIds(new Set())
 
   const handleDelete = (id: string) => {
     onJobsChange(jobs.filter(j => j.id !== id))
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
-    })
-  }
-
-  const handleEdit = (id: string) => {
-    setEditingId(id)
+    setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n })
   }
 
   const handleSaveEdit = (updatedJob: ScrapedJob) => {
     onJobsChange(jobs.map(j => j.id === updatedJob.id ? updatedJob : j))
-    setEditingId(null)
-  }
-
-  const handleCancelEdit = () => {
     setEditingId(null)
   }
 
@@ -77,27 +58,19 @@ export const JobStaging: React.FC<JobStagingProps> = ({
     await onSubmit(selectedJobs)
   }
 
-  const validJobs = jobs.filter(j => j.isValid)
-  const invalidJobs = jobs.filter(j => !j.isValid)
+  const validCount = jobs.filter(j => j.isValid).length
+  const invalidCount = jobs.length - validCount
 
   return (
     <div>
-      <div style={{
-        padding: '16px',
-        borderBottom: '1px solid #ddd',
-        backgroundColor: '#f9f9f9'
-      }}>
-        <h3 style={{ marginBottom: '8px', fontSize: '16px', fontWeight: 600 }}>
-          Staging Area
-        </h3>
-        <p style={{ fontSize: '12px', color: '#666' }}>
-          Review and edit captured jobs before submitting
-        </p>
+      <div style={{ padding: 16, borderBottom: '1px solid #ddd', background: '#f9f9f9' }}>
+        <h3 style={{ marginBottom: 8, fontSize: 16, fontWeight: 600 }}>Staging Area</h3>
+        <p style={{ fontSize: 12, color: '#666' }}>Review and edit captured jobs before submitting</p>
       </div>
 
       {jobs.length === 0 ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#999' }}>
-          No jobs in staging area. Capture jobs from a supported job portal.
+        <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+          No jobs in staging area. Use "Scan Jobs" on any job page to capture listings.
         </div>
       ) : (
         <>
@@ -109,7 +82,7 @@ export const JobStaging: React.FC<JobStagingProps> = ({
             onDeselectAll={handleDeselectAll}
           />
 
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {jobs.map(job => {
               if (editingId === job.id) {
                 return (
@@ -117,78 +90,78 @@ export const JobStaging: React.FC<JobStagingProps> = ({
                     key={job.id}
                     job={job}
                     onSave={handleSaveEdit}
-                    onCancel={handleCancelEdit}
+                    onCancel={() => setEditingId(null)}
                   />
                 )
               }
+
+              const errors = job.errors || []
 
               return (
                 <div
                   key={job.id}
                   style={{
-                    padding: '12px',
+                    padding: 12,
                     borderBottom: '1px solid #eee',
-                    backgroundColor: job.isValid ? 'white' : '#fff5f5'
+                    background: job.isValid ? 'white' : '#fff5f5',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'start', gap: 12 }}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(job.id)}
                       onChange={() => handleToggleSelect(job.id)}
                       disabled={!job.isValid}
-                      style={{ marginTop: '4px' }}
+                      style={{ marginTop: 4 }}
                     />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, marginBottom: '4px', fontSize: '14px' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14 }}>
                         {job.title || '(No title)'}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
                         {job.company || '(No company)'}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
                         {job.location || '(No location)'}
                       </div>
                       {job.sourceUrl && (
-                        <div style={{ fontSize: '11px', color: '#0073b1', marginBottom: '4px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                          Source: {job.sourceUrl}
-                        </div>
+                        <a
+                          href={job.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'block', fontSize: 11, color: '#0073b1', marginBottom: 4,
+                            textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden',
+                          }}
+                        >
+                          {job.sourceUrl}
+                        </a>
                       )}
                       {job.description && (
                         <div style={{
-                          fontSize: '11px',
-                          color: '#999',
-                          marginTop: '4px',
-                          maxHeight: '40px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
+                          fontSize: 11, color: '#999', marginTop: 4,
+                          maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis',
                         }}>
                           {job.description.substring(0, 100)}...
                         </div>
                       )}
-                      {job.errors.length > 0 && (
+                      {errors.length > 0 && (
                         <div style={{
-                          marginTop: '8px',
-                          padding: '6px',
-                          backgroundColor: '#fee',
-                          color: '#c33',
-                          fontSize: '11px',
-                          borderRadius: '4px'
+                          marginTop: 8, padding: 6,
+                          background: '#fee', color: '#c33',
+                          fontSize: 11, borderRadius: 4,
                         }}>
-                          {job.errors.join(', ')}
+                          {errors.join(', ')}
                         </div>
                       )}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <button
-                        onClick={() => handleEdit(job.id)}
+                        onClick={() => setEditingId(job.id)}
                         style={{
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          backgroundColor: '#f0f0f0',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
+                          padding: '4px 8px', fontSize: 11,
+                          background: '#f0f0f0', border: '1px solid #ddd',
+                          borderRadius: 4, cursor: 'pointer',
                         }}
                       >
                         Edit
@@ -196,13 +169,9 @@ export const JobStaging: React.FC<JobStagingProps> = ({
                       <button
                         onClick={() => handleDelete(job.id)}
                         style={{
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          backgroundColor: '#fee',
-                          border: '1px solid #fcc',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          color: '#c33'
+                          padding: '4px 8px', fontSize: 11,
+                          background: '#fee', border: '1px solid #fcc',
+                          borderRadius: 4, cursor: 'pointer', color: '#c33',
                         }}
                       >
                         Delete
@@ -215,28 +184,21 @@ export const JobStaging: React.FC<JobStagingProps> = ({
           </div>
 
           <div style={{
-            padding: '12px',
-            borderTop: '1px solid #ddd',
-            backgroundColor: '#f9f9f9',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            padding: 12, borderTop: '1px solid #ddd', background: '#f9f9f9',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              {validJobs.length} valid, {invalidJobs.length} invalid
+            <div style={{ fontSize: 12, color: '#666' }}>
+              {validCount} valid, {invalidCount} invalid
             </div>
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || selectedIds.size === 0}
               style={{
                 padding: '10px 20px',
-                backgroundColor: isSubmitting || selectedIds.size === 0 ? '#ccc' : '#0073b1',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: isSubmitting || selectedIds.size === 0 ? 'not-allowed' : 'pointer'
+                background: isSubmitting || selectedIds.size === 0 ? '#ccc' : '#0073b1',
+                color: 'white', border: 'none', borderRadius: 4,
+                fontSize: 14, fontWeight: 600,
+                cursor: isSubmitting || selectedIds.size === 0 ? 'not-allowed' : 'pointer',
               }}
             >
               {isSubmitting ? 'Submitting...' : `Submit ${selectedIds.size} Job(s)`}
@@ -247,4 +209,3 @@ export const JobStaging: React.FC<JobStagingProps> = ({
     </div>
   )
 }
-

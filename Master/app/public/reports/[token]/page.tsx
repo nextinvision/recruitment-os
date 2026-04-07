@@ -3,11 +3,35 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { StatsCard, FunnelChartWidget, Spinner, Alert, Badge } from '@/ui'
-import { formatINR } from '@/lib/currency'
 
 interface SnapshotData {
     funnelPerformance: Array<{ stage: string; count: number }>
     activityDistribution: Array<{ type: string; count: number }>
+    referralsSentCount?: number | null
+    connectionRequestsSentCount?: number | null
+    applicationPipelineLog?: Array<{
+        id: string
+        applicationId: string
+        jobTitle: string | null
+        company: string | null
+        stage: string
+        actionType: string
+        description: string | null
+        performedAt: string
+        performedBy: string
+    }>
+    reportOutreachCustomFields?: Array<{ id: string; label: string; value: string }>
+}
+
+const PIPELINE_ACTION_LABELS: Record<string, string> = {
+    APPLIED: 'Applied',
+    OUTREACH: 'Outreach',
+    FOLLOW_UP: 'Follow-up',
+    INTERVIEW: 'Interview',
+    OFFER: 'Offer',
+    REJECTION: 'Rejection',
+    NOTE: 'Note',
+    NO_RESPONSE: 'No Response',
 }
 
 export default function PublicReportPage() {
@@ -56,6 +80,14 @@ export default function PublicReportPage() {
     if (!report) return null
 
     const { data, client, updatedAt } = report
+    const funnel = data.funnelPerformance ?? []
+    const distribution = data.activityDistribution ?? []
+    const customOutreach = Array.isArray(data.reportOutreachCustomFields) ? data.reportOutreachCustomFields : []
+    const outreachColors = ['orange', 'purple', 'red'] as const
+    const showOutreachStrip =
+        data.referralsSentCount != null ||
+        data.connectionRequestsSentCount != null ||
+        customOutreach.length > 0
 
     return (
         <div className="min-h-screen bg-careerist-bg">
@@ -93,20 +125,44 @@ export default function PublicReportPage() {
                         </div>
                     </div>
 
+                    {showOutreachStrip && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {data.referralsSentCount != null && (
+                                <StatsCard title="Referrals sent" value={String(data.referralsSentCount)} color="blue" />
+                            )}
+                            {data.connectionRequestsSentCount != null && (
+                                <StatsCard
+                                    title="Connection requests sent"
+                                    value={String(data.connectionRequestsSentCount)}
+                                    color="green"
+                                />
+                            )}
+                            {customOutreach.map((row, i) => (
+                                <StatsCard
+                                    key={row.id}
+                                    title={row.label}
+                                    value={row.value.trim() !== '' ? row.value : '—'}
+                                    color={outreachColors[i % outreachColors.length]}
+                                />
+                            ))}
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div className="bg-careerist-card shadow-md rounded-xl p-6 border border-careerist-border">
+                        <div className="bg-careerist-card shadow-md rounded-xl p-6 border border-careerist-border min-w-0">
                             <h3 className="text-lg font-semibold text-careerist-text-primary mb-6">Application Funnel</h3>
-                            <div className="h-[350px]">
-                                <FunnelChartWidget data={data.funnelPerformance} />
-                            </div>
+                            <FunnelChartWidget data={funnel} variant="bare" />
                         </div>
 
-                        <div className="bg-careerist-card shadow-md rounded-xl p-6 border border-careerist-border">
-                            <h3 className="text-lg font-semibold text-careerist-text-primary mb-6">Activity Distribution</h3>
+                        <div className="bg-careerist-card shadow-md rounded-xl p-6 border border-careerist-border min-w-0">
+                            <h3 className="text-lg font-semibold text-careerist-text-primary mb-2">Activity Distribution</h3>
+                            <p className="text-xs text-careerist-text-secondary mb-4">
+                                Counts are from your client activity timeline (calls, emails, meetings, etc.), not from application log actions below.
+                            </p>
                             <div className="space-y-6">
-                                {data.activityDistribution.length > 0 ? (
-                                    data.activityDistribution.map((item) => {
-                                        const total = data.activityDistribution.reduce((sum, i) => sum + i.count, 0)
+                                {distribution.length > 0 ? (
+                                    distribution.map((item) => {
+                                        const total = distribution.reduce((sum, i) => sum + i.count, 0)
                                         const percentage = total > 0 ? (item.count / total) * 100 : 0
                                         return (
                                             <div key={item.type}>
@@ -136,6 +192,36 @@ export default function PublicReportPage() {
                             </div>
                         </div>
                     </div>
+
+                    {data.applicationPipelineLog && data.applicationPipelineLog.length > 0 && (
+                        <div className="bg-careerist-card shadow-md rounded-xl p-6 border border-careerist-border">
+                            <h3 className="text-lg font-semibold text-careerist-text-primary mb-4">Application pipeline log</h3>
+                            <p className="text-sm text-careerist-text-secondary mb-4">
+                                Actions logged on applications (Applications → Log Action), for roles tied to this client.
+                            </p>
+                            <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
+                                {data.applicationPipelineLog.map((entry) => (
+                                    <div key={entry.id} className="p-4 rounded-lg border border-careerist-border bg-white">
+                                        <div className="flex flex-wrap justify-between gap-2 text-xs text-careerist-text-secondary">
+                                            <span>{new Date(entry.performedAt).toLocaleString()}</span>
+                                            <span>{entry.performedBy}</span>
+                                        </div>
+                                        <p className="text-sm font-medium text-careerist-text-primary mt-2">
+                                            {[entry.jobTitle, entry.company].filter(Boolean).join(' · ') || 'Application'}
+                                            <span className="text-careerist-text-secondary font-normal">
+                                                {' '}
+                                                · Stage {entry.stage.replace(/_/g, ' ')} ·{' '}
+                                                {PIPELINE_ACTION_LABELS[entry.actionType] || entry.actionType.replace(/_/g, ' ')}
+                                            </span>
+                                        </p>
+                                        {entry.description && (
+                                            <p className="text-sm text-careerist-text-primary whitespace-pre-wrap mt-2">{entry.description}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="text-center pt-8 border-t border-careerist-border">
                         <div className="flex items-center justify-center gap-1.5 mb-2">

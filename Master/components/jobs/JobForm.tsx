@@ -15,6 +15,8 @@ export interface Job {
     isDuplicate?: boolean
     companyId?: string
     applications?: Array<{ id: string }>
+    /** Distinct applications linked via primary job and/or ApplicationJob (multi-job per client). */
+    assignedApplicationCount?: number
     recruiter?: {
         id: string
         firstName: string

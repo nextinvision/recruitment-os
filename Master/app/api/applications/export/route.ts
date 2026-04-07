@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
 import { exportApplicationsToCSV } from '@/modules/applications/service'
 import { applicationFilterSchema } from '@/modules/applications/schemas'
+import { parseApplicationFilterBoundaryDate } from '@/modules/applications/filter-dates'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 
 export async function OPTIONS(request: NextRequest) {
@@ -36,10 +37,10 @@ export async function GET(request: NextRequest) {
     // Convert date strings to Date objects
     const processedFilters: any = { ...filters }
     if (processedFilters.startDate) {
-      processedFilters.startDate = new Date(processedFilters.startDate)
+      processedFilters.startDate = parseApplicationFilterBoundaryDate(processedFilters.startDate, 'start')
     }
     if (processedFilters.endDate) {
-      processedFilters.endDate = new Date(processedFilters.endDate)
+      processedFilters.endDate = parseApplicationFilterBoundaryDate(processedFilters.endDate, 'end')
     }
 
     const csv = await exportApplicationsToCSV(authContext.userId, authContext.role, processedFilters)

@@ -79,17 +79,39 @@ function rowToObject(headers: string[], cells: unknown[]): ParsedImportRow | nul
     return obj as unknown as ParsedImportRow
 }
 
+function isCellFilled(value: unknown): boolean {
+    return String(value ?? '').trim().length > 0
+}
+
+function getFirstHeaderRowIndex(excelRows: unknown[][]): number {
+    for (let i = 0; i < excelRows.length; i++) {
+        const row = excelRows[i]
+        if (!Array.isArray(row)) continue
+        if (row.some(isCellFilled)) return i
+    }
+    return -1
+}
+
 /**
  * Map raw Excel rows (first row = headers) to import row objects.
  * Call from UI after parsing file with xlsx: sheet_to_json(sheet, { header: 1 }).
  */
 export function mapExcelRowsToImportRows(excelRows: unknown[][]): ParsedImportRow[] {
-    if (excelRows.length < 2) return []
-    const headerRow = excelRows[0] as unknown[]
+    if (!Array.isArray(excelRows) || excelRows.length === 0) return []
+    const headerRowIndex = getFirstHeaderRowIndex(excelRows)
+    if (headerRowIndex === -1) return []
+
+    const headerRow = excelRows[headerRowIndex]
+    if (!Array.isArray(headerRow) || headerRow.length === 0) return []
+
     const headers = headerRow.map((h) => normalizeHeader(String(h ?? '')))
+    if (headers.every((h) => !h)) return []
+
     const result: ParsedImportRow[] = []
-    for (let r = 1; r < excelRows.length; r++) {
-        const row = rowToObject(headers, excelRows[r] as unknown[])
+    for (let r = headerRowIndex + 1; r < excelRows.length; r++) {
+        const rawRow = excelRows[r]
+        if (!Array.isArray(rawRow)) continue
+        const row = rowToObject(headers, rawRow)
         if (row) result.push(row)
     }
     return result

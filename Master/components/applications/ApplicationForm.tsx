@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { ApplicationStage } from '@prisma/client'
-import { Button, Input } from '@/ui'
-import { STAGES, STAGE_LABELS, JOB_SEARCH_DEBOUNCE_MS } from './constants'
+import { Button } from '@/ui'
+import { STAGES, STAGE_LABELS } from './constants'
 
 interface ApplicationFormProps {
     onSuccess: () => void
@@ -22,16 +22,35 @@ export function ApplicationForm({ onSuccess, onCancel }: ApplicationFormProps) {
         clientId: '',
         stage: ApplicationStage.IDENTIFIED,
     })
-    const [selectedJobs, setSelectedJobs] = useState<Array<{ id: string; title: string; company: string }>>([])
-    const [jobSearchQuery, setJobSearchQuery] = useState('')
-    const [jobSearchResults, setJobSearchResults] = useState<Array<{ id: string; title: string; company: string }>>([])
-    const [jobSearchOpen, setJobSearchOpen] = useState(false)
-    const [jobSearchLoading, setJobSearchLoading] = useState(false)
+    const [assignedJobs, setAssignedJobs] = useState<Array<{ id: string; title: string; company: string; location?: string }>>([])
+    const [loadingAssignedJobs, setLoadingAssignedJobs] = useState(false)
     const [clients, setClients] = useState<Array<{ id: string; firstName: string; lastName: string; email?: string }>>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const jobSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const jobPickerRef = useRef<HTMLDivElement>(null)
+    const loadAssignedJobsForClient = useCallback(async (clientId: string) => {
+        const token = localStorage.getItem('token')
+        if (!token || !clientId) {
+            setAssignedJobs([])
+            return
+        }
+        setLoadingAssignedJobs(true)
+        try {
+            const response = await fetch(`/api/clients/${clientId}/assigned-jobs`, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                credentials: 'include',
+            })
+            if (!response.ok) {
+                setAssignedJobs([])
+                return
+            }
+            const data = await response.json()
+            setAssignedJobs(data.jobs || [])
+        } catch {
+            setAssignedJobs([])
+        } finally {
+            setLoadingAssignedJobs(false)
+        }
+    }, [])
 
     useEffect(() => {
         const token = localStorage.getItem('token')
@@ -40,84 +59,22 @@ export function ApplicationForm({ onSuccess, onCancel }: ApplicationFormProps) {
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             credentials: 'include',
         })
-            .then((res) => res.ok ? res.json() : null)
+            .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
                 if (data) setClients(data.clients || data)
             })
             .catch(() => { })
     }, [])
 
-    const fetchJobs = useCallback(async (search: string) => {
-        const token = localStorage.getItem('token')
-        if (!token) return
-        setJobSearchLoading(true)
-        try {
-            const params = new URLSearchParams({ pageSize: '25' })
-            if (search.trim()) params.set('search', search.trim())
-            const res = await fetch(`/api/jobs?${params.toString()}`, {
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                credentials: 'include',
-            })
-            if (res.ok) {
-                const data = await res.json()
-                setJobSearchResults(data.jobs || data)
-            } else {
-                setJobSearchResults([])
-            }
-        } catch {
-            setJobSearchResults([])
-        } finally {
-            setJobSearchLoading(false)
-        }
-    }, [])
-
     useEffect(() => {
-        if (jobSearchDebounceRef.current) clearTimeout(jobSearchDebounceRef.current)
-        if (!jobSearchOpen) return
-        jobSearchDebounceRef.current = setTimeout(() => {
-            fetchJobs(jobSearchQuery)
-        }, JOB_SEARCH_DEBOUNCE_MS)
-        return () => {
-            if (jobSearchDebounceRef.current) clearTimeout(jobSearchDebounceRef.current)
+        const selectedClientId = formData.clientId
+        setFormData((prev) => ({ ...prev, jobId: '', jobIds: [] }))
+        if (!selectedClientId) {
+            setAssignedJobs([])
+            return
         }
-    }, [jobSearchQuery, jobSearchOpen, fetchJobs])
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (jobPickerRef.current && !jobPickerRef.current.contains(e.target as Node)) {
-                setJobSearchOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
-
-    const handleSelectJob = (job: { id: string; title: string; company: string }) => {
-        setSelectedJobs((prev) => {
-            if (prev.find((j) => j.id === job.id)) return prev
-            const next = [...prev, job]
-            setFormData((prevForm) => ({
-                ...prevForm,
-                jobId: next[0]?.id || '',
-                jobIds: next.map((j) => j.id),
-            }))
-            return next
-        })
-        setJobSearchQuery('')
-        setJobSearchOpen(false)
-    }
-
-    const handleRemoveJob = (jobId: string) => {
-        setSelectedJobs((prev) => {
-            const next = prev.filter((j) => j.id !== jobId)
-            setFormData((prevForm) => ({
-                ...prevForm,
-                jobId: next[0]?.id || '',
-                jobIds: next.map((j) => j.id),
-            }))
-            return next
-        })
-    }
+        loadAssignedJobsForClient(selectedClientId)
+    }, [formData.clientId, loadAssignedJobsForClient])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -125,6 +82,16 @@ export function ApplicationForm({ onSuccess, onCancel }: ApplicationFormProps) {
         setError('')
 
         try {
+            if (!formData.clientId) {
+                setError('Please select a client.')
+                setLoading(false)
+                return
+            }
+            if (formData.jobIds.length === 0) {
+                setError('Please select at least one assigned job for this client.')
+                setLoading(false)
+                return
+            }
             const token = localStorage.getItem('token')
             const userData = localStorage.getItem('user')
             const user = userData ? JSON.parse(userData) : null
@@ -167,68 +134,6 @@ export function ApplicationForm({ onSuccess, onCancel }: ApplicationFormProps) {
                 </div>
             )}
 
-            <div ref={jobPickerRef}>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Jobs (select one or more)</label>
-                {selectedJobs.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2">
-                        {selectedJobs.map((job) => (
-                            <span
-                                key={job.id}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 border border-gray-300 text-xs text-gray-800"
-                            >
-                                <span>{job.title} @ {job.company}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => handleRemoveJob(job.id)}
-                                    className="text-gray-500 hover:text-red-600 focus:outline-none"
-                                >
-                                    ×
-                                </button>
-                            </span>
-                        ))}
-                    </div>
-                )}
-                <>
-                    <Input
-                        label=""
-                        type="text"
-                        value={jobSearchQuery}
-                        onChange={(e) => {
-                            setJobSearchQuery(e.target.value)
-                            setJobSearchOpen(true)
-                        }}
-                        onFocus={() => setJobSearchOpen(true)}
-                        placeholder="Search jobs by title, company, or location..."
-                        className="mb-0"
-                    />
-                    {jobSearchOpen && (
-                        <div className="mt-1 border border-gray-200 rounded-md shadow-lg bg-white max-h-60 overflow-y-auto z-10">
-                            {jobSearchLoading ? (
-                                <div className="px-4 py-6 text-center text-sm text-gray-500">Searching...</div>
-                            ) : jobSearchResults.length === 0 ? (
-                                <div className="px-4 py-6 text-center text-sm text-gray-500">
-                                    {jobSearchQuery.trim() ? 'No jobs found. Try a different search.' : 'Type to search jobs in the database.'}
-                                </div>
-                            ) : (
-                                <ul className="py-1">
-                                    {jobSearchResults.map((job) => (
-                                        <li key={job.id}>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleSelectJob(job)}
-                                                className="w-full px-4 py-2 text-left text-sm text-gray-900 hover:bg-careerist-yellow-light focus:bg-careerist-yellow-light focus:outline-none"
-                                            >
-                                                {job.title} @ {job.company}
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    )}
-                </>
-            </div>
-
             <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">Client</label>
                 <select
@@ -244,6 +149,48 @@ export function ApplicationForm({ onSuccess, onCancel }: ApplicationFormProps) {
                         </option>
                     ))}
                 </select>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Assigned Jobs (select one or more)
+                </label>
+                {loadingAssignedJobs ? (
+                    <div className="text-sm text-gray-500 border border-gray-200 rounded-md p-3">
+                        Loading assigned jobs...
+                    </div>
+                ) : !formData.clientId ? (
+                    <div className="text-sm text-gray-500 border border-gray-200 rounded-md p-3">
+                        Select a client first to view assigned jobs.
+                    </div>
+                ) : assignedJobs.length === 0 ? (
+                    <div className="text-sm text-amber-700 border border-amber-200 bg-amber-50 rounded-md p-3">
+                        No jobs are assigned to this client yet. Assign jobs from the Jobs page first.
+                    </div>
+                ) : (
+                    <select
+                        multiple
+                        value={formData.jobIds}
+                        onChange={(e) => {
+                            const selectedIds = Array.from(e.target.selectedOptions).map((opt) => opt.value)
+                            setFormData((prev) => ({
+                                ...prev,
+                                jobIds: selectedIds,
+                                jobId: selectedIds[0] || '',
+                            }))
+                        }}
+                        className="block w-full min-h-[180px] px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        {assignedJobs.map((job) => (
+                            <option key={job.id} value={job.id}>
+                                {job.title} @ {job.company}{job.location ? ` (${job.location})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                    Hold Ctrl/Cmd to select multiple jobs.
+                </p>
             </div>
 
             <div>

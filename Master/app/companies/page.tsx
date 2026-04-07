@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { Button, Input, Select, Modal, useToast, ConfirmDialog, useConfirmDialog, Badge, Spinner } from '@/ui'
 import { mapExcelRowsToImportRows } from '@/modules/companies/excel-import'
+import { readSpreadsheetRows } from '@/lib/spreadsheet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -560,16 +561,12 @@ export default function CompaniesPage() {
                         onFileSelect={async (file: File) => {
                             setImportLoading(true)
                             try {
-                                const XLSX = (await import('xlsx')).default
-                                const data = await file.arrayBuffer()
-                                const wb = XLSX.read(data, { type: 'array' })
-                                const sheet = wb.Sheets[wb.SheetNames[0]]
-                                if (!sheet) {
-                                    showToast('No sheet in file', 'error')
+                                const rows = await readSpreadsheetRows(file)
+                                const mapped = mapExcelRowsToImportRows(rows)
+                                if (mapped.length === 0) {
+                                    showToast('No valid data rows found. Ensure the first non-empty row contains headers.', 'error')
                                     return
                                 }
-                                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
-                                const mapped = mapExcelRowsToImportRows(rows)
                                 setImportRows(mapped as Array<Record<string, unknown>>)
                                 setImportStep('preview')
                                 setImportResult(null)

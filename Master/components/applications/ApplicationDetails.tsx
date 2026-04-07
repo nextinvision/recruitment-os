@@ -6,6 +6,7 @@ import { STAGES, STAGE_LABELS } from './constants'
 
 export interface Application {
   id: string
+  approvalToken?: string | null
   stage: string
   daysInCurrentStage?: number
   daysSinceCreation?: number
@@ -15,6 +16,7 @@ export interface Application {
     company: string
   } | null
   applicationJobs?: Array<{
+    status?: string
     job: {
       id: string
       title: string
@@ -26,6 +28,7 @@ export interface Application {
     firstName: string
     lastName: string
     email?: string
+    phone?: string
   } | null
   recruiter?: {
     id: string

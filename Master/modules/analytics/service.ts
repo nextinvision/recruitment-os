@@ -583,63 +583,126 @@ export class AnalyticsService {
   async getClientMetrics(clientId: string): Promise<{
     funnelPerformance: Array<{ stage: string; count: number }>
     activityDistribution: Array<{ type: string; count: number }>
-    notes: Array<{
+    /** Log actions from applications (Pipeline → Log Action); not the same as Activity NOTE counts */
+    applicationPipelineLog: Array<{
       id: string
-      title: string
+      applicationId: string
+      jobTitle: string | null
+      company: string | null
+      stage: string
+      actionType: string
       description: string | null
-      occurredAt: Date
-      createdBy: string
+      performedAt: Date
+      performedBy: string
     }>
   }> {
-    const [stageGroups, activities, noteActivities] = await Promise.all([
-      db.application.groupBy({
-        by: ['stage'],
-        where: { clientId },
-        _count: true,
-      }),
+    /**
+     * Funnel for client reports is expected to reflect both:
+     * - Applied (stage was reached at some point)
+     * - Follow-up 1 (stage was reached later)
+     *
+     * The DB's `Application.stage` only stores the *current* stage, so we must derive
+     * "stage reached" counts from historical stage transitions.
+     *
+     * We use `AuditLog` entries written by PATCH /api/applications/:id to reconstruct
+     * the timeline of stage changes, without changing existing tables.
+     */
+    const applications = await db.application.findMany({
+      where: { clientId },
+      select: { id: true, stage: true },
+    })
+
+    const applicationIds = applications.map((a) => a.id)
+
+    const auditLogs = applicationIds.length
+      ? await db.auditLog.findMany({
+          where: {
+            entity: 'Application',
+            entityId: { in: applicationIds },
+          },
+          select: { entityId: true, details: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+
+    const [activities, applicationActions] = await Promise.all([
       db.activity.groupBy({
         by: ['type'],
         where: { clientId },
         _count: true,
       }),
-      db.activity.findMany({
+      db.applicationAction.findMany({
         where: {
-          clientId,
-          type: 'NOTE',
+          application: { clientId },
         },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          occurredAt: true,
-          assignedUser: {
+        include: {
+          application: {
             select: {
-              firstName: true,
-              lastName: true,
+              id: true,
+              stage: true,
+              job: {
+                select: { title: true, company: true },
+              },
             },
           },
+          performedBy: {
+            select: { firstName: true, lastName: true },
+          },
         },
-        orderBy: { occurredAt: 'desc' },
-        take: 100,
+        orderBy: { performedAt: 'desc' },
+        take: 200,
       }),
     ])
 
-    const countByStage = new Map<string, number>()
-    for (const row of stageGroups) {
-      countByStage.set(row.stage, prismaGroupByCount(row))
+    // Build "stage reached" set per application id.
+    const reachedStagesByApplicationId = new Map<string, Set<string>>()
+    for (const app of applications) {
+      // Include current stage even if audit history is missing (seed/legacy cases).
+      reachedStagesByApplicationId.set(app.id, new Set<string>([String(app.stage)]))
     }
 
-    const funnelPerformance = CLIENT_APPLICATION_FUNNEL_STAGES.map((stage) => ({
-      stage,
+    for (const log of auditLogs) {
+      const entityId = log.entityId
+      if (!entityId) continue
+      const stageSet = reachedStagesByApplicationId.get(entityId)
+      if (!stageSet) continue
+
+      if (!log.details) continue
+
+      // AuditLog.details is a JSON string produced by UnifiedLogger.getAuditDetails.
+      // We safely parse and look for changes.stage.new.
+      let parsed: any = null
+      try {
+        parsed = JSON.parse(log.details)
+      } catch {
+        parsed = null
+      }
+
+      const stageNew = parsed?.changes?.stage?.new
+      if (typeof stageNew === 'string' && stageNew.trim().length > 0) {
+        stageSet.add(stageNew)
+      }
+    }
+
+    // Convert sets to stage counts (distinct applications that reached stage).
+    const countByStage = new Map<string, number>()
+    for (const stageSet of reachedStagesByApplicationId.values()) {
+      for (const stage of stageSet.values()) {
+        countByStage.set(stage, (countByStage.get(stage) ?? 0) + 1)
+      }
+    }
+
+    const funnelPerformance: Array<{ stage: string; count: number }> = CLIENT_APPLICATION_FUNNEL_STAGES.map((stage) => ({
+      stage: String(stage),
       count: countByStage.get(stage) ?? 0,
     }))
 
-    // Any DB stages not in the canonical list (e.g. after enum migration) still show up
-    for (const row of stageGroups) {
-      if (!CLIENT_APPLICATION_FUNNEL_STAGES.includes(row.stage)) {
+    // Any stages not in the canonical list (e.g. after enum migration) still show up.
+    for (const [stage, count] of countByStage.entries()) {
+      if (!CLIENT_APPLICATION_FUNNEL_STAGES.includes(stage as ApplicationStage)) {
         funnelPerformance.push({
-          stage: row.stage,
-          count: prismaGroupByCount(row),
+          stage,
+          count,
         })
       }
     }
@@ -649,20 +712,24 @@ export class AnalyticsService {
       count: prismaGroupByCount(a),
     }))
 
-    const notes = noteActivities.map((n) => ({
-      id: n.id,
-      title: n.title,
-      description: n.description,
-      occurredAt: n.occurredAt,
-      createdBy: n.assignedUser
-        ? `${n.assignedUser.firstName} ${n.assignedUser.lastName}`.trim()
+    const applicationPipelineLog = applicationActions.map((a) => ({
+      id: a.id,
+      applicationId: a.applicationId,
+      jobTitle: a.application.job?.title ?? null,
+      company: a.application.job?.company ?? null,
+      stage: a.application.stage,
+      actionType: a.type,
+      description: a.description,
+      performedAt: a.performedAt,
+      performedBy: a.performedBy
+        ? `${a.performedBy.firstName} ${a.performedBy.lastName}`.trim()
         : 'Unknown',
     }))
 
     return {
       funnelPerformance,
       activityDistribution,
-      notes,
+      applicationPipelineLog,
     }
   }
 }

@@ -10,6 +10,7 @@ import {
 } from './schemas'
 import { createClientSchema, CreateClientInput } from '@/modules/clients/schemas'
 import { createClient } from '@/modules/clients/service'
+import { getSubmissionValueByFieldType } from '@/modules/onboarding-forms/present-submission'
 
 export async function createOnboardingForm(input: CreateOnboardingFormInput, createdById: string) {
   const validated = createOnboardingFormSchema.parse(input)
@@ -111,7 +112,7 @@ export async function getAllSubmissions(userId: string, userRole: UserRole) {
   return db.onboardingFormSubmission.findMany({
     where: { form: formWhere },
     include: {
-      form: { select: { id: true, title: true } },
+      form: { select: { id: true, title: true, description: true, fields: true } },
       client: { select: { id: true, firstName: true, lastName: true } },
       lead: { select: { id: true, firstName: true, lastName: true } },
     },
@@ -158,11 +159,14 @@ export async function createClientFromSubmission(
     return []
   }
 
+  const emailFromFormType = getSubmissionValueByFieldType(data, submission.form.fields, 'email')
+  const phoneFromFormType = getSubmissionValueByFieldType(data, submission.form.fields, 'phone')
+
   const clientInput: CreateClientInput = {
     firstName: map('firstName') || map('first_name') || map('fullName')?.split(' ')[0] || 'Client',
     lastName: map('lastName') || map('last_name') || map('fullName')?.split(' ').slice(1).join(' ') || 'Name',
-    email: map('email') || map('linkedinId') || undefined,
-    phone: map('phone') || map('mobile') || map('contact') || undefined,
+    email: map('email') || map('linkedinId') || emailFromFormType || undefined,
+    phone: map('phone') || map('mobile') || map('contact') || phoneFromFormType || undefined,
     address: map('address') || map('fullHomeAddr') || map('currentLocation') || undefined,
     industry: map('currentIndustry') || map('targetIndustry') || map('industry') || undefined,
     currentJobTitle: map('currentRole') || map('designation') || map('currentJobTitle') || undefined,

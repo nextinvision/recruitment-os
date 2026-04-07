@@ -40,7 +40,7 @@ export const PAGE_ACCESS_DEFAULTS: Record<string, string[]> = {
   '/ats-resume-analysis': ['ADMIN', 'MANAGER', 'RECRUITER'],
   '/resume-builder': ['ADMIN', 'MANAGER', 'RECRUITER'],
   '/revenues': ['ADMIN', 'MANAGER', 'RECRUITER', 'SALES'],
-  '/reports': ['ADMIN', 'MANAGER'],
+  '/reports': ['ADMIN', 'MANAGER', 'SALES'],
   '/dashboard/escalations': ['ADMIN', 'MANAGER'],
   '/admin': ['ADMIN', 'MANAGER'],
 }

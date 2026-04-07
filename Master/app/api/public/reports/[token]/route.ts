@@ -25,7 +25,20 @@ export async function GET(
             return NextResponse.json({ error: 'Report not found' }, { status: 404 })
         }
 
-        return NextResponse.json(snapshot)
+        // Never expose internal CRM timeline notes on the public link (strip legacy snapshots too).
+        const rawData = snapshot.data as Record<string, unknown> | null
+        const sanitizedData =
+            rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+                ? (() => {
+                      const { notes: _omit, ...rest } = rawData
+                      return rest
+                  })()
+                : rawData
+
+        return NextResponse.json({
+            ...snapshot,
+            data: sanitizedData,
+        })
     } catch (error: any) {
         console.error('Error fetching public report:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })

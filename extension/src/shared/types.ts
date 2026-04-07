@@ -1,16 +1,11 @@
-export type JobSource = 'linkedin' | 'indeed' | 'naukri' | 'other'
-
-export interface JobInput {
+export interface ScrapedJob {
+  id: string
   title: string
   company: string
   location: string
   description: string
-  source: JobSource
-  sourceUrl?: string
-}
-
-export interface ScrapedJob extends JobInput {
-  id: string
+  source: string
+  sourceUrl: string
   isValid: boolean
   errors: string[]
 }
@@ -40,10 +35,3 @@ export interface StorageData {
   user?: LoginResponse['user']
   stagingJobs?: ScrapedJob[]
 }
-
-export interface PageInfo {
-  platform: JobSource | null
-  isJobPage: boolean
-  url: string
-}
-

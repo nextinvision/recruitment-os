@@ -22,8 +22,29 @@ export const updateJobSchema = createJobSchema.partial().extend({
   id: z.string().min(1),
 })
 
+/**
+ * Stored when the browser extension (or other bulk importers) sends jobs from listing cards
+ * where a full description is often unavailable. Matches Prisma `Job.description` (required String).
+ */
+export const BULK_IMPORT_MISSING_DESCRIPTION_PLACEHOLDER =
+  'No description was captured from the job listing. Open the source URL or edit the job in the dashboard to add details.'
+
+/**
+ * Same fields as manual job creation, but description may be omitted or blank from scrapers.
+ * Empty values are normalized to {@link BULK_IMPORT_MISSING_DESCRIPTION_PLACEHOLDER} before insert.
+ */
+export const bulkCreateJobItemSchema = createJobSchema.omit({ description: true }).extend({
+  description: z
+    .string()
+    .optional()
+    .transform((raw) => {
+      const trimmed = (raw ?? '').trim()
+      return trimmed.length > 0 ? trimmed : BULK_IMPORT_MISSING_DESCRIPTION_PLACEHOLDER
+    }),
+})
+
 export const bulkCreateJobsSchema = z.object({
-  jobs: z.array(createJobSchema).min(1, 'At least one job is required'),
+  jobs: z.array(bulkCreateJobItemSchema).min(1, 'At least one job is required'),
 })
 
 export const jobFiltersSchema = z.object({
@@ -64,6 +85,11 @@ export const bulkAssignJobSchema = z.object({
   candidateIds: z.array(z.string().min(1)).min(1),
 })
 
+export const bulkAssignJobsToCandidateSchema = z.object({
+  jobIds: z.array(z.string().min(1)).min(1),
+  candidateId: z.string().min(1),
+})
+
 export const resolveDuplicateSchema = z.object({
   duplicateId: z.string().min(1),
   originalId: z.string().min(1),
@@ -82,5 +108,6 @@ export type JobSortInput = z.input<typeof jobSortSchema>
 export type JobPaginationInput = z.input<typeof jobPaginationSchema>
 export type AssignJobInput = z.infer<typeof assignJobSchema>
 export type BulkAssignJobInput = z.infer<typeof bulkAssignJobSchema>
+export type BulkAssignJobsToCandidateInput = z.infer<typeof bulkAssignJobsToCandidateSchema>
 export type BulkDeleteJobsInput = z.infer<typeof bulkDeleteJobsSchema>
 export type ResolveDuplicateInput = z.infer<typeof resolveDuplicateSchema>

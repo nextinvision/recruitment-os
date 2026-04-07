@@ -1,259 +1,517 @@
-import { JobDetector } from './job-detector'
-import { JobScraper } from './job-scraper'
-import { UniversalExtractor } from './universal-extractor'
-import { UniversalJobDetector } from './universal-detector'
-import { ScrapedJob } from '../shared/types'
-import { validateJob } from '../shared/validation'
+interface ScrapedJob {
+  id: string
+  title: string
+  company: string
+  location: string
+  description: string
+  source: string
+  sourceUrl: string
+}
 
-// Manual Selection Mode State
-let isMappingMode = false
-let currentMappingField: 'title' | 'company' | 'location' | 'description' | null = null
-let mappingData: Partial<ScrapedJob> = {}
+// ── Source detection ─────────────────────────────────────────────────
 
-// Inject capture button into the page
-function injectCaptureButton() {
-  // Remove existing container if any
-  const existing = document.getElementById('recruitment-os-container')
-  if (existing) {
-    existing.remove()
+function detectSource(): string {
+  const host = location.hostname.toLowerCase()
+  if (host.includes('linkedin.com')) return 'linkedin'
+  if (host.includes('indeed.com') || host.includes('indeed.co')) return 'indeed'
+  if (host.includes('naukri.com')) return 'naukri'
+  return 'other'
+}
+
+// ── Page scan entry point ───────────────────────────────────────────
+
+function scanPage(): ScrapedJob[] {
+  const cards = findJobCards()
+  const source = detectSource()
+  const jobs: ScrapedJob[] = []
+
+  for (const card of cards) {
+    const job = extractFromCard(card, source)
+    if (job) jobs.push({ id: `job-${Date.now()}-${jobs.length}`, ...job })
   }
 
-  // Wait for body to be available
+  if (jobs.length === 0) {
+    const single = extractSingleJob(source)
+    if (single) jobs.push({ id: `job-${Date.now()}-0`, ...single })
+  }
+
+  return dedup(jobs)
+}
+
+// ── Card detection ──────────────────────────────────────────────────
+
+const CARD_SELECTORS = [
+  '[data-job-id]', '[data-jk]', '[data-entity-urn*="jobPosting"]',
+  '[class*="job-card"]', '[class*="jobCard"]', '[class*="job-listing"]',
+  '[class*="job_seen_beacon"]', '[class*="jobTuple"]', '[class*="srp-jobtuple"]',
+  '[class*="job-search-card"]', '[class*="base-search-card"]', '[class*="base-card"]',
+  '[class*="position-card"]', '[class*="vacancy-card"]', '[class*="career-item"]',
+  '[class*="resultContent"]',
+  'article[class*="job"]', 'li[class*="job"]',
+  'div[class*="job"][class*="item"]', 'div[class*="job"][class*="row"]',
+]
+
+function findJobCards(): Element[] {
+  for (const sel of CARD_SELECTORS) {
+    try {
+      const els = document.querySelectorAll(sel)
+      if (els.length >= 2) return Array.from(els)
+    } catch { /* invalid selector */ }
+  }
+  return findRepeatingContainers()
+}
+
+function findRepeatingContainers(): Element[] {
+  const candidates = document.querySelectorAll(
+    'ul, ol, div[role="list"], main, section, [class*="list"], [class*="results"], [class*="grid"], [class*="feed"], [class*="cards"]'
+  )
+  let best: Element[] = []
+
+  for (const container of Array.from(candidates)) {
+    const children = Array.from(container.children)
+    if (children.length < 2) continue
+
+    const fingerprints = children.map(c => {
+      const classes = (c.className || '').toString().split(' ').sort().join(',')
+      return `${c.tagName}|${classes}`
+    })
+    const grouped = new Map<string, Element[]>()
+    fingerprints.forEach((fp, i) => {
+      if (!grouped.has(fp)) grouped.set(fp, [])
+      grouped.get(fp)!.push(children[i])
+    })
+
+    for (const group of grouped.values()) {
+      if (group.length < 2) continue
+      const withLinks = group.filter(el => el.querySelector('a[href]'))
+      if (withLinks.length >= 2 && withLinks.length > best.length) {
+        best = withLinks
+      }
+    }
+  }
+
+  return best
+}
+
+// ── Text segment collector ──────────────────────────────────────────
+// Walks a card's DOM and returns all distinct, non-overlapping text
+// pieces in document order. This is the foundation for structural
+// extraction — every visible piece of text from the card is captured.
+
+interface TextSegment {
+  text: string
+  el: Element
+  tag: string
+  classes: string
+}
+
+function collectSegments(root: Element): TextSegment[] {
+  const segments: TextSegment[] = []
+  const usedTexts = new Set<string>()
+
+  function walk(node: Element) {
+    const text = node.textContent?.trim() || ''
+    if (!text) return
+
+    // Leaf element (no child elements) — capture its text directly
+    if (node.children.length === 0) {
+      if (text.length > 0 && text.length < 500 && !usedTexts.has(text)) {
+        usedTexts.add(text)
+        segments.push({
+          text,
+          el: node,
+          tag: node.tagName.toLowerCase(),
+          classes: (node.className || '').toString().toLowerCase(),
+        })
+      }
+      return
+    }
+
+    // Container with a few children — walk children for granular text
+    if (node.children.length <= 6) {
+      for (const child of Array.from(node.children)) walk(child)
+      return
+    }
+
+    // Large container (nav, list-of-lists) — capture its text as one block
+    if (text.length > 0 && text.length < 500 && !usedTexts.has(text)) {
+      usedTexts.add(text)
+      segments.push({
+        text,
+        el: node,
+        tag: node.tagName.toLowerCase(),
+        classes: (node.className || '').toString().toLowerCase(),
+      })
+    }
+  }
+
+  for (const child of Array.from(root.children)) walk(child)
+  return segments
+}
+
+// ── Pattern helpers ─────────────────────────────────────────────────
+
+const LOCATION_KEYWORDS = /\b(remote|hybrid|on-?site|work from home|wfh|telecommute)\b/i
+const LOCATION_CITY_STATE = /\b[A-Z][a-z]{2,},\s*[A-Z]{2}\b/
+const LOCATION_CITY_COUNTRY = /\b[A-Z][a-z]{2,},\s*[A-Z][a-z]{2,}/
+const LOCATION_INDIA = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|noida|gurgaon|gurugram|ahmedabad|jaipur|chandigarh|kochi|lucknow|indore)\b/i
+const LOCATION_GLOBAL = /\b(new york|san francisco|london|berlin|toronto|singapore|dubai|sydney|tokyo|seattle|boston|chicago|austin|denver|atlanta|los angeles|paris|amsterdam|dublin)\b/i
+
+function looksLikeLocation(text: string): boolean {
+  if (text.length > 100) return false
+  return (
+    LOCATION_KEYWORDS.test(text) ||
+    LOCATION_CITY_STATE.test(text) ||
+    LOCATION_CITY_COUNTRY.test(text) ||
+    LOCATION_INDIA.test(text) ||
+    LOCATION_GLOBAL.test(text)
+  )
+}
+
+function classHints(classes: string, keywords: string[]): boolean {
+  return keywords.some(k => classes.includes(k))
+}
+
+const COMPANY_CLASS_HINTS = ['company', 'comp', 'employer', 'org', 'brand', 'subtitle', 'subTitle']
+const LOCATION_CLASS_HINTS = ['location', 'loc', 'city', 'address', 'place', 'geo']
+const DESC_CLASS_HINTS = ['description', 'desc', 'snippet', 'summary', 'detail', 'content', 'insight', 'text']
+const META_CLASS_HINTS = ['salary', 'pay', 'compensation', 'type', 'badge', 'tag', 'meta', 'info', 'date', 'time', 'posted', 'experience', 'exp']
+
+// ── Card extraction ─────────────────────────────────────────────────
+
+function extractFromCard(card: Element, source: string): Omit<ScrapedJob, 'id'> | null {
+  const segments = collectSegments(card)
+  if (segments.length === 0) return null
+
+  const link = findLink(card)
+
+  // 1. Find title — first heading, or first class-hint "title", or first link text
+  let titleIdx = -1
+  let title = ''
+
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i]
+    if (/^h[1-4]$/.test(s.tag) && s.text.length > 3 && s.text.length < 200) {
+      title = s.text; titleIdx = i; break
+    }
+  }
+  if (!title) {
+    for (let i = 0; i < segments.length; i++) {
+      const s = segments[i]
+      if (classHints(s.classes, ['title', 'desig', 'heading', 'name']) && s.text.length > 3 && s.text.length < 200) {
+        title = s.text; titleIdx = i; break
+      }
+    }
+  }
+  if (!title) {
+    const titleLink = card.querySelector('a')
+    if (titleLink) {
+      const t = titleLink.textContent?.trim() || ''
+      if (t.length > 3 && t.length < 200) {
+        title = t
+        titleIdx = segments.findIndex(s => s.text === t)
+      }
+    }
+  }
+  if (!title) return null
+
+  // 2. Classify remaining segments by class hints first, then by position & pattern
+  let company = ''
+  let locationText = ''
+  const metaParts: string[] = []
+  const descParts: string[] = []
+
+  const used = new Set<number>()
+  if (titleIdx >= 0) used.add(titleIdx)
+
+  // Pass 1: class-based assignment (high confidence)
+  for (let i = 0; i < segments.length; i++) {
+    if (used.has(i)) continue
+    const s = segments[i]
+
+    if (!company && classHints(s.classes, COMPANY_CLASS_HINTS) && s.text.length < 120) {
+      company = s.text; used.add(i)
+    } else if (!locationText && classHints(s.classes, LOCATION_CLASS_HINTS) && s.text.length < 120) {
+      locationText = s.text; used.add(i)
+    } else if (classHints(s.classes, DESC_CLASS_HINTS) && s.text.length > 20) {
+      descParts.push(s.text); used.add(i)
+    } else if (classHints(s.classes, META_CLASS_HINTS) && s.text.length < 120) {
+      metaParts.push(s.text); used.add(i)
+    }
+  }
+
+  // Also try data-testid attributes (Indeed style)
+  if (!company) {
+    const el = card.querySelector('[data-testid*="company"]')
+    if (el) {
+      const t = el.textContent?.trim() || ''
+      if (t.length > 0 && t.length < 120) {
+        company = t
+        const idx = segments.findIndex(s => s.text === t)
+        if (idx >= 0) used.add(idx)
+      }
+    }
+  }
+  if (!locationText) {
+    const el = card.querySelector('[data-testid*="location"]')
+    if (el) {
+      const t = el.textContent?.trim() || ''
+      if (t.length > 0 && t.length < 120) {
+        locationText = t
+        const idx = segments.findIndex(s => s.text === t)
+        if (idx >= 0) used.add(idx)
+      }
+    }
+  }
+
+  // Pass 2: structural fallback for remaining un-assigned segments
+  for (let i = 0; i < segments.length; i++) {
+    if (used.has(i)) continue
+    const s = segments[i]
+
+    // Short text after title but before description — likely company or location
+    if (s.text.length < 80) {
+      if (!company) {
+        company = s.text; used.add(i)
+      } else if (!locationText && looksLikeLocation(s.text)) {
+        locationText = s.text; used.add(i)
+      } else if (!locationText && s.text.length < 60) {
+        locationText = s.text; used.add(i)
+      } else {
+        metaParts.push(s.text); used.add(i)
+      }
+    } else {
+      descParts.push(s.text); used.add(i)
+    }
+  }
+
+  // Build description from desc parts + metadata
+  const allDesc = [...metaParts, ...descParts].filter(Boolean)
+  const description = allDesc.join(' | ').substring(0, 2000)
+
+  return {
+    title,
+    company,
+    location: locationText,
+    description,
+    source,
+    sourceUrl: link || location.href,
+  }
+}
+
+// ── Single job / detail page ────────────────────────────────────────
+
+function extractSingleJob(source: string): Omit<ScrapedJob, 'id'> | null {
+  const root = document.querySelector('main, [role="main"], article, .content, #content') || document.body
+
+  // Try heading-based title
+  let title = ''
+  const h1 = root.querySelector('h1')
+  if (h1) title = h1.textContent?.trim() || ''
+  if (!title) {
+    const h2 = root.querySelector('h2')
+    if (h2) title = h2.textContent?.trim() || ''
+  }
+  if (!title) return null
+
+  // Company
+  let company = ''
+  const companySels = [
+    '[class*="company"]', '[class*="Company"]', '[class*="employer"]',
+    '[class*="org-name"]', '[data-testid*="company"]',
+    '[itemprop="hiringOrganization"]', 'a[href*="/company"]',
+  ]
+  for (const sel of companySels) {
+    try {
+      const el = root.querySelector(sel)
+      if (el) { company = el.textContent?.trim() || ''; if (company) break }
+    } catch { /* invalid */ }
+  }
+
+  // Location
+  let loc = ''
+  const locSels = [
+    '[class*="location"]', '[class*="Location"]', '[class*="loc"]',
+    '[data-testid*="location"]', '[itemprop="jobLocation"]',
+  ]
+  for (const sel of locSels) {
+    try {
+      const el = root.querySelector(sel)
+      if (el) { loc = el.textContent?.trim() || ''; if (loc) break }
+    } catch { /* invalid */ }
+  }
+
+  // Description — grab the largest text block
+  let description = ''
+  const descSels = [
+    '[class*="description"]', '[class*="Description"]',
+    '#jobDescriptionText', '#job-details',
+    '[itemprop="description"]', '[class*="job-desc"]',
+    '[class*="jd-desc"]', 'section.description',
+  ]
+  for (const sel of descSels) {
+    try {
+      const el = root.querySelector(sel)
+      if (el) {
+        const t = el.textContent?.trim() || ''
+        if (t.length > description.length) description = t.substring(0, 3000)
+      }
+    } catch { /* invalid */ }
+  }
+  if (!description) {
+    const paragraphs = root.querySelectorAll('p, li')
+    const texts: string[] = []
+    for (const p of Array.from(paragraphs)) {
+      const t = p.textContent?.trim() || ''
+      if (t.length > 20) texts.push(t)
+    }
+    description = texts.join(' | ').substring(0, 3000)
+  }
+
+  return {
+    title,
+    company,
+    location: loc,
+    description,
+    source,
+    sourceUrl: location.href,
+  }
+}
+
+// ── Link finder ─────────────────────────────────────────────────────
+
+function findLink(card: Element): string {
+  const sels = [
+    'a[href*="/jobs/view"]', 'a[href*="/viewjob"]',
+    'a[href*="/job-listings"]', 'a[href*="/job-details"]',
+    'a[href*="/job/"]', 'a[href*="/career"]', 'a[href*="/position"]',
+    'a[href*="/apply"]',
+    'h1 a', 'h2 a', 'h3 a', 'h4 a',
+    'a[class*="title"]', 'a[class*="Title"]',
+  ]
+  for (const sel of sels) {
+    try {
+      const a = card.querySelector(sel) as HTMLAnchorElement | null
+      if (a?.href && a.href.startsWith('http')) return a.href
+    } catch { /* invalid */ }
+  }
+  // Fallback: first link in the card
+  const first = card.querySelector('a[href]') as HTMLAnchorElement | null
+  if (first?.href && first.href.startsWith('http')) return first.href
+  return ''
+}
+
+// ── Dedup ───────────────────────────────────────────────────────────
+
+function dedup(jobs: ScrapedJob[]): ScrapedJob[] {
+  const seen = new Set<string>()
+  return jobs.filter(j => {
+    const key = `${j.title}|${j.sourceUrl}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+// ── UI ──────────────────────────────────────────────────────────────
+
+function injectButton() {
+  const existing = document.getElementById('ros-scan-btn')
+  if (existing) existing.remove()
+
   if (!document.body) {
-    setTimeout(injectCaptureButton, 100)
+    setTimeout(injectButton, 200)
     return
   }
 
-  const pageInfo = JobDetector.getPageInfo()
-  const isKnownPlatform = pageInfo.platform && pageInfo.isJobPage
-
-  const container = document.createElement('div')
-  container.id = 'recruitment-os-container'
-  container.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 10000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    pointer-events: auto;
-  `
-
-  // Main Action Button (Automatic)
-  const autoBtn = document.createElement('button')
-  autoBtn.id = 'recruitment-os-capture-btn'
-  autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
-  autoBtn.style.cssText = `
-    padding: 12px 24px;
-    background: ${isKnownPlatform ? '#0073b1' : '#28a745'};
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  const btn = document.createElement('button')
+  btn.id = 'ros-scan-btn'
+  btn.textContent = 'Scan Jobs'
+  btn.style.cssText = `
+    position: fixed; top: 20px; right: 20px; z-index: 99999;
+    padding: 12px 24px; background: #0073b1; color: #fff;
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    transition: all 0.2s;
+    transition: background 0.2s;
   `
+  btn.onmouseenter = () => { btn.style.background = '#005a8c' }
+  btn.onmouseleave = () => { btn.style.background = '#0073b1' }
 
-  // Manual Mapping Button
-  const manualBtn = document.createElement('button')
-  manualBtn.textContent = 'Manual Selection'
-  manualBtn.style.cssText = `
-    padding: 8px 16px;
-    background: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    font-family: sans-serif;
-  `
-
-  autoBtn.addEventListener('click', async () => {
-    autoBtn.disabled = true
-    autoBtn.textContent = 'Scanning...'
+  btn.addEventListener('click', async () => {
+    btn.disabled = true
+    btn.textContent = 'Scanning...'
+    btn.style.background = '#999'
 
     try {
-      let jobs: ScrapedJob[] = []
-
-      if (isKnownPlatform && pageInfo.platform) {
-        const scraper = new JobScraper(pageInfo.platform)
-        jobs = scraper.scrapeCurrentPage()
-      } else {
-        const universalExtractor = new UniversalExtractor()
-        let extractedJobs = universalExtractor.extractAllJobs()
-
-        // Deep Scrape Fallback
-        if (extractedJobs.length > 0 && extractedJobs.length < 5) {
-          autoBtn.textContent = 'Deep Scrape...'
-          const clicked = await universalExtractor.findAndClickNextPage()
-          if (clicked) {
-            const moreJobs = universalExtractor.extractAllJobs()
-            extractedJobs = [...extractedJobs, ...moreJobs]
-          }
-        }
-
-        if (extractedJobs.length === 0) {
-          const detailJob = universalExtractor.extractJobFromDetailPage()
-          if (detailJob) extractedJobs.push(detailJob)
-        }
-
-        jobs = extractedJobs.map((job, index) => {
-          const validation = validateJob(job as any)
-          return {
-            id: `job-${Date.now()}-${index}`,
-            title: job.title || '',
-            company: job.company || '',
-            location: job.location || '',
-            description: job.description || '',
-            source: job.source || 'other',
-            isValid: validation.isValid,
-            errors: validation.errors,
-          }
-        })
-      }
+      const jobs = scanPage()
 
       if (jobs.length === 0) {
-        alert('No jobs found. Try "Manual Selection" if the automatic scan missed them.')
-        autoBtn.disabled = false
-        autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
+        showToast('No jobs found on this page.')
         return
       }
 
-      sendJobsToExtension(jobs)
-      autoBtn.textContent = `✓ Captured ${jobs.length}`
+      sendJobs(jobs)
+      btn.textContent = `Found ${jobs.length} job${jobs.length > 1 ? 's' : ''}`
+      btn.style.background = '#28a745'
+      showToast(`${jobs.length} job${jobs.length > 1 ? 's' : ''} sent to staging`)
+    } catch (err) {
+      console.error('[RecruitmentOS]', err)
+      showToast('Scan failed. Check console for details.')
+    } finally {
       setTimeout(() => {
-        autoBtn.textContent = isKnownPlatform ? 'Capture Jobs' : 'Scrape Page (AI)'
-        autoBtn.disabled = false
+        btn.disabled = false
+        btn.textContent = 'Scan Jobs'
+        btn.style.background = '#0073b1'
       }, 2000)
-    } catch (error) {
-      console.error('Scrape error:', error)
-      autoBtn.disabled = false
-      autoBtn.textContent = 'Retry Scrape'
     }
   })
 
-  manualBtn.addEventListener('click', startManualMapping)
-
-  container.appendChild(autoBtn)
-  container.appendChild(manualBtn)
-  document.body.appendChild(container)
+  document.body.appendChild(btn)
 }
 
-function startManualMapping() {
-  if (isMappingMode) return
-  isMappingMode = true
-  currentMappingField = 'title'
-  showMappingToast('MANUAL MODE: Click on the JOB TITLE')
-
-  document.addEventListener('click', handleManualClick, true)
-  document.body.style.cursor = 'crosshair'
-}
-
-function handleManualClick(e: MouseEvent) {
-  if (!isMappingMode) return
-
-  e.preventDefault()
-  e.stopPropagation()
-
-  const target = e.target as HTMLElement
-  const text = target.textContent?.trim() || ''
-
-  if (currentMappingField) {
-    mappingData[currentMappingField] = text as any
-
-    const fields: ('title' | 'company' | 'location' | 'description')[] = ['title', 'company', 'location', 'description']
-    const currentIndex = fields.indexOf(currentMappingField)
-
-    if (currentIndex < fields.length - 1) {
-      currentMappingField = fields[currentIndex + 1]
-      showMappingToast(`Captured! Now click the ${currentMappingField.toUpperCase()}`)
-    } else {
-      finishMapping()
-    }
-  }
-}
-
-async function finishMapping() {
-  isMappingMode = false
-  currentMappingField = null
-  document.removeEventListener('click', handleManualClick, true)
-  document.body.style.cursor = 'default'
-
-  const job: ScrapedJob = {
-    id: `manual-${Date.now()}`,
-    title: mappingData.title || '',
-    company: mappingData.company || '',
-    location: mappingData.location || '',
-    description: mappingData.description || '',
-    source: 'other',
-    isValid: !!mappingData.title,
-    errors: mappingData.title ? [] : ['Title is required'],
-  }
-
-  if (confirm(`Save this job to staging?\n\nTitle: ${job.title}\nCompany: ${job.company}`)) {
-    sendJobsToExtension([job])
-  }
-
-  mappingData = {}
-}
-
-function showMappingToast(message: string) {
-  const toast = document.createElement('div')
-  toast.textContent = message
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #0073b1;
-    color: white;
-    padding: 14px 28px;
-    border-radius: 50px;
-    z-index: 10001;
-    font-family: sans-serif;
-    font-weight: 600;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    animation: fadeIn 0.3s;
+function showToast(msg: string) {
+  const t = document.createElement('div')
+  t.textContent = msg
+  t.style.cssText = `
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 12px 24px; border-radius: 8px;
+    z-index: 100000; font-size: 14px; font-family: sans-serif;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   `
-  document.body.appendChild(toast)
-  setTimeout(() => toast.remove(), 3000)
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 3000)
 }
 
-function sendJobsToExtension(jobs: ScrapedJob[]) {
+function sendJobs(jobs: ScrapedJob[]) {
   if (!chrome.runtime?.id) {
-    alert('Extension context lost. Please refresh the page.')
+    showToast('Extension context lost. Refresh the page.')
     return
   }
 
-  chrome.runtime.sendMessage({
-    type: 'JOBS_CAPTURED',
-    jobs,
-    platform: 'other',
-  }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('Message error:', chrome.runtime.lastError)
+  chrome.runtime.sendMessage(
+    { type: 'JOBS_CAPTURED', jobs },
+    (resp) => {
+      if (chrome.runtime.lastError) {
+        console.error('[RecruitmentOS]', chrome.runtime.lastError)
+      }
     }
-  })
+  )
 }
 
-// Init
+// ── Init ────────────────────────────────────────────────────────────
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injectCaptureButton)
+  document.addEventListener('DOMContentLoaded', injectButton)
 } else {
-  injectCaptureButton()
+  injectButton()
 }
 
-// SPA support
 let lastUrl = location.href
 new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href
-    setTimeout(injectCaptureButton, 1000)
+    setTimeout(injectButton, 1000)
   }
 }).observe(document, { subtree: true, childList: true })

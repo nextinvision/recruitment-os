@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireAuth } from '@/lib/rbac'
-import { getApplications, createApplication } from '@/modules/applications/service'
+import { getApplications, createApplication, bulkDeleteApplications } from '@/modules/applications/service'
 import { applicationFilterSchema, applicationSortSchema, applicationPaginationSchema } from '@/modules/applications/schemas'
+import { parseApplicationFilterBoundaryDate } from '@/modules/applications/filter-dates'
 import { addCorsHeaders, handleCors } from '@/lib/cors'
 import { logMutation } from '@/lib/mutation-logger'
 
@@ -49,10 +50,10 @@ export async function GET(request: NextRequest) {
     // Convert date strings to Date objects
     const processedFilters: any = { ...filters }
     if (processedFilters.startDate) {
-      processedFilters.startDate = new Date(processedFilters.startDate)
+      processedFilters.startDate = parseApplicationFilterBoundaryDate(processedFilters.startDate, 'start')
     }
     if (processedFilters.endDate) {
-      processedFilters.endDate = new Date(processedFilters.endDate)
+      processedFilters.endDate = parseApplicationFilterBoundaryDate(processedFilters.endDate, 'end')
     }
 
     const result = await getApplications(
@@ -104,6 +105,53 @@ export async function POST(request: NextRequest) {
     return addCorsHeaders(response, origin)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create application'
+    const response = NextResponse.json({ error: message }, { status: 400 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const corsResponse = handleCors(request)
+    if (corsResponse) return corsResponse
+
+    const authHeader = request.headers.get('authorization') ||
+      (request.cookies.get('token')?.value ? `Bearer ${request.cookies.get('token')?.value}` : null)
+    const authContext = requireAuth(await getAuthContext(authHeader))
+
+    const body = await request.json()
+    const ids = Array.isArray(body?.applicationIds)
+      ? body.applicationIds.filter((id: unknown) => typeof id === 'string' && id.trim() !== '')
+      : []
+
+    if (ids.length === 0) {
+      const response = NextResponse.json({ error: 'applicationIds is required' }, { status: 400 })
+      const origin = request.headers.get('origin')
+      return addCorsHeaders(response, origin)
+    }
+
+    const result = await bulkDeleteApplications(ids, authContext.userId, authContext.role)
+
+    for (const app of result.deletedApplications) {
+      await logMutation({
+        request,
+        userId: authContext.userId,
+        action: 'DELETE',
+        entity: 'Application',
+        entityId: app.id,
+        entityName: app.job ? `Application for ${app.job.title}` : 'Application (no job)',
+        oldData: app,
+      }).catch((err) => {
+        console.error('Failed to log mutation:', err)
+      })
+    }
+
+    const response = NextResponse.json(result, { status: 200 })
+    const origin = request.headers.get('origin')
+    return addCorsHeaders(response, origin)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete applications'
     const response = NextResponse.json({ error: message }, { status: 400 })
     const origin = request.headers.get('origin')
     return addCorsHeaders(response, origin)
